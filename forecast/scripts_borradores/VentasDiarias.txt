@@ -1,0 +1,135 @@
+/**
+ * Script para extraer el resumen de ventas del día anterior.
+ * Borra primero cualquier registro previo del día anterior y luego inserta los datos nuevos actualizados.
+ * Pensado para ser ejecutado mediante un activador diario en Apps Script (Ej: todos los días a la 1 am).
+ */
+
+function updateVentasDiarias() {
+  Logger.log("[VENTAS DIARIAS] Iniciando extracción del día anterior...");
+  
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.SHEET_VENTAS_PERIODO);
+  const executionTimestamp = Utilities.formatDate(new Date(), "America/Argentina/Buenos_Aires", "yyyy-MM-dd HH:mm:ss");
+  
+  if (!sheet) {
+    throw new Error(`[VENTAS DIARIAS] No se encontró la hoja '${CONFIG.SHEET_VENTAS_PERIODO}'`);
+  }
+  
+  // Calcular la fecha del "día anterior"
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const dateStr = yesterday.toISOString().split('T')[0]; // Ej: 2026-08-12
+  const fromIso = `${dateStr}T00:00:00.000Z`;
+  const toIso = `${dateStr}T23:59:59.999Z`;
+  
+  Logger.log(`[VENTAS DIARIAS] Fecha objetivo: ${dateStr}`);
+  
+  // 1. Borrar registros previos de esa fecha (si existen, ej: cargas parciales)
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    const fromIsos = sheet.getRange(2, 3, lastRow - 1, 1).getValues(); // Columna 3 es from_iso
+    let deletedCount = 0;
+    // Iteramos desde abajo hacia arriba para que al borrar filas no cambien los índices
+    for (let i = fromIsos.length - 1; i >= 0; i--) {
+      if (String(fromIsos[i][0]).startsWith(dateStr)) {
+        sheet.deleteRow(i + 2); // i+2 por el header de la fila 1 y porque el array es 0-indexed
+        deletedCount++;
+      }
+    }
+    Logger.log(`[VENTAS DIARIAS] Se limpiaron ${deletedCount} registros parciales previos del ${dateStr}.`);
+  }
+  
+  // 2. Extraer datos nuevos
+  const sellers = getActiveSellers(); 
+  const allRows = [];
+  
+  sellers.forEach(seller => {
+    Logger.log(`[VENTAS DIARIAS] Buscando ventas para: ${seller.nickname} (ID: ${seller.seller_id_meli})`);
+    
+    const dayObj = {
+      ordersTotal: 0,
+      paidOrdersTotal: 0,
+      itemsQuantityTotal: 0,
+      totalAmountSum: 0.0,
+      paidAmountSum: 0.0,
+      currencies: new Set()
+    };
+    
+    let offset = 0;
+    const limit = 50;
+    let hasMore = true;
+    let totalPaging = 0;
+    
+    try {
+      while (hasMore) {
+        const url = `https://api.mercadolibre.com/orders/search?seller=${seller.seller_id_meli}&order.date_created.from=${fromIso}&order.date_created.to=${toIso}&offset=${offset}&limit=${limit}`;
+        
+        const response = UrlFetchApp.fetch(url, {
+          method: "get",
+          headers: { "Authorization": `Bearer ${seller.access_token}` },
+          muteHttpExceptions: true
+        });
+        
+        const json = JSON.parse(response.getContentText());
+        if (response.getResponseCode() !== 200) {
+          throw new Error(json.message || "Error al buscar órdenes");
+        }
+        
+        totalPaging = json.paging.total;
+        const results = json.results || [];
+        
+        for (const order of results) {
+          dayObj.ordersTotal++;
+          if (order.status === "paid") {
+            dayObj.paidOrdersTotal++;
+          }
+          dayObj.totalAmountSum += (order.total_amount || 0);
+          dayObj.paidAmountSum += (order.paid_amount || 0);
+          
+          if (order.currency_id) {
+            dayObj.currencies.add(order.currency_id);
+          }
+          
+          const items = order.order_items || [];
+          for (const item of items) {
+            dayObj.itemsQuantityTotal += (item.quantity || 0);
+          }
+        }
+        
+        offset += limit;
+        if (offset >= totalPaging) {
+          hasMore = false;
+        }
+      }
+      
+      // Armar la fila del seller
+      const row = [
+        seller.seller_id_meli,
+        seller.nickname,
+        fromIso,
+        toIso,
+        dayObj.ordersTotal,
+        dayObj.paidOrdersTotal,
+        dayObj.itemsQuantityTotal,
+        dayObj.totalAmountSum,
+        dayObj.paidAmountSum,
+        Array.from(dayObj.currencies).join(", "),
+        executionTimestamp
+      ];
+      allRows.push(row);
+      
+    } catch (e) {
+      Logger.log(`[VENTAS DIARIAS] 🚨 ERROR para ${seller.nickname}: ${e.message}`);
+    }
+  });
+  
+  // 3. Escribir datos al final de la tabla
+  if (allRows.length > 0) {
+    const nextRow = sheet.getLastRow() + 1;
+    sheet.getRange(nextRow, 1, allRows.length, allRows[0].length).setValues(allRows);
+    Logger.log(`[VENTAS DIARIAS] Se insertaron ${allRows.length} registros del ${dateStr} con éxito.`);
+  } else {
+    Logger.log(`[VENTAS DIARIAS] No hubo ventas registradas para el ${dateStr}.`);
+  }
+}

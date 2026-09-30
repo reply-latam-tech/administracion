@@ -1,0 +1,54 @@
+// CONFIGURACIÓN GLOBAL REDUCIDA PARA EL NUEVO PROYECTO
+const CONFIG = {
+  // Configuración Mercado Libre (necesaria para refrescar tokens)
+  MELI_CLIENT_ID: "8733209397166757", 
+  MELI_CLIENT_SECRET: "lXepK3wntoXfaoBUiTYi9ASqpF2lgeBB",
+  
+  // ⚠️ REEMPLAZA ESTO: ID de tu NUEVA planilla de Google Sheets
+  SPREADSHEET_ID: "1cXI5gPevHj9CdiQ6UylFEUkdvjmcmNaPom9pCsjaTW8",
+  
+  // Nombres de las hojas necesarias
+  SHEET_VENTAS_PERIODO: "ventas_historicas",
+  SHEET_FORECAST_VENTAS: "forecast_ventas",
+  SHEET_COMPARATIVA: "comparativa_meses",
+  SHEET_SELLER: "seller"
+};
+
+/**
+ * Función principal para ejecutar la extracción histórica (TODO EL AÑO).
+ * 1. Renueva los tokens vencidos.
+ * 2. Ejecuta el script de extracción desde el 1 de enero.
+ * 3. Ejecuta el forecast.
+ * 4. Genera la tabla comparativa de meses.
+ */
+function runHistorico() {
+  Logger.log("=========================================");
+  Logger.log("Iniciando extracción histórica completa...");
+  checkAndRefreshTokens();
+  updateVentasHistoricas();
+  updateForecastVentas();
+  updateComparativaMeses();
+  Logger.log("Extracción histórica finalizada exitosamente.");
+  Logger.log("=========================================");
+}
+
+/**
+ * Función principal para ejecutar la extracción DIARIA (Automática).
+ * 1. Renueva los tokens vencidos.
+ * 2. Ejecuta el script de extracción que procesa SOLO el día de ayer.
+ * 3. Ejecuta el forecast para actualizar el acumulado y estimación de cierre.
+ * 4. Genera la tabla comparativa de meses.
+ * 
+ * 👉 Configura un activador (Trigger) en Apps Script para que ejecute esta
+ *    función todos los días (ej: 01:00 AM a 02:00 AM).
+ */
+function runDiario() {
+  Logger.log("=========================================");
+  Logger.log("Iniciando ejecución automatizada diaria...");
+  checkAndRefreshTokens();
+  updateVentasDiarias();
+  updateForecastVentas();
+  updateComparativaMeses();
+  Logger.log("Ejecución diaria finalizada exitosamente.");
+  Logger.log("=========================================");
+}

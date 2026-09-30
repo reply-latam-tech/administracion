@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <!-- Estilos oficiales minimalistas de Google -->
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+      body {
+        padding: 15px;
+        font-family: Arial, sans-serif;
+      }
+      .form-group {
+        margin-bottom: 20px;
+      }
+      label {
+        font-weight: 600;
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+      }
+      input[type="date"] {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      button.action {
+        width: 100%;
+        padding: 10px;
+        background-color: #1a73e8;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.2s;
+      }
+      button.action:hover {
+        background-color: #1557b0;
+      }
+      #status {
+        margin-top: 15px;
+        font-size: 13px;
+        color: #555;
+        font-weight: 500;
+      }
+      .loading {
+        color: #ff9800;
+      }
+      .success {
+        color: #4caf50;
+      }
+      .error {
+        color: #f44336;
+      }
+    </style>
+  </head>
+  <body>
+    
+    <div class="form-group">
+      <label for="startDate">Fecha Inicial</label>
+      <input type="date" id="startDate">
+    </div>
+    
+    <div class="form-group">
+      <label for="endDate">Fecha Final</label>
+      <input type="date" id="endDate">
+    </div>
+    
+    <button class="action" onclick="ejecutarReporte()">Generar Forecast</button>
+    
+    <div id="status"></div>
+
+    <script>
+      function ejecutarReporte() {
+        var start = document.getElementById('startDate').value;
+        var end = document.getElementById('endDate').value;
+        var statusDiv = document.getElementById('status');
+        
+        if (!start || !end) {
+          statusDiv.innerHTML = '<span class="error">Por favor, selecciona ambas fechas.</span>';
+          return;
+        }
+        if (start > end) {
+          statusDiv.innerHTML = '<span class="error">La fecha inicial no puede ser mayor a la final.</span>';
+          return;
+        }
+
+        statusDiv.innerHTML = '<span class="loading">⏳ Generando estimaciones, espere por favor...</span>';
+        
+        // Llamada directa a la función del archivo Code.gs
+        google.script.run
+          .withSuccessHandler(function(result) {
+            statusDiv.innerHTML = '<span>' + result + '</span>';
+          })
+          .withFailureHandler(function(error) {
+            statusDiv.innerHTML = '<span class="error">Error interno: ' + error.message + '</span>';
+          })
+          .generarReporteForecast(start, end);
+      }
+    </script>
+  </body>
+</html>

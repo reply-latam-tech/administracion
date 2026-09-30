@@ -1,0 +1,37 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Next.js
+.next/
+out/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Entornos y claves
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs y bases de datos locales
+*.log
+*.sqlite
+*.sqlite3
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Respuestas grandes o basura
+forecast/poc_api/ml_response.json

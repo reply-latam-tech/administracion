@@ -1,0 +1,458 @@
+/**
+ * Crea el menú en la parte superior cuando se abre el archivo
+ */
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('Forecast Automático')
+      .addItem('Abrir Panel de Forecast', 'showSidebar')
+      .addToUi();
+}
+
+/**
+ * Abre el menú lateral (Sidebar)
+ */
+function showSidebar() {
+  var html = HtmlService.createHtmlOutputFromFile('Sidebar')
+      .setTitle('Filtros de Forecast')
+      .setWidth(300);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+/**
+ * Función principal llamada desde el Sidebar.
+ * Genera el reporte en 'Forecast_Generado' con encabezados explícitos y montos del mes anterior.
+ */
+function generarReporteForecast(startDateStr, endDateStr) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheetVentas = ss.getSheetByName('ventas_historicas');
+    var sheetSeller = ss.getSheetByName('seller');
+    
+    if (!sheetVentas) throw new Error('No se encontró la hoja "ventas_historicas".');
+    if (!sheetSeller) throw new Error('No se encontró la hoja "seller" para extraer los IDs.');
+    
+    // Mapeo Oficial de IDs a Nombres desde la hoja "seller"
+    var sellerData = sheetSeller.getDataRange().getValues();
+    var nicknamesMap = {};
+    if (sellerData.length > 1) {
+      var sHeaders = sellerData[0];
+      var sIdIdx = sHeaders.indexOf('id');
+      var sNameIdx = sHeaders.indexOf('seller');
+      if (sIdIdx !== -1 && sNameIdx !== -1) {
+        for (var k = 1; k < sellerData.length; k++) {
+          nicknamesMap[String(sellerData[k][sIdIdx])] = sellerData[k][sNameIdx];
+        }
+      }
+    }
+    
+    var data = sheetVentas.getDataRange().getValues();
+    if (data.length < 2) throw new Error('La hoja "ventas_historicas" no tiene datos.');
+    
+    var headers = data[0];
+    
+    // Índices en ventas_historicas
+    var colSellerId = headers.indexOf('seller_id_meli');
+    var colNickname = headers.indexOf('nickname');
+    var colDate = headers.indexOf('from_iso');
+    var colAmount = headers.indexOf('total_amount_sum');
+    
+    if (colSellerId === -1 || colDate === -1 || colAmount === -1) {
+      throw new Error('Faltan columnas requeridas en "ventas_historicas". (Asegúrate de que exista seller_id_meli, from_iso y total_amount_sum)');
+    }
+    
+    // Rango de Fechas Filtradas
+    var pStart = startDateStr.split('-');
+    var dStart = new Date(parseInt(pStart[0]), parseInt(pStart[1])-1, parseInt(pStart[2]));
+    var pEnd = endDateStr.split('-');
+    var dEnd = new Date(parseInt(pEnd[0]), parseInt(pEnd[1])-1, parseInt(pEnd[2]));
+    
+    // 1. Identificar meses a renderizar y meses previos necesarios para la Variación
+    var monthsInRange = [];
+    var curr = new Date(dStart.getTime());
+    while(curr <= dEnd) {
+      var yr = curr.getFullYear();
+      var mo = curr.getMonth();
+      var key = yr + "-" + (mo < 9 ? '0' : '') + (mo + 1);
+      
+      var found = false;
+      for (var i = 0; i < monthsInRange.length; i++) {
+        if (monthsInRange[i].key === key) found = true;
+      }
+      if (!found) {
+        monthsInRange.push({ key: key, label: (mo < 9 ? '0' : '') + (mo + 1) + "/" + yr, year: yr, month: mo });
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    
+    // Crear diccionario de meses requeridos (actuales + el anterior de cada uno)
+    var requiredMonths = {};
+    monthsInRange.forEach(function(m) {
+      requiredMonths[m.key] = true;
+      
+      var prevMo = m.month - 1;
+      var prevYr = m.year;
+      if (prevMo < 0) { prevMo = 11; prevYr--; }
+      var prevKey = prevYr + "-" + (prevMo < 9 ? '0' : '') + (prevMo + 1);
+      requiredMonths[prevKey] = true;
+    });
+    
+    // 2. Recopilar Ventas DÍA POR DÍA
+    var results = {};
+    
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      var rowDateStr = row[colDate];
+      if (!rowDateStr) continue;
+      
+      var datePart = "";
+      if (rowDateStr instanceof Date) {
+          var mStr = rowDateStr.getMonth() + 1;
+          var dStr = rowDateStr.getDate();
+          datePart = rowDateStr.getFullYear() + "-" + (mStr < 10 ? '0' : '') + mStr + "-" + (dStr < 10 ? '0' : '') + dStr;
+      } else {
+          datePart = String(rowDateStr).split('T')[0];
+      }
+      
+      if (!datePart || datePart.indexOf('-') === -1) continue;
+      
+      var rParts = datePart.split('-');
+      var rowDate = new Date(parseInt(rParts[0]), parseInt(rParts[1])-1, parseInt(rParts[2]));
+      
+      var yr = rowDate.getFullYear();
+      var mo = rowDate.getMonth();
+      var dy = rowDate.getDate();
+      var mKey = yr + "-" + (mo < 9 ? '0' : '') + (mo + 1);
+      
+      if (requiredMonths[mKey]) {
+        var rawId = row[colSellerId];
+        var sId = String(rawId).split('.')[0].trim();
+        if (!sId || sId === '0' || sId === 'undefined') continue;
+        
+        if (!nicknamesMap[sId]) {
+          nicknamesMap[sId] = colNickname !== -1 ? row[colNickname] : sId;
+        }
+        
+        var amount = parseFloat(row[colAmount]) || 0;
+        
+        if (!results[sId]) results[sId] = {};
+        if (!results[sId][mKey]) results[sId][mKey] = {};
+        if (!results[sId][mKey][dy]) results[sId][mKey][dy] = 0;
+        
+        results[sId][mKey][dy] += amount;
+      }
+    }
+    
+    // 3. Consulta a BigQuery
+    var bqData = {};
+    try {
+      var projectId = 'bi-acco'; 
+      
+      var bqMonthsKeys = Object.keys(requiredMonths).map(function(m) {
+        return "'" + m + "'";
+      }).join(",");
+      
+      var query = 'SELECT seller_id, seller, FORMAT_DATE("%Y-%m", periodo) as mes, moneda, tipo_cargo, alicuota, monto_objetivo ' +
+                  'FROM `bi-acco.facturacion.ref_escalas` ' +
+                  'WHERE FORMAT_DATE("%Y-%m", periodo) IN (' + bqMonthsKeys + ')';
+                  
+      var request = { query: query, useLegacySql: false };
+      
+      var queryResults = BigQuery.Jobs.query(request, projectId);
+      var jobId = queryResults.jobReference.jobId;
+      
+      while (!queryResults.jobComplete) {
+        Utilities.sleep(1000);
+        queryResults = BigQuery.Jobs.getQueryResults(projectId, jobId);
+      }
+      
+      var rows = queryResults.rows || [];
+      for (var j = 0; j < rows.length; j++) {
+        var bqRow = rows[j];
+        if (!bqRow || !bqRow.f || !bqRow.f[0]) continue; 
+        
+        var bqId = bqRow.f[0].v ? String(bqRow.f[0].v).split('.')[0].trim() : null;
+        var bqSellerName = bqRow.f[1].v ? String(bqRow.f[1].v).trim().toUpperCase() : null;
+        
+        var mesKey = bqRow.f[2].v;
+        var moneda = bqRow.f[3].v;
+        var tCargo = bqRow.f[4].v;
+        
+        var alicRaw = bqRow.f[5].v;
+        var alic = alicRaw ? parseFloat(alicRaw) : 0;
+        
+        var mObjRaw = bqRow.f[6].v;
+        var mObj = mObjRaw ? parseFloat(mObjRaw) : 0;
+        
+        var config = { moneda: moneda, tipo_cargo: tCargo, alicuota: alic, monto_objetivo: mObj };
+        
+        if (bqId) {
+          if (!bqData[bqId]) bqData[bqId] = {};
+          bqData[bqId][mesKey] = config;
+        }
+        
+        if (bqSellerName) {
+          if (!bqData[bqSellerName]) bqData[bqSellerName] = {};
+          bqData[bqSellerName][mesKey] = config;
+        }
+      }
+    } catch (e) {
+      throw new Error("Problema conectando a BigQuery: " + e.message);
+    }
+    
+    // 4. Armar Cabeceras con los nuevos campos explícitos y Array de Formatos
+    var outHeaders = ['Vendedor', 'Moneda', 'Tipo Cargo', 'Alicuota'];
+    var formats = [null, null, null, '0.00%'];
+    
+    monthsInRange.forEach(function(m) {
+      // Calcular etiqueta del mes anterior para los headers
+      var prevMo = m.month - 1;
+      var prevYr = m.year;
+      if (prevMo < 0) { prevMo = 11; prevYr--; }
+      var prevLabel = (prevMo < 9 ? '0' : '') + (prevMo + 1) + "/" + prevYr;
+
+      // ENCABEZADOS ACTUALIZADOS (100% claros)
+      outHeaders.push('Facturado Acumulado (' + m.label + ')');
+      formats.push('#,##0.00');
+
+      outHeaders.push('Facturado Mismo Periodo Mes Ant. (' + prevLabel + ')'); // NUEVA COLUMNA DE MONTO
+      formats.push('#,##0.00');
+      
+      outHeaders.push('Var % Periodo (vs ' + prevLabel + ')');
+      formats.push('0.00%');
+      
+      outHeaders.push('Promedio Diario (' + m.label + ')');
+      formats.push('#,##0.00');
+      
+      outHeaders.push('Estimado Cierre (' + m.label + ')');
+      formats.push('#,##0.00');
+
+      outHeaders.push('Total Cierre Mes Ant. (' + prevLabel + ')'); // NUEVA COLUMNA DE MONTO
+      formats.push('#,##0.00');
+      
+      outHeaders.push('Var % Cierre Estimado (vs ' + prevLabel + ')');
+      formats.push('0.00%');
+      
+      outHeaders.push('Monto a Facturar Reply (' + m.label + ')');
+      formats.push('#,##0.00');
+    });
+    
+    var outputData = [outHeaders];
+    var dataRows = [];
+    
+    var specialMappings = {
+      "EVACOL MEXICO": "EVACOL MEX",
+      "CALVIN KLEIN": "GRUPO AXO TOTAL",
+      "TOMMY HILFIGER": "GRUPO AXO TOTAL",
+      "MOTOROLA": "NEWSAN",
+      "PILISAR": "PEABODY",
+      "SODASTREAM": "SODA STREAM ML"
+    };
+    
+    // 5. Unir Ventas, Calcular Variaciones y Montos
+    for (var sellerId in results) {
+        
+        var nickname = nicknamesMap[sellerId] || sellerId;
+        var nickUpper = String(nickname).toUpperCase().trim();
+        var mappedNick = specialMappings[nickUpper] || nickUpper;
+        
+        var bqRecordGlobal = null;
+        for (var idx = monthsInRange.length - 1; idx >= 0; idx--) {
+           var k = monthsInRange[idx].key;
+           
+           if (bqData[sellerId] && bqData[sellerId][k]) {
+               bqRecordGlobal = bqData[sellerId][k];
+               break;
+           }
+           
+           if (bqData[mappedNick] && bqData[mappedNick][k]) {
+               bqRecordGlobal = bqData[mappedNick][k];
+               break;
+           }
+        }
+        
+        if (!bqRecordGlobal && bqData[sellerId]) {
+           var keys = Object.keys(bqData[sellerId]);
+           if (keys.length > 0) bqRecordGlobal = bqData[sellerId][keys[0]];
+        }
+        if (!bqRecordGlobal && bqData[mappedNick]) {
+           var keys2 = Object.keys(bqData[mappedNick]);
+           if (keys2.length > 0) bqRecordGlobal = bqData[mappedNick][keys2[0]];
+        }
+        
+        var globalMoneda = bqRecordGlobal ? bqRecordGlobal.moneda : 'N/A';
+        var globalTCargo = bqRecordGlobal ? bqRecordGlobal.tipo_cargo : 'N/A';
+        var globalAlic = bqRecordGlobal ? bqRecordGlobal.alicuota : 'N/A';
+        
+        var rowData = [nickname, globalMoneda, globalTCargo, globalAlic];
+        
+        monthsInRange.forEach(function(m) {
+          
+          var bqRecordMes = null;
+          if (bqData[sellerId] && bqData[sellerId][m.key]) {
+              bqRecordMes = bqData[sellerId][m.key];
+          } else if (bqData[mappedNick] && bqData[mappedNick][m.key]) {
+              bqRecordMes = bqData[mappedNick][m.key];
+          }
+          
+          var tCargo = bqRecordMes ? bqRecordMes.tipo_cargo : globalTCargo;
+          var alic = bqRecordMes ? bqRecordMes.alicuota : globalAlic;
+          var mObj = bqRecordMes ? bqRecordMes.monto_objetivo : 0;
+          
+          var prevMo = m.month - 1;
+          var prevYr = m.year;
+          if (prevMo < 0) { prevMo = 11; prevYr--; }
+          var prevKey = prevYr + "-" + (prevMo < 9 ? '0' : '') + (prevMo + 1);
+          
+          var currentMonthData = results[sellerId][m.key] || {};
+          var prevMonthData = results[sellerId][prevKey] || {};
+          
+          var billed = 0;
+          var billedPrevSameDays = 0;
+          var daysInFilteredPeriod = 0;
+          
+          var currDay = new Date(dStart.getTime());
+          while(currDay <= dEnd) {
+             if (currDay.getFullYear() === m.year && currDay.getMonth() === m.month) {
+                var dNum = currDay.getDate();
+                billed += currentMonthData[dNum] || 0;
+                billedPrevSameDays += prevMonthData[dNum] || 0;
+                daysInFilteredPeriod++;
+             }
+             currDay.setDate(currDay.getDate() + 1);
+          }
+          
+          var totalBilledPrevMonth = 0;
+          for (var d = 1; d <= 31; d++) {
+             totalBilledPrevMonth += prevMonthData[d] || 0;
+          }
+          
+          var daysInMonth = new Date(m.year, m.month + 1, 0).getDate();
+          var dailyAverage = 0;
+          var estimated = 0;
+          if (daysInFilteredPeriod > 0) {
+            dailyAverage = billed / daysInFilteredPeriod;
+            estimated = dailyAverage * daysInMonth;
+          }
+          
+          var varPeriodo = "";
+          if (billedPrevSameDays > 0) {
+             varPeriodo = (billed / billedPrevSameDays) - 1;
+          } else if (billed === 0 && billedPrevSameDays === 0) {
+             varPeriodo = 0;
+          } else if (billed > 0) {
+             varPeriodo = 1;
+          }
+          
+          var varCierre = "";
+          if (totalBilledPrevMonth > 0) {
+             varCierre = (estimated / totalBilledPrevMonth) - 1;
+          } else if (estimated === 0 && totalBilledPrevMonth === 0) {
+             varCierre = 0;
+          } else if (estimated > 0) {
+             varCierre = 1;
+          }
+          
+          var montoFacturar = 0;
+          var tipoCargoLimpio = String(tCargo).toUpperCase().trim();
+          
+          if (tipoCargoLimpio === 'MINIMO') {
+            montoFacturar = mObj;
+          } else if (tipoCargoLimpio === 'PORCENTUAL') {
+            montoFacturar = estimated * (alic !== 'N/A' ? alic : 0);
+          } else {
+            montoFacturar = Math.max(estimated * (alic !== 'N/A' ? alic : 0), mObj);
+          }
+          
+          // Se insertan en la fila las 8 columnas del mes (ahora agregando los montos anteriores)
+          rowData.push(billed);                 // Facturado Acumulado
+          rowData.push(billedPrevSameDays);     // [NUEVO] Facturado Mismo Periodo Mes Anterior
+          rowData.push(varPeriodo);             // Var % Periodo
+          rowData.push(dailyAverage);          // Promedio Diario
+          rowData.push(estimated);             // Estimado Cierre
+          rowData.push(totalBilledPrevMonth);   // [NUEVO] Total Cierre Mes Anterior
+          rowData.push(varCierre);              // Var % Cierre Estimado
+          rowData.push(montoFacturar);         // Monto a Facturar Reply
+        });
+        
+        dataRows.push(rowData);
+    }
+    
+    // 6. Ordenamiento
+    dataRows.sort(function(a, b) {
+      var monedaA = String(a[1]).toUpperCase();
+      var monedaB = String(b[1]).toUpperCase();
+      if (monedaA < monedaB) return -1;
+      if (monedaA > monedaB) return 1;
+      
+      var vendedorA = String(a[0]).toUpperCase();
+      var vendedorB = String(b[0]).toUpperCase();
+      if (vendedorA < vendedorB) return -1;
+      if (vendedorA > vendedorB) return 1;
+      return 0;
+    });
+    
+    outputData = outputData.concat(dataRows);
+    
+    if (outputData.length === 1) return "No se encontraron datos en el rango seleccionado.";
+    
+    // 7. Renderizar Hoja y Dar Formato por bloques
+    var sheetName = "Forecast_Generado";
+    var sheetReport = ss.getSheetByName(sheetName);
+    if (!sheetReport) {
+      sheetReport = ss.insertSheet(sheetName);
+    } else {
+      sheetReport.clear();
+    }
+    
+    var numRows = outputData.length;
+    var numCols = outputData[0].length;
+    
+    sheetReport.getRange(1, 1, numRows, numCols).setValues(outputData);
+    
+    var fullRange = sheetReport.getRange(1, 1, numRows, numCols);
+    fullRange.setBorder(true, true, true, true, true, true, '#e0e0e0', SpreadsheetApp.BorderStyle.SOLID);
+    
+    sheetReport.getRange(1, 1, 1, numCols).setFontWeight('bold').setBackground('#d9d9d9');
+    
+    if (numRows > 1) {
+      for (var c = 0; c < formats.length; c++) {
+        if (formats[c]) {
+          sheetReport.getRange(2, c + 1, numRows - 1, 1).setNumberFormat(formats[c]);
+        }
+      }
+      
+      // Aplicar colores y bordes ajustados (ahora cada bloque de mes tiene 8 columnas)
+      for (var i = 0; i < monthsInRange.length; i++) {
+        var startCol = 4 + (i * 8) + 1; // Offset inicial (4 fijas + 8 por mes)
+        
+        // Facturado Acumulado Actual (Azul tenue)
+        sheetReport.getRange(2, startCol, numRows - 1, 1).setBackground('#ebf5fb');
+        // Facturado Mismo Periodo Mes Anterior (Gris clarito para indicar que es referencia)
+        sheetReport.getRange(2, startCol + 1, numRows - 1, 1).setBackground('#f2f3f4');
+        // Var % Periodo (Blanco)
+        // Promedio Diario (Gris extra claro)
+        sheetReport.getRange(2, startCol + 3, numRows - 1, 1).setBackground('#f8f9f9');
+        // Estimado Cierre (Amarillo tenue)
+        sheetReport.getRange(2, startCol + 4, numRows - 1, 1).setBackground('#fef9e7');
+        // Total Cierre Mes Anterior (Gris clarito)
+        sheetReport.getRange(2, startCol + 5, numRows - 1, 1).setBackground('#f2f3f4');
+        // Var % Cierre (Blanco)
+        // Monto a Facturar (Verde con texto verde oscuro)
+        sheetReport.getRange(2, startCol + 7, numRows - 1, 1).setBackground('#d4efdf').setFontColor('#0e6655').setFontWeight('bold');
+        
+        // Borde izquierdo para delimitar meses
+        sheetReport.getRange(1, startCol, numRows, 1).setBorder(null, true, null, null, null, null, '#666666', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+      }
+      
+      sheetReport.getRange(1, numCols, numRows, 1).setBorder(null, null, null, true, null, null, '#666666', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+    }
+    
+    sheetReport.autoResizeColumns(1, numCols);
+    ss.setActiveSheet(sheetReport);
+    
+    return "✅ Reporte completo actualizado con columnas de montos anteriores en la hoja: " + sheetName;
+    
+  } catch (e) {
+    throw new Error("❌ Error: " + e.message);
+  }
+}

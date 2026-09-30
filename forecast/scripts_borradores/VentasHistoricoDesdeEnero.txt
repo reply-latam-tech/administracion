@@ -1,0 +1,165 @@
+/**
+ * Script TRANSITORIO para rellenar datos históricos faltantes sin duplicar ni borrar.
+ * Resuelve el límite de los 10000 resultados consultando los días faltantes 1 a 1,
+ * desde el 1 de junio en adelante.
+ */
+function updateVentasHistoricasFaltantes() {
+  Logger.log("[PARCHE] Iniciando extracción de días faltantes (Desde 1 de Junio)...");
+  
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.SHEET_VENTAS_PERIODO); 
+  const executionTimestamp = Utilities.formatDate(new Date(), "America/Argentina/Buenos_Aires", "yyyy-MM-dd HH:mm:ss");
+  
+  if (!sheet) {
+    throw new Error(`No se encontró la hoja '${CONFIG.SHEET_VENTAS_PERIODO}'`);
+  }
+  
+  // 1. Definir los Sellers objetivos
+  const targetSellers = ["189600743", "1634660854", "514936764", "1684118419", "2587221833", "308973138", "1529028605", "257050030"];
+  
+  // 2. Leer TODA la hoja para descubrir qué fechas ya existen para estas cuentas
+  const existingData = sheet.getDataRange().getValues();
+  const existingDates = {};
+  targetSellers.forEach(id => existingDates[id] = new Set());
+  
+  for (let i = 1; i < existingData.length; i++) {
+     let rawId = existingData[i][0];
+     let sId = String(rawId).split('.')[0].trim();
+     
+     if (targetSellers.includes(sId)) {
+        let dateVal = existingData[i][2]; // from_iso
+        if (dateVal) {
+           let dateStr = "";
+           if (dateVal instanceof Date) {
+              dateStr = Utilities.formatDate(dateVal, "GMT", "yyyy-MM-dd");
+           } else {
+              dateStr = String(dateVal).split('T')[0];
+           }
+           existingDates[sId].add(dateStr);
+        }
+     }
+  }
+  
+  // 3. Preparar la consulta desde el 1 de JUNIO (Mes 5 en JS)
+  const toDate = new Date();
+  const fromDate = new Date(toDate.getFullYear(), 5, 1); 
+  
+  const allSellers = getActiveSellers(); 
+  const sellersToProcess = allSellers.filter(s => targetSellers.includes(String(s.seller_id_meli).trim()));
+  
+  const allRows = [];
+  
+  sellersToProcess.forEach(seller => {
+    Logger.log(`[PARCHE] Procesando faltantes de: ${seller.nickname} (ID: ${seller.seller_id_meli})`);
+    const dailyData = {};
+    const sId = String(seller.seller_id_meli).trim();
+    const missingDaysList = [];
+    
+    const daysDiff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 3600 * 24));
+    
+    // 4. Identificar exactamente los días que faltan
+    for (let d = 0; d <= daysDiff; d++) {
+      const dayDate = new Date(toDate.getTime() - (d * 24 * 60 * 60 * 1000));
+      const dateStr = dayDate.toISOString().split('T')[0];
+      
+      if (!existingDates[sId].has(dateStr)) {
+         dailyData[dateStr] = {
+           ordersTotal: 0,
+           paidOrdersTotal: 0,
+           itemsQuantityTotal: 0,
+           totalAmountSum: 0.0,
+           paidAmountSum: 0.0,
+           currencies: new Set()
+         };
+         missingDaysList.push(dateStr);
+      }
+    }
+    
+    Logger.log(`[PARCHE] Se detectaron ${missingDaysList.length} días faltantes.`);
+    if (missingDaysList.length === 0) return;
+    
+    try {
+      // 5. Consultar a ML únicamente los días que faltan, de a un día por vez
+      for (const dateStr of missingDaysList) {
+        const fromIsoDay = `${dateStr}T00:00:00.000Z`;
+        const toIsoDay = `${dateStr}T23:59:59.999Z`;
+        
+        let offset = 0;
+        const limit = 50;
+        let hasMore = true;
+        
+        while (hasMore) {
+          const url = `https://api.mercadolibre.com/orders/search?seller=${seller.seller_id_meli}&order.date_created.from=${fromIsoDay}&order.date_created.to=${toIsoDay}&offset=${offset}&limit=${limit}`;
+          
+          const response = UrlFetchApp.fetch(url, {
+            method: "get",
+            headers: { "Authorization": `Bearer ${seller.access_token}` },
+            muteHttpExceptions: true
+          });
+          
+          const json = JSON.parse(response.getContentText());
+          if (response.getResponseCode() !== 200) {
+            throw new Error(json.message || "Error al buscar órdenes");
+          }
+          
+          const results = json.results || [];
+          for (const order of results) {
+            const dayObj = dailyData[dateStr];
+            dayObj.ordersTotal++;
+            
+            if (order.status === "paid") {
+              dayObj.paidOrdersTotal++;
+            }
+            
+            dayObj.totalAmountSum += (order.total_amount || 0);
+            dayObj.paidAmountSum += (order.paid_amount || 0);
+            
+            if (order.currency_id) {
+              dayObj.currencies.add(order.currency_id);
+            }
+            
+            const items = order.order_items || [];
+            for (const item of items) {
+              dayObj.itemsQuantityTotal += (item.quantity || 0);
+            }
+          }
+          
+          offset += limit;
+          if (offset >= json.paging.total) {
+            hasMore = false;
+          }
+        }
+      }
+      
+      // Empaquetar resultados
+      Object.keys(dailyData).sort((a, b) => b.localeCompare(a)).forEach(dateStr => {
+        const dayObj = dailyData[dateStr];
+        const row = [
+          seller.seller_id_meli,
+          seller.nickname,
+          `${dateStr}T00:00:00.000Z`, 
+          `${dateStr}T23:59:59.999Z`, 
+          dayObj.ordersTotal,
+          dayObj.paidOrdersTotal,
+          dayObj.itemsQuantityTotal,
+          dayObj.totalAmountSum,
+          dayObj.paidAmountSum,
+          Array.from(dayObj.currencies).join(", "),
+          executionTimestamp
+        ];
+        allRows.push(row);
+      });
+      
+    } catch (e) {
+      Logger.log(`[PARCHE] 🚨 ERROR para ${seller.nickname}: ${e.message}`);
+    }
+  });
+  
+  if (allRows.length > 0) {
+    const lastRow = sheet.getLastRow();
+    sheet.getRange(lastRow + 1, 1, allRows.length, allRows[0].length).setValues(allRows);
+    Logger.log(`[PARCHE] ÉXITO: Se añadieron ${allRows.length} filas nuevas al final de la hoja.`);
+  } else {
+    Logger.log(`[PARCHE] No hubo filas nuevas para añadir.`);
+  }
+}

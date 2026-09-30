@@ -1,0 +1,316 @@
+/**
+ * Script para procesar las ventas históricas y generar un pronóstico (forecast) por cuenta.
+ * Calcula la facturación acumulada mensual y la facturación estimada de cierre de mes.
+ */
+
+function updateForecastVentas() {
+  Logger.log("[FORECAST] Iniciando generación de Forecast...");
+  
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheetVentas = ss.getSheetByName(CONFIG.SHEET_VENTAS_PERIODO);
+  const sheetForecast = ss.getSheetByName(CONFIG.SHEET_FORECAST_VENTAS || "forecast_ventas");
+  
+  if (!sheetVentas) {
+    throw new Error(`[FORECAST] No se encontró la hoja de origen '${CONFIG.SHEET_VENTAS_PERIODO}'`);
+  }
+  if (!sheetForecast) {
+    throw new Error(`[FORECAST] No se encontró la hoja de destino '${CONFIG.SHEET_FORECAST_VENTAS || "forecast_ventas"}'`);
+  }
+  
+  const lastRow = sheetVentas.getLastRow();
+  if (lastRow < 2) {
+    Logger.log("[FORECAST] No hay datos en ventas_historicas para procesar.");
+    return;
+  }
+  
+  // 1. Obtener todos los datos de origen
+  const data = sheetVentas.getRange(2, 1, lastRow - 1, sheetVentas.getLastColumn()).getValues();
+  
+  // Índices en la tabla de origen:
+  // 0: seller_id_meli, 1: nickname, 2: from_iso, 3: to_iso, 
+  // 4: orders_total, 5: paid_orders_total, 6: items_quantity_total, 
+  // 7: total_amount_sum, 8: paid_amount_sum, 9: currencies, 10: last_updated
+  
+  // 2. Agrupar por seller_id
+  const sellersData = {};
+  for (const row of data) {
+    const sellerId = row[0];
+    if (!sellersData[sellerId]) {
+      sellersData[sellerId] = [];
+    }
+    sellersData[sellerId].push({
+      seller_id_meli: row[0],
+      nickname: row[1],
+      from_iso: row[2],
+      to_iso: row[3],
+      total_amount_sum: Number(row[7]) || 0,
+      currencies: row[9]
+    });
+  }
+  
+  const forecastRows = [];
+  
+  // Función auxiliar para obtener días del mes
+  function getDaysInMonth(year, month) {
+    // month es 1-indexed (1=Enero, 12=Diciembre)
+    return new Date(year, month, 0).getDate();
+  }
+  
+  // 3. Procesar cada seller ordenado cronológicamente
+  Object.keys(sellersData).forEach(sellerId => {
+    // Ordenar de fecha más antigua a fecha más nueva (ascendente) para poder acumular
+    const registros = sellersData[sellerId].sort((a, b) => {
+      return String(a.from_iso).localeCompare(String(b.from_iso));
+    });
+    
+    let currentMonthStr = "";
+    let acumuladoMes = 0;
+    let diasTranscurridos = 0;
+    let diasTotalesDelMes = 30; // default safe fallback
+    
+    for (const reg of registros) {
+      // Extraer año y mes directamente del string (Ej: "2026-08-13T00:00:00.000Z")
+      // Esto evita problemas de huso horario al usar new Date() que puede desfasar 3 horas (y caer en el mes anterior)
+      const monthStr = String(reg.from_iso).substring(0, 7); // Ej: "2026-08"
+      
+      // ¿Cambiamos de mes o es el inicio? -> Reiniciamos el acumulador
+      if (monthStr !== currentMonthStr) {
+        currentMonthStr = monthStr;
+        acumuladoMes = 0;
+        diasTranscurridos = 0;
+        
+        const year = parseInt(monthStr.substring(0, 4), 10);
+        const month = parseInt(monthStr.substring(5, 7), 10);
+        diasTotalesDelMes = getDaysInMonth(year, month);
+      }
+      
+      acumuladoMes += reg.total_amount_sum;
+      diasTranscurridos += 1;
+      
+      // Evitar división por cero
+      const promedioDiario = acumuladoMes / diasTranscurridos; 
+      const estimacionCierre = promedioDiario * diasTotalesDelMes;
+      
+      // Pushear al resultado final
+      forecastRows.push([
+        reg.seller_id_meli,
+        reg.nickname,
+        reg.from_iso,
+        reg.to_iso,
+        reg.total_amount_sum,
+        reg.currencies,
+        acumuladoMes,
+        estimacionCierre
+      ]);
+    }
+  });
+  
+  // 4. Escribir resultados en la hoja destino
+  // Limpiar toda la hoja destino primero (para no dejar basura si hoy hay menos filas que ayer)
+  sheetForecast.clear();
+  
+  // Escribir headers
+  const headers = [
+    "seller_id_meli", 
+    "nickname", 
+    "from_iso", 
+    "to_iso", 
+    "total_amount_sum", 
+    "currencies", 
+    "facturacion_acumulada_mes", 
+    "facturacion_estimada_cierre_mes"
+  ];
+  
+  if (forecastRows.length > 0) {
+    sheetForecast.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheetForecast.getRange(2, 1, forecastRows.length, forecastRows[0].length).setValues(forecastRows);
+    
+    // (Opcional) Dar formato de moneda a las columnas de dinero
+    sheetForecast.getRange(2, 5, forecastRows.length, 1).setNumberFormat("#,##0.00");
+    sheetForecast.getRange(2, 7, forecastRows.length, 2).setNumberFormat("#,##0.00"); // Abarca col 7 y 8
+    
+    Logger.log(`[FORECAST] Se escribieron ${forecastRows.length} filas de forecast.`);
+  } else {
+    sheetForecast.getRange(1, 1, 1, headers.length).setValues([headers]);
+    Logger.log("[FORECAST] No se generaron filas (puede que las fechas sean inválidas).");
+  }
+}
+
+/**
+ * Script para generar la hoja de Comparativa de Meses.
+ * Extrae la info de forecast_ventas y arma la tabla de:
+ * Día de corte vs Mes anterior + Cierre de mes vs Cierre mes anterior.
+ */
+function updateComparativaMeses() {
+  Logger.log("[COMPARATIVA] Iniciando generación de tabla comparativa...");
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheetForecast = ss.getSheetByName(CONFIG.SHEET_FORECAST_VENTAS || "forecast_ventas");
+  let sheetComp = ss.getSheetByName(CONFIG.SHEET_COMPARATIVA || "comparativa_meses");
+  
+  if (!sheetForecast) {
+    Logger.log("[COMPARATIVA] No existe la hoja de forecast_ventas.");
+    return;
+  }
+  
+  // 1. Crear hoja si no existe
+  if (!sheetComp) {
+    sheetComp = ss.insertSheet(CONFIG.SHEET_COMPARATIVA || "comparativa_meses");
+  }
+  
+  const lastRow = sheetForecast.getLastRow();
+  if (lastRow < 2) return;
+  
+  const data = sheetForecast.getRange(2, 1, lastRow - 1, sheetForecast.getLastColumn()).getValues();
+  
+  // 2. Encontrar el último día (corte) con datos en toda la tabla
+  let maxDateStr = "1900-01-01";
+  for (const row of data) {
+    const dStr = String(row[2]).substring(0, 10);
+    if (dStr > maxDateStr) maxDateStr = dStr;
+  }
+  const corteDia = parseInt(maxDateStr.substring(8, 10), 10); // Ej: 13
+  
+  // 3. Agrupar por seller y recolectar los meses únicos
+  const sellers = {};
+  const mesesSet = new Set();
+  
+  for (const row of data) {
+    const sId = row[0];
+    const nick = row[1];
+    const curr = row[5];
+    
+    const from_iso = String(row[2]);
+    const monthStr = from_iso.substring(0, 7); // Ej "2026-08"
+    const dia = parseInt(from_iso.substring(8, 10), 10);
+    const factAcum = Number(row[6]) || 0;
+    
+    mesesSet.add(monthStr);
+    
+    if (!sellers[sId]) {
+      sellers[sId] = { nickname: nick, currencies: curr, meses: {} };
+    }
+    if (!sellers[sId].meses[monthStr]) {
+      sellers[sId].meses[monthStr] = { factDiaCorte: 0, factCierre: 0, ultDiaVisto: 0 };
+    }
+    
+    const mesObj = sellers[sId].meses[monthStr];
+    
+    // Día de corte: Queremos la facturación del día exacto de corte (o el último día disponible <= al de corte)
+    // Como procesamos secuencialmente de arriba a abajo, el último <= corteDia pisará a los anteriores
+    if (dia <= corteDia) {
+      mesObj.factDiaCorte = factAcum;
+    }
+    
+    // Cierre de mes: Guardamos el factAcum del último día reportado en el mes
+    if (dia >= mesObj.ultDiaVisto) {
+      mesObj.ultDiaVisto = dia;
+      mesObj.factCierre = factAcum;
+    }
+  }
+  
+  const mesesArr = Array.from(mesesSet).sort(); // Ordenados cronológicamente
+  
+  // 4. Preparar tabla de salida
+  const headers = ["seller_id_meli", "nickname", "currencies"];
+  for (const m of mesesArr) {
+    headers.push(`Acumulado Día ${corteDia} (${m})`);
+    headers.push(`Var % Día ${corteDia} (${m})`);
+    headers.push(`Acumulado Cierre Mes (${m})`);
+    headers.push(`Var % Cierre (${m})`);
+  }
+  
+  const rows = [];
+  for (const sId in sellers) {
+    const sData = sellers[sId];
+    const row = [sId, sData.nickname, sData.currencies];
+    
+    let prevCorte = null;
+    let prevCierre = null;
+    
+    for (const m of mesesArr) {
+      const mesData = sData.meses[m] || { factDiaCorte: 0, factCierre: 0 };
+      
+      const valCorte = mesData.factDiaCorte;
+      const valCierre = mesData.factCierre;
+      
+      const varCorte = (prevCorte && prevCorte > 0) ? (valCorte / prevCorte) - 1 : "";
+      const varCierre = (prevCierre && prevCierre > 0) ? (valCierre / prevCierre) - 1 : "";
+      
+      row.push(valCorte);
+      row.push(varCorte);
+      row.push(valCierre);
+      row.push(varCierre);
+      
+      // Solo consideramos el mes anterior válido si tuvo facturación (para no arrastrar un mes en 0)
+      if (valCorte > 0) prevCorte = valCorte;
+      if (valCierre > 0) prevCierre = valCierre;
+    }
+    rows.push(row);
+  }
+  
+  // 5. Escribir y aplicar colores
+  sheetComp.clear();
+  sheetComp.getRange(1, 1, 1, headers.length).setValues([headers]);
+  
+  if (rows.length > 0) {
+    sheetComp.getRange(2, 1, rows.length, headers.length).setValues(rows);
+    
+    // Colores base para alternar meses:
+    const colores = ["#e8f4f8", "#f4f8e8", "#f8e8ef", "#e8eaf8", "#fff2e6", "#e6ffe6"];
+    
+    // Dar formato iterando por los bloques de cada mes (cada bloque tiene 4 columnas)
+    // El offset inicial es 3 columnas fijas (A, B, C)
+    for (let i = 0; i < mesesArr.length; i++) {
+      const startCol = 4 + (i * 4);
+      
+      // Aplicar color de fondo a todo el bloque del mes
+      const bgColor = colores[i % colores.length];
+      sheetComp.getRange(1, startCol, rows.length + 1, 4).setBackground(bgColor);
+      
+      // Formato moneda
+      sheetComp.getRange(2, startCol, rows.length, 1).setNumberFormat("#,##0.00");
+      sheetComp.getRange(2, startCol + 2, rows.length, 1).setNumberFormat("#,##0.00");
+      
+      // Formato porcentaje
+      sheetComp.getRange(2, startCol + 1, rows.length, 1).setNumberFormat("0.00%");
+      sheetComp.getRange(2, startCol + 3, rows.length, 1).setNumberFormat("0.00%");
+      
+      // Formato condicional de las columnas de variaciones (verde si > 0, rojo si < 0)
+      const rangeVarCorte = sheetComp.getRange(2, startCol + 1, rows.length, 1);
+      const rangeVarCierre = sheetComp.getRange(2, startCol + 3, rows.length, 1);
+      
+      const rulePosCorte = SpreadsheetApp.newConditionalFormatRule()
+        .whenNumberGreaterThan(0)
+        .setFontColor("#006100")
+        .setRanges([rangeVarCorte])
+        .build();
+      const ruleNegCorte = SpreadsheetApp.newConditionalFormatRule()
+        .whenNumberLessThan(0)
+        .setFontColor("#9c0006")
+        .setRanges([rangeVarCorte])
+        .build();
+        
+      const rulePosCierre = SpreadsheetApp.newConditionalFormatRule()
+        .whenNumberGreaterThan(0)
+        .setFontColor("#006100")
+        .setRanges([rangeVarCierre])
+        .build();
+      const ruleNegCierre = SpreadsheetApp.newConditionalFormatRule()
+        .whenNumberLessThan(0)
+        .setFontColor("#9c0006")
+        .setRanges([rangeVarCierre])
+        .build();
+        
+      const rules = sheetComp.getConditionalFormatRules();
+      rules.push(rulePosCorte, ruleNegCorte, rulePosCierre, ruleNegCierre);
+      sheetComp.setConditionalFormatRules(rules);
+    }
+    
+    // Dar estilo a la cabecera
+    sheetComp.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+    
+    // Congelar paneles
+    sheetComp.setFrozenRows(1);
+    sheetComp.setFrozenColumns(2);
+  }
+}
