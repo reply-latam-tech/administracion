@@ -472,7 +472,7 @@ export default function FacturacionPage() {
                 />
                 <Tooltip 
                   contentStyle={{ borderRadius: '8px', border: '1px solid #F3F4F6', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  formatter={(val: number) => [`Índice: ${val.toFixed(2)}`, 'Peso']}
+                  formatter={(val: any) => [`Índice: ${val.toFixed(2)}`, 'Peso']}
                 />
                 <ReferenceLine y={1} stroke="#000000" strokeWidth={1} />
                 <ReferenceLine y={avgDOW} stroke="#6B7280" strokeDasharray="3 3" />
@@ -502,7 +502,7 @@ export default function FacturacionPage() {
                 />
                 <Tooltip 
                   contentStyle={{ borderRadius: '8px', border: '1px solid #F3F4F6', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  formatter={(val: number) => [`Índice: ${val.toFixed(2)}`, 'Peso']}
+                  formatter={(val: any) => [`Índice: ${val.toFixed(2)}`, 'Peso']}
                 />
                 <ReferenceLine y={1} stroke="#000000" strokeWidth={1} />
                 <ReferenceLine y={avgDOM} stroke="#6B7280" strokeDasharray="3 3" />
@@ -532,7 +532,7 @@ export default function FacturacionPage() {
                 />
                 <Tooltip 
                   contentStyle={{ borderRadius: '8px', border: '1px solid #F3F4F6', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  formatter={(val: number) => [`Índice: ${val.toFixed(2)}`, 'Peso']}
+                  formatter={(val: any) => [`Índice: ${val.toFixed(2)}`, 'Peso']}
                 />
                 <ReferenceLine y={1} stroke="#000000" strokeWidth={1} />
                 <ReferenceLine y={avgMensual} stroke="#6B7280" strokeDasharray="3 3" />

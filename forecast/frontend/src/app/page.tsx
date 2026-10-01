@@ -116,7 +116,7 @@ export default function DashboardPage() {
       };
 
       if (grouped[sId]) {
-        let prevVal = null;
+        let prevVal: number | null = null;
         monthsArr.forEach(m => {
           const days = grouped[sId][m];
           if (days) {
