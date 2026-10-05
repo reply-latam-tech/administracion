@@ -30,6 +30,28 @@ def get_sellers_map():
         norm_name = normalize_name(s['nombre_seller'])
         sellers_map[norm_name] = s['id_seller']
         
+    # Alias manuales para cuentas de botmaker que no coinciden exactamente
+    alias_map = {
+        "dapsa_1": "dapsa",
+        "juanvaldez_1": "juan valdez",
+        "juanvaldez": "juan valdez",
+        "cafemartinez_1": "cafe martinez",
+        "laespumeria_1": "la espumeria",
+        "laespumeria_2": "la espumeria",
+        "morixe_1": "morixe",
+        "sodastream_1": "sodastream",
+        "stylestore_1": "stylestore",
+        "bellapaloma_1": "bellapaloma",
+        "dapopmakeup_1": "dapopmakeup",
+        "dapopmakeup_2": "dapopmakeup",
+        "belcorp_1": "belcorp"
+    }
+    
+    # Expandir el mapa con los alias
+    for alias, real_name in alias_map.items():
+        if normalize_name(real_name) in sellers_map:
+            sellers_map[normalize_name(alias)] = sellers_map[normalize_name(real_name)]
+            
     return sellers_map
 
 def extract_period(headers):
