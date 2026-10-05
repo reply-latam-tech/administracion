@@ -27,6 +27,10 @@ export default function RootLayout({
                 <LayoutDashboard size={18} />
                 <span className="text-sm font-medium">Overview</span>
               </a>
+              <a href="/clientes" className="flex items-center gap-3 px-3 py-2 text-gray-600 rounded-md hover:bg-gray-50 hover:text-gray-900 transition-colors">
+                <Target size={18} />
+                <span className="text-sm font-medium">Directorio</span>
+              </a>
               <a href="/" className="flex items-center gap-3 px-3 py-2 bg-gray-100 text-gray-900 rounded-md transition-colors">
                 <TrendingUp size={18} />
                 <span className="text-sm font-medium">Proyecciones</span>
