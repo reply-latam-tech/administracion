@@ -60,7 +60,9 @@ def seed_seller(filename):
     idx = 0
     while idx < len(lines):
         if 'facturacion' in lines[idx].lower():
-            idx += 2
+            idx += 1
+            while idx < len(lines) and not lines[idx].strip():
+                idx += 1
             break
         idx += 1
         
@@ -102,7 +104,9 @@ def seed_seller(filename):
     idx = 0
     while idx < len(lines):
         if 'escalas' in lines[idx].lower():
-            idx += 2
+            idx += 1
+            while idx < len(lines) and not lines[idx].strip().startswith('202'):
+                idx += 1
             break
         idx += 1
         
@@ -121,8 +125,8 @@ def seed_seller(filename):
         
         escalas_inserts = []
         while idx < len(lines):
-            row = lines[idx].strip().split('\t')
-            if not row or not any(row):
+            row = lines[idx].rstrip('\r\n').split('\t')
+            if not any(x.strip() for x in row):
                 idx += 1
                 continue
                 

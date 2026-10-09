@@ -44,7 +44,11 @@ def get_sellers_map():
         "bellapaloma_1": "bellapaloma",
         "dapopmakeup_1": "dapopmakeup",
         "dapopmakeup_2": "dapopmakeup",
-        "belcorp_1": "belcorp"
+        "belcorp_1": "belcorp",
+        "almanativa": "alma nativa",
+        "violetta": "violetta cosmeticos",
+        "abarka": "abarka",
+        "geat": "geat"
     }
     
     # Expandir el mapa con los alias
@@ -78,7 +82,7 @@ def process_file(filepath, sellers_map):
         
         periodo = extract_period(headers)
         if not periodo:
-            print("❌ No se pudo detectar el periodo (mes y año) en las columnas de Botmaker.")
+            print("ERROR: No se pudo detectar el periodo (mes y año) en las columnas de Botmaker.")
             return False
             
         print(f"Período detectado: {periodo}")
@@ -125,10 +129,10 @@ def process_file(filepath, sellers_map):
                 rows_to_upsert, 
                 on_conflict="periodo,child_project_id"
             ).execute()
-            print(f"✅ Se guardaron/actualizaron {len(rows_to_upsert)} registros en Supabase.")
+            print(f"OK: Se guardaron/actualizaron {len(rows_to_upsert)} registros en Supabase.")
             return True
         else:
-            print("⚠️ No se encontraron filas de Child Accounts para procesar.")
+            print("WARN: No se encontraron filas de Child Accounts para procesar.")
             return False
 
 def main():
@@ -153,11 +157,11 @@ def main():
                 filename = os.path.basename(filepath)
                 dest = os.path.join(OUTPUT_DIR, filename)
                 shutil.move(filepath, dest)
-                print(f"📦 Archivo movido a {dest}\n")
+                print(f"OK: Archivo movido a {dest}\n")
             else:
-                print(f"❌ Se omitió mover {filepath} por errores.\n")
+                print(f"FAIL: Se omitió mover {filepath} por errores.\n")
         except Exception as e:
-            print(f"❌ Error crítico procesando {filepath}: {e}\n")
+            print(f"ERROR: Error crítico procesando {filepath}: {e}\n")
 
 if __name__ == "__main__":
     main()
