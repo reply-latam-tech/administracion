@@ -1,0 +1,29 @@
+name: Daily ML Orders Sync
+
+on:
+  schedule:
+    # 11:00 AM UTC es 08:00 AM en Argentina (UTC-3)
+    - cron: '0 11 * * *'
+  workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub si es necesario
+
+jobs:
+  sync_orders:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run daily sync script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          # Navegamos al directorio del script y lo ejecutamos
+          cd forecast/poc_api
+          node sync_daily_all.js
