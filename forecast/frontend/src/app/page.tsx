@@ -157,22 +157,40 @@ export default function DashboardPage() {
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(val);
 
-  // Configuración de ECharts
+  // Último valor del seller seleccionado para KPIs
+  const currentSellerData = useMemo(() => {
+    if (!data.length) return { acumulada: 0, proyeccion: 0, cumplimiento: 0 };
+    const last = data[data.length - 1];
+    const cumpl = last.proyeccion > 0 ? (last.acumulada / last.proyeccion) * 100 : 0;
+    return {
+      acumulada: last.acumulada || 0,
+      proyeccion: last.proyeccion || 0,
+      cumplimiento: Math.min(cumpl, 100)
+    };
+  }, [data]);
+
+  const selectedSellerObj = useMemo(() => {
+    return sellers.find(s => s.id_seller === selectedSeller);
+  }, [sellers, selectedSeller]);
+
+  // Configuración de ECharts con paleta institucional Reply
   const getEChartsOption = () => {
     return {
       tooltip: {
         trigger: 'axis',
         formatter: function (params: any) {
-          let tooltipHtml = `<div style="font-weight:bold;margin-bottom:5px;">${params[0].axisValue}</div>`;
+          let tooltipHtml = `<div style="font-weight:700;color:#0f172a;margin-bottom:8px;font-size:13px;border-bottom:1px solid #f1f5f9;padding-bottom:4px;">${params[0].axisValue}</div>`;
           params.forEach((param: any) => {
             const color = param.color;
             const seriesName = param.seriesName;
             const value = formatCurrency(param.value);
             tooltipHtml += `
-              <div style="display:flex;align-items:center;margin-bottom:3px;">
-                <span style="display:inline-block;margin-right:5px;border-radius:50%;width:10px;height:10px;background-color:${color};"></span>
-                <span style="margin-right:15px;color:#666;">${seriesName}:</span>
-                <span style="font-weight:bold;color:#111;">${value}</span>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:5px;font-size:12px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="display:inline-block;border-radius:50%;width:8px;height:8px;background-color:${color};"></span>
+                  <span style="color:#64748b;">${seriesName}:</span>
+                </div>
+                <span style="font-weight:700;color:#0f172a;font-family:monospace;">${value}</span>
               </div>
             `;
           });
@@ -180,20 +198,27 @@ export default function DashboardPage() {
         },
         backgroundColor: '#ffffff',
         borderColor: '#e2e8f0',
+        borderWidth: 1,
         padding: 12,
-        textStyle: { color: '#334155' },
-        extraCssText: 'box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-radius: 8px;'
+        textStyle: { color: '#0f172a' },
+        extraCssText: 'box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); border-radius: 10px;'
       },
       legend: {
         data: ['Facturación Acumulada', 'Proyección a Fin de Mes'],
         bottom: 0,
-        icon: 'circle'
+        icon: 'circle',
+        itemGap: 24,
+        textStyle: {
+          color: '#475569',
+          fontWeight: 500,
+          fontSize: 12
+        }
       },
       grid: {
         left: '2%',
-        right: '4%',
+        right: '3%',
         bottom: '12%',
-        top: '5%',
+        top: '6%',
         containLabel: true
       },
       xAxis: {
@@ -201,7 +226,7 @@ export default function DashboardPage() {
         boundaryGap: false,
         data: data.map(d => d.name),
         axisLine: { lineStyle: { color: '#e2e8f0' } },
-        axisLabel: { color: '#64748b' }
+        axisLabel: { color: '#64748b', fontSize: 11 }
       },
       yAxis: {
         type: 'value',
@@ -210,6 +235,7 @@ export default function DashboardPage() {
         splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } },
         axisLabel: { 
           color: '#64748b',
+          fontSize: 11,
           formatter: (value: number) => `$${(value / 1000000).toFixed(1)}M`
         }
       },
@@ -218,19 +244,32 @@ export default function DashboardPage() {
           name: 'Facturación Acumulada',
           type: 'line',
           data: data.map(d => d.acumulada),
-          smooth: true,
-          symbolSize: 8,
-          itemStyle: { color: '#2563eb' },
-          lineStyle: { width: 3 }
+          smooth: 0.3,
+          symbolSize: 6,
+          itemStyle: { color: '#4981fb' },
+          lineStyle: { width: 3, color: '#4981fb' },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(73, 129, 251, 0.22)' },
+                { offset: 1, color: 'rgba(73, 129, 251, 0.01)' }
+              ]
+            }
+          }
         },
         {
           name: 'Proyección a Fin de Mes',
           type: 'line',
           data: data.map(d => d.proyeccion),
-          smooth: true,
+          smooth: 0.3,
           symbol: 'none',
-          itemStyle: { color: '#94a3b8' },
-          lineStyle: { width: 2, type: 'dashed' }
+          itemStyle: { color: '#ff5100' },
+          lineStyle: { width: 2.5, type: 'dashed', color: '#ff5100' }
         }
       ]
     };
@@ -239,15 +278,17 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 pb-12">
       
-      {/* Controles */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-        <div className="flex gap-4 items-center">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Cliente</label>
+      {/* Controles & KPIs de Cabecera */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <div className="w-full sm:w-72">
+            <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+              Cliente Seleccionado
+            </label>
             <select 
               value={selectedSeller}
               onChange={(e) => setSelectedSeller(e.target.value)}
-              className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2"
+              className="bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium rounded-lg focus:ring-2 focus:ring-[#4981fb] focus:border-[#4981fb] block w-full p-2.5 transition-all outline-none"
             >
               {sellers.length > 0 ? (
                 sellers.map((s) => (
@@ -260,19 +301,65 @@ export default function DashboardPage() {
               )}
             </select>
           </div>
+
+          {selectedSellerObj && (
+            <div className="hidden lg:flex items-center gap-2 pt-5">
+              <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
+                País: {selectedSellerObj.pais || 'ARG'}
+              </span>
+              <span className="text-xs px-2.5 py-1 rounded-full bg-[#eff5ff] text-[#275ec9] font-medium border border-[#daebfe]">
+                Moneda: {selectedSellerObj.moneda || 'ARS'}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="text-right">
-          <p className="text-xs font-medium text-gray-500">Última actualización</p>
-          <p className="text-sm font-semibold text-gray-900">En tiempo real</p>
+
+        {/* Mini KPI Cards del Seller */}
+        <div className="flex items-center gap-3 sm:gap-6 self-stretch justify-between sm:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+          <div className="text-left sm:text-right">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Ventas Acumuladas</p>
+            <p className="text-base sm:text-lg font-bold text-[#4981fb]">
+              {formatCurrency(currentSellerData.acumulada)}
+            </p>
+          </div>
+          <div className="h-8 w-px bg-slate-200"></div>
+          <div className="text-right">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Proyección Fin Mes</p>
+            <p className="text-base sm:text-lg font-bold text-[#ff5100]">
+              {formatCurrency(currentSellerData.proyeccion)}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Gráfico */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-900 mb-6">Tendencia de Facturación y Proyección</h2>
+      {/* Gráfico Principal */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 mb-4 gap-2">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              Curva de Crecimiento & Proyección a Fin de Mes
+            </h2>
+            <p className="text-xs text-slate-500">
+              Comparativa de ventas reales diarias acumuladas contra el ritmo estimado del modelo estadístico
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#4981fb]"></span>
+              Ventas Reales
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ff5100]"></span>
+              Proyección
+            </span>
+          </div>
+        </div>
+
         <div className="h-80 w-full">
           {loading ? (
-            <div className="h-full flex items-center justify-center text-gray-400">Cargando datos de Supabase...</div>
+            <div className="h-full flex items-center justify-center text-slate-400 text-sm">
+              <span className="inline-block animate-pulse">Cargando serie temporal desde Supabase...</span>
+            </div>
           ) : (
             <ReactECharts 
               option={getEChartsOption()} 
@@ -284,69 +371,99 @@ export default function DashboardPage() {
       </div>
 
       {/* Tabla Matricial */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
+        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Matriz de Facturación y Proyecciones</h2>
-            <p className="text-xs text-gray-500">Comparativa global de todos los clientes</p>
+            <h2 className="text-base font-bold text-slate-900">Matriz Consolidada de Clientes</h2>
+            <p className="text-xs text-slate-500">
+              Ventas reales vs. proyecciones por periodo para toda la cartera
+            </p>
           </div>
-          <div className="flex bg-gray-200 p-1 rounded-lg">
+          <div className="flex bg-slate-200/80 p-1 rounded-lg self-start sm:self-auto">
             <button 
               onClick={() => setViewMode('CIERRE')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode === 'CIERRE' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                viewMode === 'CIERRE' 
+                  ? 'bg-white text-slate-900 shadow-xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              Cierre de mes
+              Cierre de Mes
             </button>
             <button 
               onClick={() => setViewMode('DIA_ACTUAL')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode === 'DIA_ACTUAL' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                viewMode === 'DIA_ACTUAL' 
+                  ? 'bg-white text-slate-900 shadow-xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              Al día actual (Día {new Date().getDate()})
+              Al Día Actual (Día {new Date().getDate()})
             </button>
           </div>
         </div>
+        
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left text-gray-600">
-            <thead className="text-xs text-gray-500 uppercase bg-white border-b border-gray-100 sticky top-0 z-10">
+          <table className="w-full text-sm text-left text-slate-600">
+            <thead className="text-[11px] text-slate-400 uppercase tracking-wider bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10">
               <tr>
-                <th scope="col" className="px-6 py-4 font-semibold sticky left-0 bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Seller</th>
+                <th scope="col" className="px-6 py-3.5 font-bold text-slate-700 sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                  Seller
+                </th>
                 {matrixData.months.map(m => (
-                  <th key={m} scope="col" className="px-4 py-3 font-medium text-center min-w-[150px] border-l border-gray-50">{m}</th>
+                  <th key={m} scope="col" className="px-4 py-3.5 font-bold text-slate-700 text-center min-w-[160px] border-l border-slate-100">
+                    {m}
+                  </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {matrixData.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={matrixData.months.length + 1} className="px-6 py-8 text-center text-gray-400">Cargando datos...</td>
+                  <td colSpan={matrixData.months.length + 1} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    Cargando datos consolidados...
+                  </td>
                 </tr>
               ) : (
                 matrixData.rows.map((row: any, idx: number) => (
-                  <tr key={idx} className="bg-white border-b border-gray-50 hover:bg-gray-50 transition-colors group">
-                    <td className="px-6 py-4 font-semibold text-gray-900 whitespace-nowrap sticky left-0 bg-white group-hover:bg-gray-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-gray-100">
-                      {row.sellerName}
+                  <tr key={idx} className="bg-white hover:bg-slate-50/70 transition-colors group">
+                    <td className="px-6 py-4 font-bold text-slate-900 whitespace-nowrap sticky left-0 bg-white group-hover:bg-slate-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#4981fb]"></span>
+                        <span>{row.sellerName}</span>
+                      </div>
                     </td>
                     
                     {matrixData.months.map((m: string) => {
                       const cell = row.monthsData[m];
                       if (!cell) {
-                        return <td key={m} className="px-6 py-4 text-center text-gray-300 border-l border-gray-50">-</td>;
+                        return (
+                          <td key={m} className="px-4 py-3 text-center text-slate-300 border-l border-slate-100">
+                            —
+                          </td>
+                        );
                       }
                       
                       return (
-                        <td key={m} className="px-4 py-3 border-l border-gray-50">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[11px] text-gray-400 font-medium">Real:</span>
-                              <span className="text-sm font-semibold text-gray-900">{formatCurrency(cell.facturacion)}</span>
+                        <td key={m} className="px-4 py-3 border-l border-slate-100">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-[10px] text-slate-400 font-semibold uppercase">Real:</span>
+                              <span className="font-bold text-slate-900">{formatCurrency(cell.facturacion)}</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[11px] text-indigo-400 font-medium">Proy:</span>
-                              <span className="text-sm font-medium text-indigo-600">{formatCurrency(cell.proyeccion)}</span>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-[10px] text-[#ff5100] font-semibold uppercase">Proy:</span>
+                              <span className="font-semibold text-[#ff5100]">{formatCurrency(cell.proyeccion)}</span>
                             </div>
                             {cell.variation !== null && (
-                              <div className={`flex items-center justify-end gap-1 text-[10px] font-bold mt-0.5 ${cell.variation > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                {cell.variation > 0 ? '▲' : '▼'} {(Math.abs(cell.variation) * 100).toFixed(1)}%
+                              <div className="flex items-center justify-end pt-0.5">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                                  cell.variation >= 0 
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' 
+                                    : 'text-rose-600 bg-rose-50 border border-rose-200/60'
+                                }`}>
+                                  {cell.variation >= 0 ? '+' : ''}{(cell.variation * 100).toFixed(1)}%
+                                </span>
                               </div>
                             )}
                           </div>

@@ -112,69 +112,71 @@ export default function ClientesPage() {
   return (
     <div className="space-y-6 pb-12 w-full h-full overflow-hidden flex flex-col">
       <div className="flex flex-col gap-4 shrink-0">
-        <div className="flex items-center justify-between bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between bg-white p-6 rounded-xl border border-slate-200/80 shadow-xs">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Database className="w-6 h-6 text-indigo-600" />
-              Directorio de Clientes
+            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2.5">
+              <Database className="w-5 h-5 text-[#ff5100]" />
+              Directorio de Sellers & Estado de Ingesta
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Estado de integración y configuración de cada cuenta en tiempo real</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Monitoreo en tiempo real de cobertura histórica, tokens de API de Mercado Libre y matrices tarifarias
+            </p>
           </div>
           <div className="flex gap-4">
-            <div className="text-center px-4 border-r border-gray-200">
-              <p className="text-2xl font-bold text-gray-900">{sellersInfo.length}</p>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cuentas</p>
+            <div className="text-center px-4 border-r border-slate-200">
+              <p className="text-2xl font-bold text-slate-900">{sellersInfo.length}</p>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Cuentas</p>
             </div>
             <div className="text-center px-4">
-              <p className="text-2xl font-bold text-emerald-600">
+              <p className="text-2xl font-bold text-[#4981fb]">
                 {sellersInfo.filter(s => s.hasOrders && s.hasFacturacion && s.hasEscalas).length}
               </p>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Completas</p>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Completas</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+      <div className="flex-1 bg-white rounded-xl shadow-xs border border-slate-200/80 overflow-hidden flex flex-col">
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-              <p className="text-sm text-gray-500">Cargando directorio...</p>
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4981fb] border-t-transparent"></div>
+              <p className="text-xs text-slate-500 font-medium">Cargando directorio de cuentas...</p>
             </div>
           </div>
         ) : (
           <div className="flex-1 overflow-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-500 uppercase bg-gray-50/80 sticky top-0 z-10 shadow-sm backdrop-blur-sm">
+              <thead className="text-[11px] text-slate-400 uppercase tracking-wider bg-slate-50/90 sticky top-0 z-10 border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 font-semibold">Cliente</th>
-                  <th className="px-6 py-4 font-semibold text-center">Frecuencia</th>
-                  <th className="px-6 py-4 font-semibold text-center" title="Facturación Histórica (Mensual)">Facturación</th>
-                  <th className="px-6 py-4 font-semibold text-center" title="Órdenes de Mercado Libre (Diarias)">Órdenes ML</th>
-                  <th className="px-6 py-4 font-semibold text-center" title="Matriz de Escalas Cargada">Escalas</th>
-                  <th className="px-6 py-4 font-semibold text-center">Botmaker</th>
-                  <th className="px-6 py-4 font-semibold text-center">Último Mes Real</th>
-                  <th className="px-6 py-4 font-semibold text-right">Última Tarifa</th>
+                  <th className="px-6 py-4 font-bold text-slate-700">Cliente</th>
+                  <th className="px-6 py-4 font-bold text-slate-700 text-center">Frecuencia</th>
+                  <th className="px-6 py-4 font-bold text-slate-700 text-center" title="Facturación Histórica (Mensual)">Facturación</th>
+                  <th className="px-6 py-4 font-bold text-slate-700 text-center" title="Órdenes de Mercado Libre (Diarias)">Órdenes ML</th>
+                  <th className="px-6 py-4 font-bold text-slate-700 text-center" title="Matriz de Escalas Cargada">Escalas</th>
+                  <th className="px-6 py-4 font-bold text-slate-700 text-center">Botmaker</th>
+                  <th className="px-6 py-4 font-bold text-slate-700 text-center">Último Mes Real</th>
+                  <th className="px-6 py-4 font-bold text-slate-700 text-right">Última Tarifa</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {sellersInfo.map((seller) => (
-                  <tr key={seller.id} className="hover:bg-indigo-50/30 transition-colors group">
+                  <tr key={seller.id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full ${seller.estado === 'activa' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                         <div>
-                          <p className="font-semibold text-gray-900">{seller.nombre}</p>
-                          <p className="text-xs text-gray-400 font-mono">{seller.id}</p>
+                          <p className="font-bold text-slate-900">{seller.nombre}</p>
+                          <p className="text-xs text-slate-400 font-mono">{seller.id}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
                         seller.frecuencia === 'MENSUAL' 
-                          ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-700/10' 
-                          : 'bg-gray-100 text-gray-700 ring-1 ring-gray-500/10'
+                          ? 'bg-[#eff5ff] text-[#275ec9] border border-[#daebfe]' 
+                          : 'bg-slate-100 text-slate-700 border border-slate-200'
                       }`}>
                         {seller.frecuencia || 'N/A'}
                       </span>

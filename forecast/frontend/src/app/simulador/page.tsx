@@ -305,43 +305,43 @@ export default function SimuladorPage() {
           </div>
         ) : points.length > 0 ? (
           <>
-            <div className="h-[450px] w-full border border-gray-100 rounded-xl bg-gray-50/30 p-4 pb-8 pr-8">
+            <div className="h-[450px] w-full border border-slate-200/80 rounded-xl bg-slate-50/40 p-4 pb-8 pr-8">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={points} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
                   <defs>
                     <linearGradient id="colorFee" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#4981fb" stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor="#4981fb" stopOpacity={0.02}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis 
                     dataKey="facturacion" 
                     type="number"
                     domain={[0, 'dataMax']}
                     tickFormatter={(val) => `$ ${Math.round(val / 1000000)}M`}
-                    stroke="#9ca3af"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickMargin={10}
                     tickCount={15}
-                    label={{ value: 'Facturación Bruta Ajustada', position: 'bottom', offset: 0, fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                    label={{ value: 'Facturación Bruta de Venta ($)', position: 'bottom', offset: 0, fill: '#64748b', fontSize: 12, fontWeight: 600 }}
                   />
                   <YAxis 
                     yAxisId="left"
                     tickFormatter={(val) => `$ ${Math.round(val / 1000000)}M`}
-                    stroke="#9ca3af"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickMargin={10}
-                    label={{ value: 'Nuestro Fee ($)', angle: -90, position: 'insideLeft', offset: -5, fill: '#3b82f6', fontSize: 13, fontWeight: 600 }}
+                    label={{ value: 'Fee de Servicio Reply ($)', angle: -90, position: 'insideLeft', offset: -5, fill: '#4981fb', fontSize: 12, fontWeight: 700 }}
                   />
                   <YAxis 
                     yAxisId="right"
                     orientation="right"
-                    stroke="#f59e0b"
-                    fontSize={12}
+                    stroke="#ff5100"
+                    fontSize={11}
                     tickMargin={10}
                     allowDecimals={false}
-                    label={{ value: 'Frecuencia Histórica (Meses)', angle: 90, position: 'insideRight', offset: 0, fill: '#9ca3af', fontSize: 13, fontWeight: 600 }}
+                    label={{ value: 'Frecuencia Histórica (Meses)', angle: 90, position: 'insideRight', offset: 0, fill: '#94a3b8', fontSize: 12, fontWeight: 600 }}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   
@@ -355,8 +355,8 @@ export default function SimuladorPage() {
                       y1={0}
                       y2={t.count}
                       fill="transparent"
-                      stroke="#9ca3af"
-                      strokeWidth={2}
+                      stroke="#cbd5e1"
+                      strokeWidth={1.5}
                       strokeOpacity={0.8}
                     />
                   ))}
@@ -368,37 +368,41 @@ export default function SimuladorPage() {
                     yAxisId="left"
                     type="linear" 
                     dataKey="fee" 
-                    stroke="#3b82f6" 
-                    strokeWidth={2}
+                    stroke="#4981fb" 
+                    strokeWidth={2.5}
                     fillOpacity={1} 
                     fill="url(#colorFee)" 
                     isAnimationActive={false}
                   />
                   {simulatedFacturacion > 0 && (
-                    <ReferenceLine yAxisId="left" x={simulatedFacturacion} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'top', value: 'Venta', fill: '#ef4444', fontSize: 12 }} />
+                    <ReferenceLine yAxisId="left" x={simulatedFacturacion} stroke="#ff5100" strokeWidth={2} strokeDasharray="4 4" label={{ position: 'top', value: 'Venta Simulada', fill: '#ff5100', fontSize: 12, fontWeight: 700 }} />
                   )}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
 
             {/* Panel Interactivo */}
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 flex flex-col gap-6">
-              <div className="flex justify-between items-center">
+            <div className="bg-[#eff5ff] border border-[#daebfe] rounded-xl p-6 flex flex-col gap-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-blue-900">Calculadora en vivo</h3>
-                  <p className="text-xs text-blue-600">Deslizá para simular una facturación de {selectedMonth}</p>
+                  <h3 className="text-sm font-bold text-[#1e3a8a]">Calculadora de Escala en Vivo</h3>
+                  <p className="text-xs text-[#275ec9]">Deslizá para proyectar el fee exacto para {selectedMonth}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-blue-500 font-medium uppercase tracking-wider mb-1">Nuestro Fee Resultante</p>
-                  <div className="text-3xl font-black text-blue-700 tracking-tight">{formatCurrency(simulatedFee)}</div>
-                  <div className="text-xs font-semibold text-blue-600 bg-blue-100 inline-block px-2 py-0.5 rounded mt-1">Escala aplicada: {simulatedAlicuotaStr}</div>
+                <div className="text-left sm:text-right bg-white p-3.5 rounded-xl border border-[#daebfe] shadow-2xs min-w-[200px]">
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Fee Estimado Reply</p>
+                  <div className="text-2xl font-black text-[#ff5100] tracking-tight">{formatCurrency(simulatedFee)}</div>
+                  <div className="text-[11px] font-bold text-[#275ec9] bg-[#eff5ff] inline-block px-2 py-0.5 rounded border border-[#daebfe] mt-1">
+                    Escala: {simulatedAlicuotaStr}
+                  </div>
                 </div>
               </div>
               
               <div>
-                <div className="flex justify-between text-xs text-blue-600 font-medium mb-2">
+                <div className="flex justify-between text-xs text-[#275ec9] font-semibold mb-2">
                   <span>$0</span>
-                  <span className="text-sm font-bold">{formatCurrency(simulatedFacturacion)} Bruto</span>
+                  <span className="text-sm font-bold text-slate-900 bg-white px-3 py-1 rounded-md border border-[#daebfe] shadow-2xs">
+                    {formatCurrency(simulatedFacturacion)} Venta Bruta
+                  </span>
                   <span>{formatCurrency(maxSliderVal)}</span>
                 </div>
                 <input 
@@ -408,7 +412,7 @@ export default function SimuladorPage() {
                   step="10000"
                   value={simulatedFacturacion}
                   onChange={(e) => setSimulatedFacturacion(Number(e.target.value))}
-                  className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  className="w-full h-2.5 bg-[#daebfe] rounded-lg appearance-none cursor-pointer accent-[#4981fb]"
                 />
               </div>
             </div>

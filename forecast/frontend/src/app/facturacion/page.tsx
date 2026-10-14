@@ -182,49 +182,118 @@ export default function FacturacionPage() {
       const total = data.total;
       const totalVar = variationType === 'monthly' ? data.total_varM : data.total_varA;
       
+      // Filtrar clientes con facturación > 0 y ordenar descendentemente por volumen de facturación
+      const activeEntries = payload
+        .filter((entry: any) => entry.value && entry.value > 0)
+        .sort((a: any, b: any) => (b.value || 0) - (a.value || 0));
+
+      const TOP_LIMIT = 10;
+      const hasOthers = activeEntries.length > TOP_LIMIT;
+      const displayedEntries = hasOthers ? activeEntries.slice(0, TOP_LIMIT) : activeEntries;
+      const remainingEntries = hasOthers ? activeEntries.slice(TOP_LIMIT) : [];
+
+      const othersTotalValue = remainingEntries.reduce((acc: number, curr: any) => acc + (curr.value || 0), 0);
+      const othersPercentage = total > 0 ? (othersTotalValue / total) * 100 : 0;
+      
       return (
-        <div className="bg-white/95 backdrop-blur-md p-3 rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] border border-gray-100/50 text-xs min-w-[200px]">
-          <div className="font-bold text-gray-800 mb-2 border-b border-gray-100/80 pb-2 flex justify-between items-center">
-            <span>{label}</span>
+        <div className="bg-white/98 backdrop-blur-md p-3.5 rounded-xl shadow-[0_10px_30px_-5px_rgba(0,0,0,0.15)] border border-slate-200/90 text-xs min-w-[280px] max-w-[340px] z-50 pointer-events-none">
+          {/* Header del Tooltip */}
+          <div className="font-bold text-slate-800 mb-2 border-b border-slate-100 pb-2 flex justify-between items-center">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-slate-900">{label}</span>
+              <span className="text-[11px] font-normal text-slate-400">
+                ({activeEntries.length} {activeEntries.length === 1 ? 'cliente' : 'clientes'})
+              </span>
+            </div>
+            {hasOthers && (
+              <span className="text-[10px] font-bold text-[#4981fb] bg-[#eff5ff] px-2 py-0.5 rounded-full border border-[#daebfe]">
+                Top 10 + Otros
+              </span>
+            )}
           </div>
-          <div className="space-y-1.5 mb-2">
-            {payload.map((entry: any, index: number) => {
+
+          {/* Lista de clientes (Top 10 ordenado) */}
+          <div className="space-y-1.5 mb-2.5 max-h-[300px] overflow-y-auto pr-1">
+            {displayedEntries.map((entry: any, index: number) => {
               const varValue = data[`${entry.name}_var${variationType === 'monthly' ? 'M' : 'A'}`];
-              if (entry.value === 0) return null;
               const percentage = total > 0 ? (entry.value / total) * 100 : 0;
               return (
-                <div key={index} className="flex justify-between items-center gap-6">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-gray-600 font-medium">{entry.name}</span>
+                <div key={index} className="flex justify-between items-center gap-2 py-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                    <span className="text-slate-700 font-medium truncate text-xs" title={entry.name}>
+                      {entry.name}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right flex flex-col">
-                      <span className="font-semibold text-gray-900 leading-tight">{formatCurrency(entry.value)}</span>
-                      <span className="text-[10px] text-gray-400 font-medium leading-tight">{percentage.toFixed(1)}%</span>
-                    </div>
-                    {varValue !== 0 && varValue != null ? (
-                      <span className={`text-[10px] w-10 text-right ${varValue > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {varValue > 0 ? '+' : ''}{(varValue * 100).toFixed(1)}%
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <span className="font-bold text-slate-900 leading-tight block text-xs">
+                        {formatCurrency(entry.value)}
                       </span>
-                    ) : (
-                      <span className="text-[10px] w-10 text-right text-transparent">-</span>
-                    )}
+                      <span className="text-[10px] text-slate-400 font-medium leading-none block">
+                        {percentage.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="w-12 text-right">
+                      {varValue !== 0 && varValue != null ? (
+                        <span className={`text-[10px] font-bold px-1 py-0.2 rounded ${
+                          varValue > 0 
+                            ? 'text-emerald-700 bg-emerald-50' 
+                            : 'text-rose-600 bg-rose-50'
+                        }`}>
+                          {varValue > 0 ? '+' : ''}{(varValue * 100).toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-300 font-mono">—</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
             })}
+
+            {/* Fila de Otros agrupados */}
+            {hasOthers && (
+              <div className="flex justify-between items-center gap-2 pt-1.5 border-t border-dashed border-slate-200">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <div className="w-2 h-2 rounded-full shrink-0 bg-slate-400" />
+                  <span 
+                    className="text-slate-500 font-semibold italic truncate text-xs" 
+                    title={remainingEntries.map((e: any) => e.name).join(', ')}
+                  >
+                    Otros ({remainingEntries.length} clientes)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right">
+                    <span className="font-bold text-slate-700 leading-tight block text-xs">
+                      {formatCurrency(othersTotalValue)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium leading-none block">
+                      {othersPercentage.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-12 text-right">
+                    <span className="text-[10px] text-slate-400 font-mono">—</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="border-t border-gray-100/80 pt-2 flex justify-between items-center">
-            <span className="font-bold text-gray-700">Total Bruto</span>
+
+          {/* Footer: Total Bruto */}
+          <div className="border-t border-slate-200 pt-2 flex justify-between items-center bg-slate-50/80 -mx-3.5 -mb-3.5 px-3.5 py-2.5 rounded-b-xl">
+            <span className="font-bold text-slate-800 text-xs">Total Bruto</span>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-gray-900">{formatCurrency(total)}</span>
+              <span className="font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(total)}</span>
               {totalVar !== 0 && totalVar != null ? (
-                <span className={`text-[10px] w-10 text-right font-medium ${totalVar > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  totalVar > 0 ? 'text-emerald-700 bg-emerald-100/80' : 'text-rose-600 bg-rose-100/80'
+                }`}>
                   {totalVar > 0 ? '+' : ''}{(totalVar * 100).toFixed(1)}%
                 </span>
               ) : (
-                <span className="text-[10px] w-10 text-right text-transparent">-</span>
+                <span className="text-[10px] text-slate-300 font-mono">—</span>
               )}
             </div>
           </div>
@@ -322,26 +391,63 @@ export default function FacturacionPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 shrink-0">
-        <h2 className="text-md font-semibold text-gray-800 mb-4">Evolución de Facturación por Seller</h2>
-        <div className="h-[300px] w-full">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-5 shrink-0">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-2">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Evolución de Facturación por Seller</h2>
+            <p className="text-xs text-slate-500">
+              {selectedSeller ? `Visualizando únicamente: ${selectedSeller}` : 'Composición mensual de ingresos brutos por cliente'}
+            </p>
+          </div>
+          {selectedSeller && (
+            <button
+              onClick={() => setSelectedSeller(null)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#eff5ff] text-[#275ec9] hover:bg-[#daebfe] transition-colors border border-[#daebfe] flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <span>✕ Ver todos los clientes</span>
+            </button>
+          )}
+        </div>
+
+        <div className="h-[380px] w-full">
           {loading ? (
-             <div className="animate-pulse w-full h-full bg-gray-50 rounded"></div>
+             <div className="animate-pulse w-full h-full bg-slate-50 rounded-xl"></div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} stackOffset={valueType === 'relative' ? 'expand' : 'none'}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} dy={10} />
+              <BarChart 
+                data={chartData} 
+                margin={{ top: 10, right: 15, left: 10, bottom: 25 }} 
+                stackOffset={valueType === 'relative' ? 'expand' : 'none'}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748B' }} 
+                  dy={10} 
+                />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 12, fill: '#6B7280' }} 
+                  tick={{ fontSize: 11, fill: '#64748B' }} 
                   tickFormatter={(value) => valueType === 'relative' ? `${(value * 100).toFixed(0)}%` : new Intl.NumberFormat('es-AR', { notation: "compact", compactDisplay: "short" }).format(value)} 
                 />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F3F4F6' }} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                <Tooltip 
+                  content={<CustomTooltip />} 
+                  cursor={{ fill: 'rgba(73, 129, 251, 0.05)' }} 
+                  wrapperStyle={{ zIndex: 50 }}
+                />
+                <Legend 
+                  iconType="circle" 
+                  wrapperStyle={{ fontSize: '11px', paddingTop: '16px', color: '#64748B' }} 
+                />
                 {sellerNames.filter(name => !selectedSeller || name === selectedSeller).map((name, index) => {
-                  const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4'];
+                  const colors = [
+                    '#4981FB', '#FF5100', '#10B981', '#F59E0B', '#8B5CF6', 
+                    '#06B6D4', '#EC4899', '#14B8A6', '#6366F1', '#F97316', 
+                    '#84CC16', '#A855F7', '#3B82F6', '#E11D48', '#0EA5E9', '#D97706'
+                  ];
                   const color = colors[index % colors.length];
                   return (
                     <Bar key={name} dataKey={name} stackId="a" fill={color}>
