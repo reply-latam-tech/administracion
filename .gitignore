@@ -35,3 +35,7 @@ env/
 
 # Respuestas grandes o basura
 forecast/poc_api/ml_response.json
+
+# Documentación interna / provisoria
+forecast/INFORME_TECNICO.md
+*INFORME_TECNICO.md
