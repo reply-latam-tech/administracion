@@ -167,8 +167,21 @@ export default function ClientesPage() {
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full ${seller.estado === 'activa' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                         <div>
-                          <p className="font-bold text-slate-900">{seller.nombre}</p>
-                          <p className="text-xs text-slate-400 font-mono">{seller.id}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-slate-900">{seller.nombre}</p>
+                            {seller.id >= 900000000 && seller.id < 1000000000 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200" title="Falta completar el Seller ID oficial">
+                                ⚠️ ID Pendiente
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 font-mono">
+                            {seller.id >= 900000000 && seller.id < 1000000000 ? (
+                              <span className="text-amber-600/80 italic font-sans text-[11px]">Sin ID oficial (Completar)</span>
+                            ) : (
+                              seller.id
+                            )}
+                          </p>
                         </div>
                       </div>
                     </td>
