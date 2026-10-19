@@ -105,17 +105,6 @@ export function Header() {
           <span className="hidden lg:inline">Sync Diaria:</span>
           <span className="font-semibold">08:00 AM</span>
         </div>
-
-        {/* User / Workspace */}
-        <div className="flex items-center gap-2.5 pl-2 border-l border-slate-200">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#ff5100] to-[#ff7a3d] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-            R
-          </div>
-          <div className="hidden xl:block text-left text-xs">
-            <div className="font-semibold text-slate-800 leading-none">Reply Team</div>
-            <div className="text-[10px] text-slate-400 leading-none mt-1">Administración</div>
-          </div>
-        </div>
       </div>
     </header>
   );

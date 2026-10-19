@@ -277,25 +277,42 @@ function SidebarContent() {
         </nav>
       </div>
 
-      {/* Footer / System Status */}
-      <div className="p-4 border-t border-slate-100 bg-slate-50/60 space-y-3">
+      {/* Footer / User Profile & System Status */}
+      <div className="p-3.5 border-t border-slate-100 bg-slate-50/70 space-y-2.5">
+        {/* User Profile Card */}
+        <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#ff5100] to-[#ff7a3d] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              R
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <div className="font-semibold text-slate-800 text-xs truncate leading-tight">Reply Team</div>
+            <div className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">Administración</div>
+          </div>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-50 text-[#ff5100] border border-orange-200 uppercase shrink-0">
+            Admin
+          </span>
+        </div>
+
         {/* Status card */}
-        <div className="p-3 bg-white rounded-lg border border-slate-200/70 shadow-2xs space-y-2">
+        <div className="p-2.5 bg-white rounded-lg border border-slate-200/70 shadow-2xs space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
               Supabase DB
             </span>
-            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">
+            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">
               Online
             </span>
           </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
             <span className="flex items-center gap-1 text-[10px]">
-              <Activity size={12} className="text-[#ff5100]" />
+              <Activity size={11} className="text-[#ff5100]" />
               Cron 08:00 ART
             </span>
             <span className="text-[10px] text-slate-400 font-mono">v1.4</span>
@@ -303,7 +320,7 @@ function SidebarContent() {
         </div>
 
         {/* Quick doc link */}
-        <div className="text-[11px] text-slate-400 text-center flex items-center justify-center gap-1.5 pt-1">
+        <div className="text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5 pt-0.5">
           <span>Reply Latam © 2026</span>
         </div>
       </div>

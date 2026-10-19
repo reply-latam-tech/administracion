@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Search, X, Clock, Globe, Sparkles } from "lucide-react";
 
 export default function EscalasPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [sellersList, setSellersList] = useState<any[]>([]);
+  const [sellersMetaMap, setSellersMetaMap] = useState<Record<string, any>>({});
+  const [liqMapState, setLiqMapState] = useState<Record<string, any>>({});
   const [monthsStr, setMonthsStr] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
+
+  // Filtros reactivos
+  const [selectedCountry, setSelectedCountry] = useState<string>('TODOS');
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   useEffect(() => {
     async function fetchData() {
@@ -396,7 +403,6 @@ export default function EscalasPage() {
         a.sellerName.localeCompare(b.sellerName)
       );
 
-      const formattedData: any[] = [];
       const monthsArray = Array.from(globalMonthsSet).sort((a, b) => {
         // Sort months chronologically just in case (e.g. 'Ene 2026' vs 'Feb 2026')
         const parseDate = (str: string) => {
@@ -406,52 +412,19 @@ export default function EscalasPage() {
         };
         return parseDate(a) - parseDate(b);
       });
-      
-      sortedSellers.forEach((seller) => {
-        let maxTiers = 0;
-        monthsArray.forEach(m => {
-          if (seller.tiersByMonth[m]) {
-            seller.tiersByMonth[m].sort((a: any, b: any) => {
-              if (a.tipoCargo === 'MINIMO' && b.tipoCargo !== 'MINIMO') return -1;
-              if (b.tipoCargo === 'MINIMO' && a.tipoCargo !== 'MINIMO') return 1;
-              if (a.tipoCargo === 'SESIONES' && b.tipoCargo === 'SESIONES') {
-                return a.alicuota - b.alicuota;
-              }
-              return b.alicuota - a.alicuota;
-            });
-            maxTiers = Math.max(maxTiers, seller.tiersByMonth[m].length);
-          }
-        });
-
-        for (let i = 0; i < maxTiers; i++) {
-          const rowMonths: any = {};
-          monthsArray.forEach(m => {
-             const tiers = seller.tiersByMonth[m];
-             if (tiers && tiers[i]) {
-               rowMonths[m] = tiers[i];
-             } else {
-               rowMonths[m] = null;
-             }
-          });
-          
-          formattedData.push({
-            isFirstRow: i === 0,
-            rowSpan: maxTiers,
-            sellerId: seller.sellerId,
-            sellerName: seller.sellerName,
-            pais: seller.pais,
-            moneda: seller.moneda,
-            isBaja: sellersMeta[seller.sellerId]?.isBaja || false,
-            fechaEgreso: sellersMeta[seller.sellerId]?.fechaEgreso || null,
-            months: rowMonths,
-            liquidaciones: liqMap[seller.sellerId] || {},
-            id: `${seller.sellerId}_row_${i}`
-          });
-        }
-      });
 
       setMonthsStr(monthsArray);
-      setData(formattedData);
+      setSellersList(sortedSellers);
+      setSellersMetaMap(sellersMeta);
+      setLiqMapState(liqMap);
+
+      // Fecha y hora exacta en tiempo real (ART - UTC-3)
+      const now = new Date();
+      const diaSemana = now.toLocaleDateString('es-AR', { weekday: 'long' });
+      const diaCapitalizado = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
+      const fechaStr = now.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+      const horaStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      setLastUpdated(`${diaCapitalizado} ${fechaStr} • ${horaStr} hs ART`);
       setLoading(false);
     }
     
@@ -474,39 +447,195 @@ export default function EscalasPage() {
   const formatPercent = (val: number) => 
     new Intl.NumberFormat('es-AR', { style: 'percent', minimumFractionDigits: 2 }).format(val);
 
+  // Conteo de sellers por país / moneda
+  const countryCounts = useMemo(() => {
+    const counts = { TODOS: sellersList.length, AR: 0, CL: 0, CO: 0, MX: 0, US: 0 };
+    sellersList.forEach((s) => {
+      const p = (s.pais || '').toUpperCase();
+      const m = (s.moneda || '').toUpperCase();
+      if (p === 'AR' || p === 'ARG' || m === 'ARS') counts.AR++;
+      else if (p === 'CL' || p === 'CHL' || m === 'CLP') counts.CL++;
+      else if (p === 'CO' || p === 'COL' || m === 'COP') counts.CO++;
+      else if (p === 'MX' || p === 'MEX' || m === 'MXN') counts.MX++;
+      else if (p === 'US' || p === 'USA' || m === 'USD') counts.US++;
+    });
+    return counts;
+  }, [sellersList]);
+
+  // Sellers filtrados dinámicamente por país y buscador de texto
+  const filteredSellers = useMemo(() => {
+    return sellersList.filter((seller) => {
+      // 1. Filtro por país / moneda
+      if (selectedCountry !== 'TODOS') {
+        const p = (seller.pais || '').toUpperCase();
+        const m = (seller.moneda || '').toUpperCase();
+        if (selectedCountry === 'AR' && p !== 'AR' && p !== 'ARG' && m !== 'ARS') return false;
+        if (selectedCountry === 'CL' && p !== 'CL' && p !== 'CHL' && m !== 'CLP') return false;
+        if (selectedCountry === 'CO' && p !== 'CO' && p !== 'COL' && m !== 'COP') return false;
+        if (selectedCountry === 'MX' && p !== 'MX' && p !== 'MEX' && m !== 'MXN') return false;
+        if (selectedCountry === 'US' && p !== 'US' && p !== 'USA' && m !== 'USD') return false;
+      }
+      // 2. Filtro por término de búsqueda (nombre o ID)
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase().trim();
+        const matchesName = (seller.sellerName || '').toLowerCase().includes(term);
+        const matchesId = String(seller.sellerId).includes(term);
+        if (!matchesName && !matchesId) return false;
+      }
+      return true;
+    });
+  }, [sellersList, selectedCountry, searchTerm]);
+
+  // Filas aplanadas para la tabla con preservación de rowSpan por seller
+  const tableRows = useMemo(() => {
+    const rows: any[] = [];
+    filteredSellers.forEach((seller) => {
+      let maxTiers = 0;
+      monthsStr.forEach((m) => {
+        if (seller.tiersByMonth[m]) {
+          seller.tiersByMonth[m].sort((a: any, b: any) => {
+            if (a.tipoCargo === 'MINIMO' && b.tipoCargo !== 'MINIMO') return -1;
+            if (b.tipoCargo === 'MINIMO' && a.tipoCargo !== 'MINIMO') return 1;
+            if (a.tipoCargo === 'SESIONES' && b.tipoCargo === 'SESIONES') {
+              return a.alicuota - b.alicuota;
+            }
+            return b.alicuota - a.alicuota;
+          });
+          maxTiers = Math.max(maxTiers, seller.tiersByMonth[m].length);
+        }
+      });
+
+      for (let i = 0; i < maxTiers; i++) {
+        const rowMonths: any = {};
+        monthsStr.forEach((m) => {
+          const tiers = seller.tiersByMonth[m];
+          rowMonths[m] = tiers && tiers[i] ? tiers[i] : null;
+        });
+
+        rows.push({
+          isFirstRow: i === 0,
+          rowSpan: maxTiers,
+          sellerId: seller.sellerId,
+          sellerName: seller.sellerName,
+          pais: seller.pais,
+          moneda: seller.moneda,
+          isBaja: sellersMetaMap[seller.sellerId]?.isBaja || false,
+          fechaEgreso: sellersMetaMap[seller.sellerId]?.fechaEgreso || null,
+          months: rowMonths,
+          liquidaciones: liqMapState[seller.sellerId] || {},
+          id: `${seller.sellerId}_row_${i}`
+        });
+      }
+    });
+    return rows;
+  }, [filteredSellers, monthsStr, sellersMetaMap, liqMapState]);
+
   return (
-    <div className="space-y-6 w-full h-[calc(100vh-130px)] flex flex-col">
-      <div className="flex flex-col gap-4 shrink-0">
-        <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+    <div className="space-y-3 w-full h-[calc(100vh-105px)] flex flex-col">
+      {/* 1. Barra de Control Superior Unificada */}
+      <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col gap-3 shrink-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Título & Badge de sellers */}
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Matriz de Escalas y Tarifas</h1>
-            <p className="text-sm text-gray-500">Histórico de umbrales por inflación y proyecciones</p>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-base font-bold text-slate-900 tracking-tight">Matriz de Escalas y Tarifas</h1>
+              <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                {filteredSellers.length} {filteredSellers.length === 1 ? 'cliente' : 'clientes'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Histórico de umbrales ajustados por inflación y proyecciones dinámicas
+            </p>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-medium text-gray-500">Última actualización</p>
-            <p className="text-sm font-semibold text-gray-900">En tiempo real</p>
+
+          {/* Buscador reactivo y Día/Hora de última actualización */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Buscador reactivo con input */}
+            <div className="relative">
+              <Search size={14} className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar cliente por nombre o ID..."
+                className="pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5100]/20 focus:border-[#ff5100] w-64 text-slate-800 placeholder-slate-400 transition-all"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 transition-colors"
+                  title="Limpiar búsqueda"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Badge de última actualización exacta */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50/80 border border-emerald-200/70 text-emerald-900 text-xs shadow-2xs">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-slate-500 hidden sm:inline text-[11px]">Última actualización:</span>
+              <span className="font-semibold font-mono text-[11px] text-emerald-950">
+                {lastUpdated || 'En tiempo real'}
+              </span>
+            </div>
           </div>
         </div>
-        
-        <div className="bg-orange-50 border border-orange-100 p-4 rounded-xl shadow-sm text-sm text-orange-900">
-          <div className="flex gap-2 font-semibold mb-1 items-center">
-            <span className="w-3 h-3 rounded-full bg-orange-400"></span>
-            Acerca de las Proyecciones
-          </div>
-          <p className="text-orange-800">
-            Las celdas resaltadas en color naranja fuerte indican la escala en la que cae la <span className="font-bold">facturación proyectada</span> (basada en tendencias y promedios) contra los umbrales de escala ajustados por la inflación esperada del BCRA. Las celdas en naranja suave muestran el resto de las escalas proyectadas para esos meses.
-          </p>
+
+        {/* 2. Filtros por País / Moneda (Pills) */}
+        <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+            <Globe size={12} /> Filtro:
+          </span>
+          {[
+            { id: 'TODOS', label: 'Todos', count: countryCounts.TODOS, flag: '🌐' },
+            { id: 'AR', label: 'Argentina (ARS)', count: countryCounts.AR, flag: '🇦🇷' },
+            { id: 'CL', label: 'Chile (USD/CLP)', count: countryCounts.CL, flag: '🇨🇱' },
+            { id: 'CO', label: 'Colombia (COP/USD)', count: countryCounts.CO, flag: '🇨🇴' },
+            { id: 'MX', label: 'México (USD/MXN)', count: countryCounts.MX, flag: '🇲🇽' },
+            { id: 'US', label: 'USA (USD)', count: countryCounts.US, flag: '🇺🇸' },
+          ].map((c) => {
+            const isActive = selectedCountry === c.id;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedCountry(c.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                  isActive
+                    ? 'bg-[#275ec9] text-white shadow-2xs ring-1 ring-[#275ec9]'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
+                }`}
+              >
+                <span>{c.flag}</span>
+                <span>{c.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-600'
+                }`}>
+                  {c.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 flex gap-2 items-start">
-          <div className="mt-0.5 text-blue-500">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+
+        {/* 3. Banner Unificado y Compacto (combinando Proyecciones e Inflación REM BCRA) */}
+        <div className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg bg-orange-50/70 border border-orange-200/60 text-[11px] text-orange-950">
+          <div className="flex items-center gap-2 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ff5100] shrink-0 animate-ping" />
+            <p className="truncate">
+              <strong className="font-semibold text-orange-900">Guía de Proyecciones:</strong> Celdas en <span className="px-1.5 py-0.2 rounded bg-orange-500 text-white font-bold text-[10px]">naranja fuerte</span> indican la escala de facturación proyectada (estimada con la mediana de IPC del REM BCRA); las celdas en naranja suave reflejan los demás umbrales futuros ajustados.
+            </p>
           </div>
-          <div>
-            <strong className="text-gray-700">Sobre los datos proyectados:</strong> Los valores futuros se calculan utilizando la mediana del Índice de Precios al Consumidor (IPC) – Nivel General, basándose en el REM (Relevamiento de Expectativas de Mercado) publicado por el BCRA.
+          <div className="shrink-0 text-[11px] text-slate-500 font-mono hidden md:inline">
+            Ajuste inflacionario automático
           </div>
         </div>
       </div>
 
+      {/* 4. Tabla de Escalas */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
         <div className="overflow-auto flex-1 relative">
           <table className="w-full text-sm text-left text-gray-600">
@@ -525,8 +654,27 @@ export default function EscalasPage() {
                     <div className="animate-pulse">Cargando escalas...</div>
                   </td>
                 </tr>
+              ) : tableRows.length === 0 ? (
+                <tr>
+                  <td colSpan={monthsStr.length + 1} className="px-6 py-16 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Search size={28} className="text-slate-300" />
+                      <p className="text-sm font-semibold text-slate-700">No se encontraron clientes para los filtros seleccionados</p>
+                      <p className="text-xs text-slate-400">
+                        {searchTerm ? `No hay resultados para "${searchTerm}". ` : ''}
+                        Intenta con otro término o selecciona &quot;Todos&quot; los países.
+                      </p>
+                      <button
+                        onClick={() => { setSearchTerm(''); setSelectedCountry('TODOS'); }}
+                        className="mt-1 px-3 py-1 text-xs text-[#ff5100] hover:underline font-semibold"
+                      >
+                        Restablecer filtros
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : (
-                data.map((row: any) => (
+                tableRows.map((row: any) => (
                   <tr key={row.id} className="bg-white border-b border-gray-50 hover:bg-gray-50 transition-colors group">
                     {row.isFirstRow && (
                       <td 
