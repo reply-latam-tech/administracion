@@ -59,11 +59,295 @@ export default function EscalasPage() {
           mStr = mStr.charAt(0).toUpperCase() + mStr.slice(1);
           
           if (!liqMap[row.seller_id]) liqMap[row.seller_id] = {};
+          
+          let tipo_cargo = row.tipo_cargo_aplicado;
+          let alicuota = row.alicuota_aplicada;
+          let subtotal_mercado_libre = row.subtotal_mercado_libre;
+
+          // Soporte para cálculo exacto en USD de Natura Colombia (seller_id 941943480)
+          if (String(row.seller_id) === '941943480') {
+            const pKey = row.periodo?.substring(0, 7);
+            const naturaMap: Record<string, { tipo: string; alicuota: number; subtotal: number }> = {
+              '2026-02': { tipo: 'MINIMO', alicuota: 0, subtotal: 1200.00 },
+              '2026-03': { tipo: 'PORCENTUAL', alicuota: 0.0293, subtotal: 1217.47 },
+              '2026-04': { tipo: 'MINIMO', alicuota: 0, subtotal: 1200.00 },
+              '2026-05': { tipo: 'PORCENTUAL', alicuota: 0.0276, subtotal: 1365.38 },
+              '2026-06': { tipo: 'PORCENTUAL', alicuota: 0.0276, subtotal: 1374.38 },
+              '2026-07': { tipo: 'PORCENTUAL', alicuota: 0.0276, subtotal: 1868.56 },
+              '2026-08': { tipo: 'PORCENTUAL', alicuota: 0.0244, subtotal: 1716.24 },
+              '2026-09': { tipo: 'PORCENTUAL', alicuota: 0.0228, subtotal: 2108.48 },
+              // 12 Meses Proyectados (cruce Facturación COP proyectada / TC proyectado -> Escala USD)
+              '2026-10': { tipo: 'PORCENTUAL', alicuota: 0.0244, subtotal: 1742.23 },
+              '2026-11': { tipo: 'PORCENTUAL', alicuota: 0.0228, subtotal: 2170.76 },
+              '2026-12': { tipo: 'PORCENTUAL', alicuota: 0.0228, subtotal: 2588.12 },
+              '2027-01': { tipo: 'PORCENTUAL', alicuota: 0.0276, subtotal: 1617.70 },
+              '2027-02': { tipo: 'PORCENTUAL', alicuota: 0.0276, subtotal: 1749.13 },
+              '2027-03': { tipo: 'PORCENTUAL', alicuota: 0.0244, subtotal: 1856.25 },
+              '2027-04': { tipo: 'PORCENTUAL', alicuota: 0.0244, subtotal: 1923.73 },
+              '2027-05': { tipo: 'PORCENTUAL', alicuota: 0.0228, subtotal: 2314.34 },
+              '2027-06': { tipo: 'PORCENTUAL', alicuota: 0.0244, subtotal: 2025.41 },
+              '2027-07': { tipo: 'PORCENTUAL', alicuota: 0.0244, subtotal: 2095.52 },
+              '2027-08': { tipo: 'PORCENTUAL', alicuota: 0.0244, subtotal: 2166.62 },
+              '2027-09': { tipo: 'PORCENTUAL', alicuota: 0.0228, subtotal: 2282.10 },
+            };
+            if (naturaMap[pKey]) {
+              tipo_cargo = naturaMap[pKey].tipo;
+              alicuota = naturaMap[pKey].alicuota;
+              subtotal_mercado_libre = naturaMap[pKey].subtotal;
+            }
+          }
+
+          // Soporte para cálculo exacto en USD de Disuiza Colombia (seller_id 964690754)
+          if (String(row.seller_id) === '964690754') {
+            const pKey = row.periodo?.substring(0, 7);
+            const tcCopMap: Record<string, number> = {
+              '2024-04': 3897.0, '2024-05': 3897.0, '2024-06': 3897.0, '2024-07': 3897.0,
+              '2024-08': 3897.0, '2024-09': 3897.0, '2024-10': 3897.0, '2024-11': 3897.0, '2024-12': 3897.0,
+              '2025-01': 3950.0, '2025-02': 3970.0, '2025-03': 3990.0, '2025-04': 4305.02,
+              '2025-05': 4107.0, '2025-06': 3974.37, '2025-07': 4097.38, '2025-08': 4016.0,
+              '2025-09': 3897.0, '2025-10': 3800.0, '2025-11': 3784.0, '2025-12': 3790.77,
+              '2026-01': 3622.0, '2026-02': 3769.0, '2026-03': 3660.0, '2026-04': 3660.0,
+              '2026-05': 3562.0, '2026-06': 3440.83, '2026-07': 3205.80, '2026-08': 3213.97,
+              '2026-09': 3312.84, '2026-10': 3325.00, '2026-11': 3340.00, '2026-12': 3360.00,
+              '2027-01': 3375.00, '2027-02': 3390.00, '2027-03': 3410.00, '2027-04': 3425.00,
+              '2027-05': 3440.00, '2027-06': 3455.00, '2027-07': 3470.00, '2027-08': 3485.00,
+              '2027-09': 3500.00
+            };
+            const currentTc = (pKey && tcCopMap[pKey]) || 3350.0;
+            const factVal = Number(row.valor_facturado) || 0;
+            const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
+            const comision2pct = factUsd * 0.02;
+            const feeFinal = Math.max(1500.0, comision2pct);
+
+            subtotal_mercado_libre = Math.round(feeFinal * 100) / 100;
+            tipo_cargo = feeFinal === 1500.0 ? 'MINIMO' : 'PORCENTUAL';
+            alicuota = feeFinal === 1500.0 ? 0 : 0.02;
+          }
+
+          // Soporte para cálculo exacto en COP de Evacol Colombia ML (seller_id 928666257)
+          if (String(row.seller_id) === '928666257') {
+            const pKey = row.periodo?.substring(0, 7);
+            const tcCopMap: Record<string, number> = {
+              '2026-02': 3769.00, '2026-03': 3660.00, '2026-04': 3660.00,
+              '2026-05': 3562.00, '2026-06': 3440.83, '2026-07': 3205.80,
+              '2026-08': 3213.97, '2026-09': 3312.84, '2026-10': 3325.00,
+              '2026-11': 3340.00, '2026-12': 3360.00, '2027-01': 3375.00,
+              '2027-02': 3390.00, '2027-03': 3410.00, '2027-04': 3425.00,
+              '2027-05': 3440.00, '2027-06': 3455.00, '2027-07': 3470.00,
+              '2027-08': 3485.00, '2027-09': 3500.00
+            };
+            const currentTc = (pKey && tcCopMap[pKey]) || 3350.0;
+            const factVal = Number(row.valor_facturado) || 0;
+            const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
+            
+            let feeUsd = 1000.0;
+            let alicuotaVal = 0;
+            let tipoCargoVal = 'MINIMO';
+            if (factUsd >= 150000) {
+              feeUsd = factUsd * 0.02;
+              alicuotaVal = 0.02;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 110000) {
+              feeUsd = factUsd * 0.025;
+              alicuotaVal = 0.025;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 80000) {
+              feeUsd = factUsd * 0.03;
+              alicuotaVal = 0.03;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 60000) {
+              feeUsd = factUsd * 0.035;
+              alicuotaVal = 0.035;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 50000) {
+              feeUsd = factUsd * 0.04;
+              alicuotaVal = 0.04;
+              tipoCargoVal = 'PORCENTUAL';
+            } else {
+              feeUsd = 1000.0;
+              alicuotaVal = 0;
+              tipoCargoVal = 'MINIMO';
+            }
+
+            subtotal_mercado_libre = Math.round(feeUsd * currentTc);
+            tipo_cargo = tipoCargoVal;
+            alicuota = alicuotaVal;
+          }
+
+          // Soporte para Evacol Colombia ADDI (seller_id 928424062)
+          if (String(row.seller_id) === '928424062') {
+            subtotal_mercado_libre = 1000.00;
+            tipo_cargo = 'FIJO';
+            alicuota = 0;
+          }
+
+          // Soporte para Formex Colombia (seller_id 127711636)
+          if (String(row.seller_id) === '127711636') {
+            const pKey = row.periodo?.substring(0, 7);
+            const tcCopMap: Record<string, number> = {
+              '2026-05': 3562.00, '2026-06': 3440.83, '2026-07': 3205.80,
+              '2026-08': 3213.97, '2026-09': 3312.84, '2026-10': 3325.00,
+              '2026-11': 3340.00, '2026-12': 3360.00, '2027-01': 3375.00,
+              '2027-02': 3390.00, '2027-03': 3410.00, '2027-04': 3425.00,
+              '2027-05': 3440.00, '2027-06': 3455.00, '2027-07': 3470.00,
+              '2027-08': 3485.00, '2027-09': 3500.00
+            };
+            const currentTc = (pKey && tcCopMap[pKey]) || 3350.0;
+            const factVal = Number(row.valor_facturado) || 0;
+            const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
+            
+            let feeUsd = 1000.0;
+            let alicuotaVal = 0;
+            let tipoCargoVal = 'MINIMO';
+            if (factUsd >= 230000) {
+              feeUsd = factUsd * 0.0130;
+              alicuotaVal = 0.0130;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 170000) {
+              feeUsd = factUsd * 0.0163;
+              alicuotaVal = 0.0163;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 125000) {
+              feeUsd = factUsd * 0.0195;
+              alicuotaVal = 0.0195;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 90000) {
+              feeUsd = factUsd * 0.0228;
+              alicuotaVal = 0.0228;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 70000) {
+              feeUsd = factUsd * 0.0244;
+              alicuotaVal = 0.0244;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 45000) {
+              feeUsd = factUsd * 0.0276;
+              alicuotaVal = 0.0276;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 35000) {
+              feeUsd = factUsd * 0.0293;
+              alicuotaVal = 0.0293;
+              tipoCargoVal = 'PORCENTUAL';
+            } else {
+              feeUsd = 1000.0;
+              alicuotaVal = 0;
+              tipoCargoVal = 'MINIMO';
+            }
+
+            subtotal_mercado_libre = Math.round(feeUsd * 100) / 100;
+            tipo_cargo = tipoCargoVal;
+            alicuota = alicuotaVal;
+          }
+
+          // Soporte para Evacol Amazon USA (seller_id 918210724)
+          if (String(row.seller_id) === '918210724') {
+            const factVal = Number(row.valor_facturado) || 0;
+            const factUsd = factVal;
+            
+            let feeUsd = 1000.0;
+            let alicuotaVal = 0;
+            let tipoCargoVal = 'MINIMO';
+            if (factUsd >= 230000) {
+              feeUsd = factUsd * 0.0130;
+              alicuotaVal = 0.0130;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 170000) {
+              feeUsd = factUsd * 0.0163;
+              alicuotaVal = 0.0163;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 125000) {
+              feeUsd = factUsd * 0.0195;
+              alicuotaVal = 0.0195;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 90000) {
+              feeUsd = factUsd * 0.0228;
+              alicuotaVal = 0.0228;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 70000) {
+              feeUsd = factUsd * 0.0244;
+              alicuotaVal = 0.0244;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 45000) {
+              feeUsd = factUsd * 0.0276;
+              alicuotaVal = 0.0276;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (factUsd >= 35000) {
+              feeUsd = factUsd * 0.0293;
+              alicuotaVal = 0.0293;
+              tipoCargoVal = 'PORCENTUAL';
+            } else {
+              feeUsd = 1000.0;
+              alicuotaVal = 0;
+              tipoCargoVal = 'MINIMO';
+            }
+
+            subtotal_mercado_libre = Math.round(feeUsd * 100) / 100;
+            tipo_cargo = tipoCargoVal;
+            alicuota = alicuotaVal;
+          }
+
+          // Soporte para Evacol México ML (seller_id 807100133)
+          if (String(row.seller_id) === '807100133') {
+            const pKey = row.periodo?.substring(0, 7);
+            const tcMxnMap: Record<string, number> = {
+              '2026-05': 16.70, '2026-06': 17.50, '2026-07': 17.80,
+              '2026-08': 16.97, '2026-09': 18.07, '2026-10': 18.12,
+              '2026-11': 18.18, '2026-12': 18.25, '2027-01': 18.32,
+              '2027-02': 18.38, '2027-03': 18.45, '2027-04': 18.52,
+              '2027-05': 18.58, '2027-06': 18.65, '2027-07': 18.72,
+              '2027-08': 18.80, '2027-09': 18.90
+            };
+            const currentTc = (pKey && tcMxnMap[pKey]) || 18.12;
+            const factVal = Number(row.valor_facturado) || 0;
+            const gmvUsd = factVal > 500000 ? (factVal / currentTc) : factVal;
+            const baseNetaUsd = gmvUsd / 1.16;
+            
+            let feeUsd = 1000.0;
+            let alicuotaVal = 0;
+            let tipoCargoVal = 'MINIMO';
+            if (baseNetaUsd >= 230000) {
+              feeUsd = baseNetaUsd * 0.0130;
+              alicuotaVal = 0.0130;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (baseNetaUsd >= 170000) {
+              feeUsd = baseNetaUsd * 0.0163;
+              alicuotaVal = 0.0163;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (baseNetaUsd >= 125000) {
+              feeUsd = baseNetaUsd * 0.0195;
+              alicuotaVal = 0.0195;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (baseNetaUsd >= 90000) {
+              feeUsd = baseNetaUsd * 0.0228;
+              alicuotaVal = 0.0228;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (baseNetaUsd >= 70000) {
+              feeUsd = baseNetaUsd * 0.0244;
+              alicuotaVal = 0.0244;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (baseNetaUsd >= 45000) {
+              feeUsd = baseNetaUsd * 0.0276;
+              alicuotaVal = 0.0276;
+              tipoCargoVal = 'PORCENTUAL';
+            } else if (baseNetaUsd >= 35000) {
+              feeUsd = baseNetaUsd * 0.0293;
+              alicuotaVal = 0.0293;
+              tipoCargoVal = 'PORCENTUAL';
+            } else {
+              feeUsd = 1000.0;
+              alicuotaVal = 0;
+              tipoCargoVal = 'MINIMO';
+            }
+
+            subtotal_mercado_libre = Math.round(feeUsd * currentTc * 100) / 100;
+            tipo_cargo = tipoCargoVal;
+            alicuota = alicuotaVal;
+          }
+
           liqMap[row.seller_id][mStr] = {
-            tipo_cargo: row.tipo_cargo_aplicado,
-            alicuota: row.alicuota_aplicada,
+            tipo_cargo,
+            alicuota,
             valor_facturado: row.valor_facturado,
-            subtotal_mercado_libre: row.subtotal_mercado_libre,
+            subtotal_mercado_libre,
             estado: row.estado
           };
         });
@@ -124,6 +408,9 @@ export default function EscalasPage() {
             seller.tiersByMonth[m].sort((a: any, b: any) => {
               if (a.tipoCargo === 'MINIMO' && b.tipoCargo !== 'MINIMO') return -1;
               if (b.tipoCargo === 'MINIMO' && a.tipoCargo !== 'MINIMO') return 1;
+              if (a.tipoCargo === 'SESIONES' && b.tipoCargo === 'SESIONES') {
+                return a.alicuota - b.alicuota;
+              }
               return b.alicuota - a.alicuota;
             });
             maxTiers = Math.max(maxTiers, seller.tiersByMonth[m].length);
@@ -163,8 +450,18 @@ export default function EscalasPage() {
     fetchData();
   }, []);
 
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(val);
+  const formatCurrency = (val: number, currency = 'ARS') => {
+    if (currency === 'USD') {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+    }
+    if (currency === 'COP') {
+      return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
+    }
+    if (currency === 'MXN') {
+      return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
+    }
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(val);
+  };
 
   const formatPercent = (val: number) => 
     new Intl.NumberFormat('es-AR', { style: 'percent', minimumFractionDigits: 2 }).format(val);
@@ -246,7 +543,12 @@ export default function EscalasPage() {
 
                       const val = cellData.monto;
                       const variation = cellData.variacion;
-                      const alicuotaLabel = cellData.tipoCargo === 'MINIMO' ? 'MÍN' : formatPercent(cellData.alicuota);
+                      const alicuotaLabel = 
+                        cellData.tipoCargo === 'MINIMO' 
+                          ? 'MÍN' 
+                          : cellData.tipoCargo === 'SESIONES'
+                          ? `${Math.round(cellData.alicuota).toLocaleString('es-AR')} ses`
+                          : formatPercent(cellData.alicuota);
 
                       const isScaleProjected = cellData.estado === 'PROYECTADO';
                       const liq = row.liquidaciones[m];
@@ -305,7 +607,7 @@ export default function EscalasPage() {
                           <div className="flex justify-between items-center mb-0.5">
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${alicuotaClass}`}>{alicuotaLabel}</span>
                             <div className={`font-semibold text-[13px] ${montoClass}`}>
-                              {formatCurrency(val)}
+                              {formatCurrency(val, row.moneda)}
                             </div>
                           </div>
                           
@@ -325,11 +627,11 @@ export default function EscalasPage() {
                               <div className="font-semibold mb-1.5 text-gray-200">{row.sellerName} <span className="text-gray-400 font-normal">| {m}</span></div>
                               <div className="flex justify-between mt-2">
                                 <span className="text-gray-400">Facturación:</span>
-                                <span className="font-medium">{formatCurrency(liq.valor_facturado)}</span>
+                                <span className="font-medium">{formatCurrency(liq.valor_facturado, row.sellerName.includes('Colombia') ? 'COP' : row.moneda)}</span>
                               </div>
                               <div className="flex justify-between mt-1">
                                 <span className="text-gray-400" title="Subtotal antes de Botmaker e IVA">Subtotal ML ({alicuotaLabel}):</span>
-                                <span className="font-bold text-blue-300">{formatCurrency(liq.subtotal_mercado_libre)}</span>
+                                <span className="font-bold text-blue-300">{formatCurrency(liq.subtotal_mercado_libre, row.sellerName.includes('Colombia') || row.moneda === 'USD' ? 'USD' : row.moneda)}</span>
                               </div>
                               <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                             </div>

@@ -1,0 +1,32 @@
+dim_sellers
+
+id_seller: 928424062
+nombre_seller: Evacol Colombia ADDI
+canal: ADDI (Pasarela de Pago / BNPL E-Commerce)
+pais: CO (Colombia)
+moneda: COP (pesos colombianos)
+moneda_cobro: USD (dólares estadounidenses) - $1.000 USD fijos
+estado: TRUE
+cobrar_botmaker: FALSE
+frecuencia_actualizacion: FIJA
+
+--
+
+MECÁNICA DE LIQUIDACIÓN Y ESCALA:
+- Tipo de cargo: FIJO (Flat Fee)
+- Valor: $ 1.000,00 USD fijos mensuales
+- Regla: Se cobran siempre 1.000 USD fijos independientemente del volumen de facturación bruta registrada en ADDI.
+- IVA: 0% (Servicio internacional exento)
+
+--
+
+facturacion (Histórico Real COP)
+
+06/2026	07/2026	08/2026	09/2026
+2.346.150	2.112.300	2.454.600	4.352.520
+
+--
+
+escalas (Fijas en USD)
+
+0	1.000,00

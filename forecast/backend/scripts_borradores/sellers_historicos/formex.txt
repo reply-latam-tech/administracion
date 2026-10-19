@@ -1,0 +1,31 @@
+dim_sellers
+
+id_seller: 127711636
+nombre_seller: Formex
+canal: Mercado Libre
+pais: CO (Colombia)
+moneda: COP (pesos colombianos)
+moneda_cobro: USD (dólares estadounidenses)  
+estado: TRUE
+cobrar_botmaker: FALSE
+frecuencia_actualizacion: FIJA
+
+--
+
+facturacion (Histórico Real COP)
+
+05/2026	06/2026	07/2026	08/2026	09/2026
+29.577.205,00	45.556.212	58.066.865	97.249.068	48.604.023,00
+
+--
+
+escalas 
+
+0	1.000,00
+2,93%	35.000,00
+2,76%	45.000,00
+2,44%	70.000,00
+2,28%	90.000,00
+1,95%	125.000,00
+1,63%	170.000,00
+1,30%	230.000,00

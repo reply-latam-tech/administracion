@@ -27,14 +27,14 @@ const pageTitles: Record<string, { title: string; category: string; description:
     description: "Estado de integración y sincronización de Sellers" 
   },
   "/facturacion": { 
-    title: "Historial de Facturación", 
-    category: "Finanzas", 
-    description: "Desglose mensual de ventas reales y variación porcentual" 
+    title: "Ventas del Cliente", 
+    category: "Facturación Bruta (GMV)", 
+    description: "Historial de ventas y volumen transaccionado por los clientes en marketplaces" 
   },
   "/liquidaciones": { 
-    title: "Liquidaciones y Fees", 
-    category: "Cobranzas", 
-    description: "Cálculo de alícuotas, mínimos y cobro por Seller" 
+    title: "Metas de Facturación", 
+    category: "Ingresos Reply (Subtotal)", 
+    description: "Honorarios netos de servicio de Reply por cliente, proyectados e históricos" 
   },
   "/metas": { 
     title: "Metas de Cobro & Simulador Inverso", 

@@ -1,0 +1,37 @@
+dim_sellers
+
+id_seller: 807100133
+nombre_seller: Evacol México ML
+canal: Mercado Libre
+pais: MX (México)
+moneda: MXN (pesos mexicanos)
+moneda_cobro: MXN (pesos mexicanos - conversión desde USD)
+estado: TRUE
+cobrar_botmaker: FALSE
+frecuencia_actualizacion: FIJA
+
+--
+
+escalas (en USD)
+
+0	1.000,00
+2,93%	35.000,00
+2,76%	45.000,00
+2,44%	70.000,00
+2,28%	90.000,00
+1,95%	125.000,00
+1,63%	170.000,00
+1,30%	230.000,00
+
+--
+
+mecanica_liquidacion
+
+1. Facturación bruta GMV en dólares (USD).
+2. Se quita el 16% de IVA (Base Neta USD = GMV_USD / 1.16).
+3. Cruce con la escala oficial en USD:
+   - Si Base Neta USD < 35.000 USD: Mínimo garantizado = 1.000 USD.
+   - Si Base Neta USD >= 35.000 USD: alícuota correspondiente (2,93% a 1,30%).
+4. Conversión y cobro en pesos mexicanos:
+   - Fee MXN = Fee USD * Tipo de Cambio Oficial (MXN/USD).
+   - Se factura y cobra en MXN + 16% IVA local.

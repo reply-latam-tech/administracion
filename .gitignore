@@ -36,9 +36,13 @@ env/
 # Respuestas grandes o basura
 forecast/poc_api/ml_response.json
 
-# Documentación interna / provisoria
+# Documentación interna / provisoria / notas de reuniones
 forecast/INFORME_TECNICO.md
 *INFORME_TECNICO.md
+*Notas de Gemini.md
+*REUNION_BI*.md
+ANALISIS_TECNICO_REUNION_BI.md
 
 # Scripts temporales / scratch
 scratch/
+
