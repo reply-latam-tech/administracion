@@ -216,8 +216,8 @@ function MetasFacturacionContent() {
             countryCode = 'MX';
             countryName = 'México';
             flag = '🇲🇽';
-            currency = m === 'USD' ? 'USD' : 'MXN';
-            symbol = m === 'USD' ? 'US$' : '$';
+            currency = 'USD';
+            symbol = 'US$';
           } else if (p === 'CL' || m === 'CLP') {
             countryCode = 'CL';
             countryName = 'Chile';
@@ -484,9 +484,9 @@ function MetasFacturacionContent() {
         ivaVal = 0;
       }
 
-      // Soporte para cuentas de México - Cobro en MXN sin IVA
+      // Soporte para cuentas de México (Evacol México) - Cobro en USD sin IVA
       if (meta.code === 'MX' || cCode === 'MX') {
-        rowCurrency = 'MXN';
+        rowCurrency = 'USD';
         ivaVal = 0;
       }
 
@@ -708,10 +708,10 @@ function MetasFacturacionContent() {
       // Facturación registrada en MXN. Se pasa a USD mediante el tipo de cambio del mes.
       // Se cruza el saldo en USD con la escala en USD sin IVA.
       // Si el saldo en USD no llega al mínimo de $35.000 USD, se aplica el fee mínimo de $1.000 USD.
-      // El fee en USD se reconvierte a MXN según el TC del mes para facturar.
+      // Reply factura y cobra siempre en DÓLARES (USD), no se reconvierte a pesos mexicanos.
       // Cuentas de México: sin IVA (IVA = 0).
       if (sId === '807100133') {
-        rowCurrency = 'MXN';
+        rowCurrency = 'USD';
         const tcMxnMap: Record<string, number> = {
           '2026-05': 16.70, '2026-06': 17.50, '2026-07': 17.80,
           '2026-08': 16.97, '2026-09': 18.07, '2026-10': 18.12,
@@ -752,12 +752,12 @@ function MetasFacturacionContent() {
           alicuotaVal = 'MÍNIMO';
         }
 
-        // Conversión del fee a pesos mexicanos (MXN) según tipo de cambio del mes
-        const feeMxn = Math.round(feeUsd * currentTc * 100) / 100;
-        montoServicio = feeMxn;
-        subtotalVal = feeMxn;
+        // Reply factura y cobra en USD directamente
+        const feeUsdFinal = Math.round(feeUsd * 100) / 100;
+        montoServicio = feeUsdFinal;
+        subtotalVal = feeUsdFinal;
         ivaVal = 0; // Cero IVA para cuentas de México
-        totalVal = feeMxn;
+        totalVal = feeUsdFinal;
         feeVal = alicuotaVal;
       }
 

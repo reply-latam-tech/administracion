@@ -344,7 +344,7 @@ export default function EscalasPage() {
               tipoCargoVal = 'MINIMO';
             }
 
-            subtotal_mercado_libre = Math.round(feeUsd * currentTc * 100) / 100;
+            subtotal_mercado_libre = Math.round(feeUsd * 100) / 100;
             tipo_cargo = tipoCargoVal;
             alicuota = alicuotaVal;
           }
