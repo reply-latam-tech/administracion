@@ -62,15 +62,23 @@ function MetasFacturacionContent() {
   
   // Pestaña activa sincronizada con la URL (?view=subtotales o ?view=detallado)
   const viewParam = searchParams.get('view');
+  const countryParam = searchParams.get('country');
   const activeTab = viewParam === 'detallado' ? 'detallado' : 'subtotales';
 
+  // Filtro de país / moneda activo (inicializado desde URL o 'AR' por defecto)
+  const [selectedCountry, setSelectedCountry] = useState<string>(countryParam || 'AR');
+
+  // Si cambia el query param country en la URL, sincronizar estado local
+  useEffect(() => {
+    if (countryParam && countryParam !== selectedCountry) {
+      setSelectedCountry(countryParam);
+    }
+  }, [countryParam]);
+
   const handleTabChange = (tab: 'subtotales' | 'detallado') => {
-    router.replace(`/liquidaciones?view=${tab}`);
+    router.replace(`/liquidaciones?view=${tab}&country=${selectedCountry}`);
   };
-  
-  // Filtro de país / moneda activo
-  const [selectedCountry, setSelectedCountry] = useState<string>('AR');
-  
+
   // Cliente seleccionado en la tabla para dinamizar el gráfico y cards (null = todos)
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   
@@ -83,10 +91,11 @@ function MetasFacturacionContent() {
   // Búsqueda de cliente
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Si cambia el país, reseteamos el cliente seleccionado
+  // Si cambia el país, sincronizar con URL y resetear cliente seleccionado
   const handleCountryChange = (countryCode: string) => {
     setSelectedCountry(countryCode);
     setSelectedSellerId(null);
+    router.replace(`/liquidaciones?view=${activeTab}&country=${countryCode}`);
   };
 
   // Función para obtener la cantidad de días del mes
@@ -144,7 +153,7 @@ function MetasFacturacionContent() {
           .order('nombre_seller', { ascending: true }),
         supabase
           .from('dim_sellers')
-          .select('id_seller, nombre_seller, pais, moneda'),
+          .select('id_seller, nombre_seller, pais, moneda, estado'),
         supabase
           .from('fact_metricas_operativas')
           .select('*')
@@ -924,6 +933,116 @@ function MetasFacturacionContent() {
     return null;
   };
 
+  // Lista ordenada de sellers para el país y filtro de búsqueda seleccionado
+  const allSellers = useMemo(() => {
+    return Object.values(groupedData[selectedCountry]?.sellersMap || {})
+      .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [groupedData, selectedCountry, searchTerm]);
+
+  // Totales consolidados detallados por concepto para el país seleccionado
+  const detailedCountryTotals = useMemo(() => {
+    const result: Record<string, {
+      gmv: number;
+      montoServicio: number;
+      botmaker: number;
+      subtotal: number;
+      iva: number;
+      total: number;
+    }> = {};
+
+    filteredMonths.forEach(m => {
+      let gmv = 0;
+      let montoServicio = 0;
+      let botmaker = 0;
+      let subtotal = 0;
+      let iva = 0;
+      let total = 0;
+
+      const sellers = Object.values(groupedData[selectedCountry]?.sellersMap || {});
+
+      if (selectedCountry === 'CL') {
+        const CHILE_CHANNEL_IDS = ['977559914', '942368053', '978106559', '919428720', '962651791', '936492429'];
+        const totalCLP = CHILE_CHANNEL_IDS.reduce((sum, id) => sum + (newsanSubAccounts[id]?.[m.key] || 0), 0);
+        const tc = getRateToUSD('CLP', m.key) || 950.0;
+        const totalUSD = totalCLP / tc;
+        const feeConsolidado = Math.max(4000.0, totalUSD * 0.01);
+
+        gmv += totalUSD;
+        montoServicio += feeConsolidado;
+        subtotal += feeConsolidado;
+        total += feeConsolidado;
+
+        sellers.forEach(s => {
+          if (!s.name.toLowerCase().includes('newsan')) {
+            const mData = s.months[m.key];
+            if (mData) {
+              gmv += (mData.facturacion || 0) / tc;
+              montoServicio += mData.montoServicio || 0;
+              botmaker += mData.botmaker || 0;
+              subtotal += mData.subtotal || 0;
+              iva += mData.iva || 0;
+              total += mData.total || 0;
+            }
+          }
+        });
+      } else if (selectedCountry === 'AR') {
+        let hasNewsanARCalculated = false;
+        sellers.forEach(s => {
+          const isNewsan = s.name.toLowerCase().includes('newsan');
+          if (isNewsan) {
+            if (!hasNewsanARCalculated) {
+              hasNewsanARCalculated = true;
+              const mlSeller = sellers.find(x => x.name.toLowerCase().includes('mercado libre') || x.id === '256189964');
+              const montoML = mlSeller?.months[m.key]?.montoServicio || 0;
+              const factML = mlSeller?.months[m.key]?.facturacion || 0;
+              const q = newsanMetricas[m.key]?.sesiones || 0;
+              const hs = newsanMetricas[m.key]?.horas || 0;
+              const tar = getNewsanWebTarifas(m.key);
+              const montoSes = Math.max(q * tar.valorSesion, tar.minGarantizado);
+              const montoHs = hs * tar.valorHora;
+              const subtotalNewsan = montoML + montoSes + montoHs;
+              const totalConIVA = subtotalNewsan * 1.21;
+              const ivaNewsan = subtotalNewsan * 0.21;
+
+              gmv += factML;
+              montoServicio += subtotalNewsan;
+              subtotal += subtotalNewsan;
+              iva += ivaNewsan;
+              total += totalConIVA;
+            }
+          } else {
+            const mData = s.months[m.key];
+            if (mData) {
+              gmv += mData.facturacion || 0;
+              montoServicio += mData.montoServicio || 0;
+              botmaker += mData.botmaker || 0;
+              subtotal += mData.subtotal || 0;
+              iva += mData.iva || 0;
+              total += mData.total || 0;
+            }
+          }
+        });
+      } else {
+        sellers.forEach(s => {
+          const mData = s.months[m.key];
+          if (mData) {
+            gmv += mData.facturacion || 0;
+            montoServicio += mData.montoServicio || 0;
+            botmaker += mData.botmaker || 0;
+            subtotal += mData.subtotal || 0;
+            iva += mData.iva || 0;
+            total += mData.total || 0;
+          }
+        });
+      }
+
+      result[m.key] = { gmv, montoServicio, botmaker, subtotal, iva, total };
+    });
+
+    return result;
+  }, [filteredMonths, selectedCountry, groupedData, newsanSubAccounts, newsanMetricas]);
+
   return (
     <div className="space-y-6 pb-12 w-full h-full flex flex-col">
       {/* 1. Header con Títulos y Tabs de Navegación */}
@@ -1000,12 +1119,12 @@ function MetasFacturacionContent() {
           <p className="text-sm font-semibold text-slate-700">Calculando matriz de liquidaciones y proyecciones...</p>
           <p className="text-xs text-slate-400 mt-1">Consolidando escalas y registros históricos</p>
         </div>
-      ) : activeTab === 'subtotales' ? (
-        /* ========================================================================= */
-        /* PESTAÑA 1: NUEVA SUBSECCIÓN DE RESUMEN DE INGRESOS (SUBTOTALES)           */
-        /* ========================================================================= */
+      ) : (
         <div className="space-y-6 flex-1 flex flex-col">
-          {/* Controles de Segmentación y Filtros */}
+          {/* ========================================================================= */}
+          {/* BARRA DE CONTROLES: SEGMENTACIÓN POR MERCADO / PAÍS Y FILTROS TEMPORALES  */}
+          {/* Disponible globalmente en ambas pestañas (Subtotales y Detallado)          */}
+          {/* ========================================================================= */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
             {/* Segmentación por País / Moneda */}
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -1083,51 +1202,58 @@ function MetasFacturacionContent() {
                 </button>
               </div>
 
-              {/* Selector de Variación % */}
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs">
-                <span className="text-[11px] font-bold text-slate-500 pl-2 pr-1 flex items-center gap-1">
-                  <Percent size={11} className="text-blue-600" />
-                  Variación:
-                </span>
-                <button
-                  onClick={() => setVariationMode('mensual')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                    variationMode === 'mensual' 
-                      ? 'bg-white text-blue-700 shadow-2xs font-bold' 
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="Variación Porcentual Mensual (MoM)"
-                >
-                  % Mensual
-                </button>
-                <button
-                  onClick={() => setVariationMode('diaria')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                    variationMode === 'diaria' 
-                      ? 'bg-white text-blue-700 shadow-2xs font-bold' 
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="Variación diaria ponderada por cantidad de días en cada mes (Ritmo diario)"
-                >
-                  % Diaria
-                </button>
-                <button
-                  onClick={() => setVariationMode('none')}
-                  className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                    variationMode === 'none' 
-                      ? 'bg-white text-slate-900 shadow-2xs font-bold' 
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                  title="Ocultar porcentajes de variación en la tabla"
-                >
-                  Ocultar
-                </button>
-              </div>
+              {/* Selector de Variación % (solo para la pestaña subtotales) */}
+              {activeTab === 'subtotales' && (
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs">
+                  <span className="text-[11px] font-bold text-slate-500 pl-2 pr-1 flex items-center gap-1">
+                    <Percent size={11} className="text-blue-600" />
+                    Variación:
+                  </span>
+                  <button
+                    onClick={() => setVariationMode('mensual')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      variationMode === 'mensual' 
+                        ? 'bg-white text-blue-700 shadow-2xs font-bold' 
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Variación Porcentual Mensual (MoM)"
+                  >
+                    % Mensual
+                  </button>
+                  <button
+                    onClick={() => setVariationMode('diaria')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      variationMode === 'diaria' 
+                        ? 'bg-white text-blue-700 shadow-2xs font-bold' 
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Variación diaria ponderada por cantidad de días en cada mes (Ritmo diario)"
+                  >
+                    % Diaria
+                  </button>
+                  <button
+                    onClick={() => setVariationMode('none')}
+                    className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      variationMode === 'none' 
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold' 
+                        : 'text-slate-400 hover:text-slate-700'
+                    }`}
+                    title="Ocultar porcentajes de variación en la tabla"
+                  >
+                    Ocultar
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Banner de Cliente Seleccionado (Filtro Dinámico Interactivo) */}
-          {selectedSellerObj && (
+          {activeTab === 'subtotales' ? (
+            /* ========================================================================= */
+            /* PESTAÑA 1: NUEVA SUBSECCIÓN DE RESUMEN DE INGRESOS (SUBTOTALES)           */
+            /* ========================================================================= */
+            <div className="space-y-6 flex-1 flex flex-col">
+              {/* Banner de Cliente Seleccionado (Filtro Dinámico Interactivo) */}
+              {selectedSellerObj && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-blue-50 border border-blue-200/90 px-4 py-3 rounded-xl text-xs text-blue-900 shadow-xs animate-in fade-in duration-200">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="relative flex h-2.5 w-2.5">
@@ -1741,21 +1867,55 @@ function MetasFacturacionContent() {
           </div>
         </div>
       ) : (
-        /* ========================================================================= */
-        /* PESTAÑA 2: DETALLE COMPLETO POR CONCEPTO (VISTA DETALLADA ORIGINAL)       */
-        /* ========================================================================= */
-        <div className="space-y-4 flex-1 flex flex-col">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex-1 flex flex-col">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">
-                  Desglose Detallado por Cliente (Facturación, Fee, Botmaker, Subtotal e IVA)
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Matriz vertical granular por cuenta para validación tributaria y contable
-                </p>
-              </div>
-            </div>
+            /* ========================================================================= */
+            /* PESTAÑA 2: DETALLE COMPLETO POR CONCEPTO (VISTA DETALLADA ORIGINAL)       */
+            /* ========================================================================= */
+            <div className="space-y-4 flex-1 flex flex-col">
+              {/* Banner comercial exclusivo para Chile en Vista Detallada */}
+              {selectedCountry === 'CL' && (
+                <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-sm border border-blue-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 bg-blue-800/60 rounded-xl text-2xl flex items-center justify-center shadow-inner">🇨🇱</div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black tracking-wide text-white">Newsan Chile • Facturación Consolidada Multi-Canal</h4>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 border border-blue-400/30">
+                          6 Canales (Falabella, ML, Paris, Walmart, Ripley, Kitchen Center)
+                        </span>
+                      </div>
+                      <p className="text-xs text-blue-200/90 mt-1 leading-relaxed max-w-3xl">
+                        <strong>Criterio Comercial Contractual:</strong> Se suman las ventas brutas en Pesos Chilenos (CLP) de las 6 cuentas, se pasan a USD con el Tipo de Cambio oficial mensual y se cruza con la escala: si el 1% es menor a USD 4.000 se aplica el cargo mínimo garantizado de <strong>US$ 4.000</strong>; si da más, se cobra el 1%. Se factura y cobra en <strong>USD sin IVA</strong> (exportación de servicios a Chile).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-5 bg-white/10 px-4 py-2.5 rounded-xl border border-white/10 backdrop-blur-xs shrink-0">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-blue-200 font-semibold block">Mínimo Mensual</span>
+                      <span className="text-sm font-black text-white">US$ 4.000,00</span>
+                    </div>
+                    <div className="h-8 w-px bg-white/20"></div>
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-blue-200 font-semibold block">Moneda de Cobro</span>
+                      <span className="text-sm font-black text-emerald-400">USD</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex-1 flex flex-col">
+                <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <span>Desglose Detallado por Cliente — {groupedData[selectedCountry]?.country.flag} {groupedData[selectedCountry]?.country.name} ({groupedData[selectedCountry]?.country.currency})</span>
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Matriz vertical granular por cuenta para validación tributaria y contable
+                    </p>
+                  </div>
+                  <span className="text-xs text-slate-400 font-medium self-start sm:self-auto">
+                    {allSellers.length} cuentas listadas en {groupedData[selectedCountry]?.country.name}
+                  </span>
+                </div>
 
             <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full text-xs text-left text-slate-600">
@@ -2606,20 +2766,85 @@ function MetasFacturacionContent() {
                   });
                 })()}
 
-                {/* FILA DE SUBTOTAL CONSOLIDADO DE TODOS LOS CLIENTES */}
-                <tfoot className="sticky bottom-0 z-20">
-                  <tr className="bg-slate-900 text-white font-extrabold text-xs shadow-lg">
-                    <td className="px-6 py-4 sticky left-0 bg-slate-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)]">
-                      TOTAL CONSOLIDADO (SUBTOTAL REPLY)
+                {/* ========================================================= */}
+                {/* PIE DE TABLA CONSOLIDADO: DESGLOSE DE LIQUIDACIÓN COMPLETO */}
+                {/* ========================================================= */}
+                <tfoot className="sticky bottom-0 z-20 shadow-xl border-t-2 border-slate-300">
+                  {/* Fila Total GMV */}
+                  <tr className="bg-slate-100 text-slate-700 font-bold text-xs border-b border-slate-200">
+                    <td className="px-6 py-2.5 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      TOTAL VENTAS DE LA CARTERA (GMV {selectedCountry === 'CL' ? 'USD' : groupedData[selectedCountry]?.country.currency})
                     </td>
-                    {filteredMonths.map(m => {
-                      const totalMonth = groupedData[selectedCountry]?.monthlyTotals[m.key] || 0;
-                      return (
-                        <td key={m.key} className="px-6 py-4 text-right font-black border-l border-slate-700 whitespace-nowrap text-emerald-400">
-                          {formatCurrency(totalMonth, executiveKPIs?.currency)}
+                    {filteredMonths.map(m => (
+                      <td key={m.key} className="px-6 py-2.5 text-right font-mono border-l border-slate-200 whitespace-nowrap">
+                        {formatCurrency(detailedCountryTotals[m.key]?.gmv || 0, executiveKPIs?.currency)}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Fila Total Monto Servicio */}
+                  <tr className="bg-slate-50 text-slate-800 font-bold text-xs border-b border-slate-200">
+                    <td className="px-6 py-2.5 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      TOTAL MONTO SERVICIO (FEE DE GESTIÓN)
+                    </td>
+                    {filteredMonths.map(m => (
+                      <td key={m.key} className="px-6 py-2.5 text-right font-mono border-l border-slate-200 whitespace-nowrap text-blue-900">
+                        {formatCurrency(detailedCountryTotals[m.key]?.montoServicio || 0, executiveKPIs?.currency)}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Fila Total Botmaker (si hay en el país) */}
+                  {Object.values(detailedCountryTotals).some(t => t.botmaker > 0) && (
+                    <tr className="bg-white text-slate-700 font-medium text-xs border-b border-slate-200">
+                      <td className="px-6 py-2 sticky left-0 bg-white z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        TOTAL BOTMAKER (LICENCIAS)
+                      </td>
+                      {filteredMonths.map(m => (
+                        <td key={m.key} className="px-6 py-2 text-right font-mono border-l border-slate-200 whitespace-nowrap">
+                          {detailedCountryTotals[m.key]?.botmaker > 0 ? formatCurrency(detailedCountryTotals[m.key]?.botmaker, executiveKPIs?.currency) : '-'}
                         </td>
-                      );
-                    })}
+                      ))}
+                    </tr>
+                  )}
+
+                  {/* Fila Total Subtotal (Ingreso Genuino Reply) */}
+                  <tr className="bg-blue-900 text-white font-black text-xs shadow-md">
+                    <td className="px-6 py-3.5 sticky left-0 bg-blue-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)]">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span>TOTAL INGRESO NETO REPLY (SUBTOTAL)</span>
+                      </div>
+                    </td>
+                    {filteredMonths.map(m => (
+                      <td key={m.key} className="px-6 py-3.5 text-right font-mono font-black border-l border-blue-800 whitespace-nowrap text-emerald-400 text-xs">
+                        {formatCurrency(detailedCountryTotals[m.key]?.subtotal || 0, executiveKPIs?.currency)}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Fila Total IVA */}
+                  <tr className="bg-slate-100 text-slate-600 font-semibold text-xs border-b border-slate-200">
+                    <td className="px-6 py-2.5 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      TOTAL IVA (DÉBITO FISCAL)
+                    </td>
+                    {filteredMonths.map(m => (
+                      <td key={m.key} className="px-6 py-2.5 text-right font-mono border-l border-slate-200 whitespace-nowrap text-slate-500">
+                        {formatCurrency(detailedCountryTotals[m.key]?.iva || 0, executiveKPIs?.currency)}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Fila Total Factura Final */}
+                  <tr className="bg-slate-900 text-white font-extrabold text-xs">
+                    <td className="px-6 py-3.5 sticky left-0 bg-slate-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)]">
+                      TOTAL GENERAL FACTURACIÓN A COBRAR
+                    </td>
+                    {filteredMonths.map(m => (
+                      <td key={m.key} className="px-6 py-3.5 text-right font-mono font-black border-l border-slate-800 whitespace-nowrap text-white text-xs">
+                        {formatCurrency(detailedCountryTotals[m.key]?.total || 0, executiveKPIs?.currency)}
+                      </td>
+                    ))}
                   </tr>
                 </tfoot>
               </table>
@@ -2628,7 +2853,9 @@ function MetasFacturacionContent() {
         </div>
       )}
     </div>
-  );
+  )}
+</div>
+);
 }
 
 export default function MetasFacturacionPage() {
