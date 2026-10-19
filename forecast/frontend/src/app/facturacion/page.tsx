@@ -135,12 +135,21 @@ export default function FacturacionPage() {
     rawSellers.forEach((s: any) => {
       const cCode = getCountryCode(s);
       const moneda = s.moneda || getDefaultCurrencyForCountry(cCode);
+      const sid = String(s.id_seller);
+      const isTrademedical = sid === '983474076' || s.nombre_seller?.toLowerCase().includes('trademedical');
+      const fechaIngreso = s.fecha_ingreso || (isTrademedical ? '2026-08-01' : null);
+      const fechaEgreso = s.fecha_egreso || (isTrademedical ? '2026-09-30' : null);
+      const isBaja = s.estado === false || isTrademedical || (!!fechaEgreso && new Date(fechaEgreso + 'T23:59:59') <= new Date());
+
       sellersMap[s.id_seller] = {
         id: s.id_seller,
         name: s.nombre_seller,
         pais: cCode,
         moneda: moneda,
-        estado: s.estado
+        estado: s.estado,
+        fechaIngreso,
+        fechaEgreso,
+        isBaja
       };
     });
 
@@ -180,6 +189,9 @@ export default function FacturacionPage() {
         countryFlag: COUNTRY_CONFIG[sInfo.pais]?.flag || '🏳️',
         monedaOrigen: sInfo.moneda,
         monedaDisplay: targetCur,
+        fechaIngreso: sInfo.fechaIngreso,
+        fechaEgreso: sInfo.fechaEgreso,
+        isBaja: sInfo.isBaja,
         months: {} as Record<string, any>,
         maxVal: 1,
         totalPeriodos: 0
@@ -1062,13 +1074,24 @@ export default function FacturacionPage() {
                             }`}>
                               <div className="flex items-center gap-2 pl-4">
                                 <div className="min-w-0">
-                                  <div className="font-semibold text-slate-900 text-[13px] group-hover:text-blue-700 transition-colors">
-                                    {row.sellerName}
+                                  <div className="font-semibold text-slate-900 text-[13px] group-hover:text-blue-700 transition-colors flex items-center gap-2">
+                                    <span className={row.isBaja ? 'text-slate-600 line-through decoration-slate-300' : ''}>{row.sellerName}</span>
+                                    {row.isBaja && (
+                                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300" title={`Cuenta dada de baja${row.fechaEgreso ? ' el ' + row.fechaEgreso : ''}`}>
+                                        Baja {row.fechaEgreso ? `(${row.fechaEgreso.slice(0, 7)})` : ''}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5 font-mono">
                                     <span>ID: {row.sellerId}</span>
                                     <span>•</span>
                                     <span>Origen: {row.monedaOrigen}</span>
+                                    {row.fechaIngreso && (
+                                      <>
+                                        <span>•</span>
+                                        <span title="Fecha de alta/ingreso">Alta: {row.fechaIngreso.slice(0, 7)}</span>
+                                      </>
+                                    )}
                                     {currencyView !== 'ORIGINAL' && (
                                       <span className="text-blue-600 font-bold">→ Mostrado en {currencyView}</span>
                                     )}

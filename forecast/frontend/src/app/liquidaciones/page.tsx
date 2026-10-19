@@ -50,6 +50,7 @@ interface CountryMeta {
   flag: string;
   currency: string;
   symbol: string;
+  isBaja?: boolean;
 }
 
 function MetasFacturacionContent() {
@@ -224,12 +225,16 @@ function MetasFacturacionContent() {
             symbol = 'US$';
           }
 
+          const isTrademedical = String(s.id_seller) === '983474076' || s.nombre_seller?.toLowerCase().includes('trademedical');
+          const isBaja = s.estado === false || isTrademedical;
+
           sellersMeta[s.id_seller] = {
             code: countryCode,
             name: countryName,
             flag,
             currency,
-            symbol
+            symbol,
+            isBaja
           };
         });
       }
@@ -385,6 +390,7 @@ function MetasFacturacionContent() {
       sellersMap: Record<string, {
         id: string;
         name: string;
+        isBaja?: boolean;
         months: Record<string, {
           subtotal: number;
           isProjected: boolean;
@@ -440,6 +446,7 @@ function MetasFacturacionContent() {
         countriesMap[cCode].sellersMap[sId] = {
           id: sId,
           name: sName,
+          isBaja: meta.isBaja || false,
           months: {},
           totalRow: 0
         };
@@ -1401,11 +1408,18 @@ function MetasFacturacionContent() {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <span className={`w-2.5 h-2.5 rounded-full transition-all ${
-                                  isRowSelected 
+                                  seller.isBaja
+                                    ? 'bg-rose-500'
+                                    : isRowSelected 
                                     ? 'bg-blue-600 ring-4 ring-blue-200 scale-110' 
                                     : 'bg-blue-400 group-hover:bg-blue-600'
                                 }`}></span>
-                                <span className="truncate max-w-[180px]">{seller.name}</span>
+                                <span className={`truncate max-w-[180px] ${seller.isBaja ? 'text-slate-500 line-through decoration-slate-300' : ''}`}>{seller.name}</span>
+                                {seller.isBaja && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
+                                    BAJA
+                                  </span>
+                                )}
                               </div>
                               {isRowSelected && (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600 text-white tracking-wider">

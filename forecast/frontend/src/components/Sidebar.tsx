@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -21,7 +21,7 @@ import {
   Coins
 } from "lucide-react";
 
-export function Sidebar() {
+function SidebarContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentView = searchParams.get("view") || "subtotales";
@@ -310,3 +310,18 @@ export function Sidebar() {
     </aside>
   );
 }
+
+export function Sidebar() {
+  return (
+    <Suspense fallback={
+      <aside className="w-64 bg-white border-r border-slate-200/90 flex flex-col justify-between shrink-0 h-screen select-none shadow-[1px_0_10px_rgba(0,0,0,0.02)]">
+        <div className="h-20 flex items-center px-6 border-b border-slate-100 gap-3">
+          <div className="w-28 h-8 bg-slate-100 rounded animate-pulse" />
+        </div>
+      </aside>
+    }>
+      <SidebarContent />
+    </Suspense>
+  );
+}
+

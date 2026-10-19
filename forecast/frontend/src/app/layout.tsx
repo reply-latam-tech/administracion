@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
@@ -20,8 +21,12 @@ export default function RootLayout({
     <html lang="es">
       <body className="antialiased bg-slate-50 text-slate-900 flex h-screen overflow-hidden">
         
-        {/* Sidebar */}
-        <Sidebar />
+        {/* Sidebar con Suspense Boundary */}
+        <Suspense fallback={
+          <aside className="w-64 bg-white border-r border-slate-200/90 shrink-0 h-screen" />
+        }>
+          <Sidebar />
+        </Suspense>
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-slate-50/70">

@@ -22,12 +22,50 @@ import {
   Info,
   ShieldCheck,
   Coins,
-  Receipt
+  Receipt,
+  AlertCircle,
+  Edit3,
+  Save
 } from 'lucide-react';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Trazabilidad de ciclo de vida conocida (fallback y valores históricos)
+const KNOWN_LIFECYCLE_DATES: Record<string, { fecha_ingreso?: string; fecha_egreso?: string; estado?: boolean; motivo?: string }> = {
+  '983474076': {
+    fecha_ingreso: '2026-08-01',
+    fecha_egreso: '2026-09-30',
+    estado: false,
+    motivo: 'Baja operativa acordada con Trademedical Chile SPA al 30 de septiembre de 2026'
+  }
+};
+
+function formatDisplayDate(dateStr?: string | null): string {
+  if (!dateStr) return '-';
+  const clean = dateStr.slice(0, 10);
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+}
+
+function calculateTenure(startStr?: string | null, endStr?: string | null): string {
+  if (!startStr) return 'Fecha no especificada';
+  const start = new Date(startStr + 'T12:00:00');
+  const end = endStr ? new Date(endStr + 'T12:00:00') : new Date();
+  
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const months = Math.max(1, Math.round(diffDays / 30.44));
+  
+  if (endStr) {
+    return `${months} ${months === 1 ? 'mes' : 'meses'} (${formatDisplayDate(startStr)} al ${formatDisplayDate(endStr)})`;
+  }
+  return `${months} ${months === 1 ? 'mes' : 'meses'} activa (desde ${formatDisplayDate(startStr)})`;
+}
 
 // Reglas de negocio y monedas de cobro de Reply por cuenta
 function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?: string) {
@@ -98,20 +136,16 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   } else if (p === 'CL') {
     monedaCobro = 'CLP';
     reglaLiquidacion = 'Facturación en Pesos Chilenos (CLP) cruzada con la escala pactada por canal (Falabella, ML, Paris, etc.). Cobro en CLP.';
-    metodoActualizacion = 'Revisión periódica pactada.';
-  } else if (p === 'MX') {
-    monedaCobro = 'MXN';
-    reglaLiquidacion = 'Facturación en Pesos Mexicanos (MXN) cruzada con la escala comercial. Cobro en MXN + 16% IVA.';
-    metodoActualizacion = 'Escala comercial en pesos mexicanos.';
+    metodoActualizacion = 'Escala en CLP acordada.';
   } else {
-    // Argentina estándar
+    // Clientes generales de Argentina (Nestle, Morixe, Dapsa, etc.)
     monedaCobro = 'ARS';
-    reglaLiquidacion = 'Facturación bruta en ARS cruzada con la escala porcentual con piso mínimo garantizado. Actualización mensual indexada por la inflación oficial del IPC (INDEC). Facturación en ARS + 21% IVA.';
-    metodoActualizacion = 'Indexación mensual por IPC (INDEC).';
+    reglaLiquidacion = 'Facturación bruta en Mercado Libre Argentina en ARS cruzada con la escala comercial escalonada. Cobro en ARS + 21% IVA.';
+    metodoActualizacion = 'Ajuste periódico pactado.';
   }
 
-  // Moneda de la escala
-  const monedaEscala = escalaMoneda || (['USD', 'COP'].includes(monedaCobro) && ['CO', 'MX', 'US'].includes(p) ? 'USD' : (p === 'CL' ? 'CLP' : (p === 'MX' ? (seller.moneda === 'USD' ? 'USD' : 'MXN') : 'ARS')));
+  // 2. Moneda de la escala comercial
+  let monedaEscala = escalaMoneda || (['941943480', '964690754', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591'].includes(sid) ? 'USD' : (p === 'CL' ? 'CLP' : 'ARS'));
 
   return {
     monedaCobro,
@@ -127,7 +161,15 @@ export default function DirectorioClientesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('TODOS');
   const [selectedPlatform, setSelectedPlatform] = useState('TODAS');
+  const [selectedStatus, setSelectedStatus] = useState<'TODOS' | 'ACTIVAS' | 'BAJAS'>('TODOS');
   const [selectedSeller, setSelectedSeller] = useState<any | null>(null);
+
+  // Estados de edición de vigencia en modal
+  const [isEditingDates, setIsEditingDates] = useState(false);
+  const [editFechaIngreso, setEditFechaIngreso] = useState('');
+  const [editFechaEgreso, setEditFechaEgreso] = useState('');
+  const [savingDates, setSavingDates] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadDirectoryData() {
@@ -241,10 +283,21 @@ export default function DirectorioClientesPage() {
         const esc = escMap[sid] || null;
         const lastLiq = liqMap[sid] || null;
 
+        // Gestión de fechas de vigencia (ingreso / egreso)
+        const knownDates = KNOWN_LIFECYCLE_DATES[sid] || {};
+        const fechaIngreso = s.fecha_ingreso || knownDates.fecha_ingreso || (fact?.min ? fact.min.slice(0, 10) : ord?.min || '2024-01-01');
+        const fechaEgreso = s.fecha_egreso || knownDates.fecha_egreso || null;
+        const isEstado = knownDates.estado !== undefined ? knownDates.estado : (s.estado ?? (fechaEgreso ? false : true));
+        const isBaja = !isEstado || (!!fechaEgreso && new Date(fechaEgreso + 'T23:59:59') <= new Date());
+
         const rules = getSellerBusinessRules(s.id_seller, s, esc?.moneda);
 
         return {
           ...s,
+          fechaIngreso,
+          fechaEgreso,
+          isBaja,
+          estado: !isBaja,
           ordersInfo: ord,
           hasOrders: !!ord && ord.count > 0,
           factInfo: fact,
@@ -262,6 +315,78 @@ export default function DirectorioClientesPage() {
 
     loadDirectoryData();
   }, []);
+
+  // Sincronizar inputs de edición al seleccionar seller
+  useEffect(() => {
+    if (selectedSeller) {
+      setEditFechaIngreso(selectedSeller.fechaIngreso || '');
+      setEditFechaEgreso(selectedSeller.fechaEgreso || '');
+      setIsEditingDates(false);
+      setSaveFeedback(null);
+    }
+  }, [selectedSeller?.id_seller]);
+
+  // Manejar guardado de fechas de vigencia
+  async function handleSaveDates() {
+    if (!selectedSeller) return;
+    setSavingDates(true);
+    setSaveFeedback(null);
+
+    const isBaja = !!editFechaEgreso;
+    const newFechaIngreso = editFechaIngreso || selectedSeller.fechaIngreso;
+    const newFechaEgreso = editFechaEgreso || null;
+
+    try {
+      // 1. Intentar actualizar en Supabase dim_sellers
+      const updatePayload: any = {
+        estado: !isBaja
+      };
+      if (newFechaIngreso) updatePayload.fecha_ingreso = newFechaIngreso;
+      updatePayload.fecha_egreso = newFechaEgreso;
+
+      const { error } = await supabase
+        .from('dim_sellers')
+        .update(updatePayload)
+        .eq('id_seller', selectedSeller.id_seller);
+
+      if (error) {
+        console.warn('Supabase update warning (las columnas pueden requerir migración DDL):', error.message);
+        setSaveFeedback('Fechas actualizadas localmente. Recuerda ejecutar la migración 05_fechas_ingreso_egreso_sellers.sql en Supabase.');
+      } else {
+        setSaveFeedback('Fechas y estado guardados exitosamente en la base de datos.');
+      }
+
+      // 2. Actualizar estado local reactivo
+      setSellersList(prev => prev.map(s => {
+        if (s.id_seller === selectedSeller.id_seller) {
+          return {
+            ...s,
+            fechaIngreso: newFechaIngreso,
+            fechaEgreso: newFechaEgreso,
+            isBaja,
+            estado: !isBaja
+          };
+        }
+        return s;
+      }));
+
+      setSelectedSeller((prev: any) => ({
+        ...prev,
+        fechaIngreso: newFechaIngreso,
+        fechaEgreso: newFechaEgreso,
+        isBaja,
+        estado: !isBaja
+      }));
+
+      setIsEditingDates(false);
+    } catch (err: any) {
+      console.error('Error guardando fechas:', err);
+      setSaveFeedback('Error al guardar. Se actualizaron los datos en la vista local.');
+      setIsEditingDates(false);
+    } finally {
+      setSavingDates(false);
+    }
+  }
 
   // Filtrado reactivo
   const filteredSellers = useMemo(() => {
@@ -291,13 +416,19 @@ export default function DirectorioClientesPage() {
         (selectedPlatform === 'WEB' && p === 'WEB') ||
         (selectedPlatform === 'OTROS' && !['MELI', 'AMAZON', 'WEB'].includes(p));
 
-      return matchSearch && matchCountry && matchPlat;
+      // Filtro estado (Activas vs Bajas)
+      const matchStatus = selectedStatus === 'TODOS' ||
+        (selectedStatus === 'ACTIVAS' && !s.isBaja) ||
+        (selectedStatus === 'BAJAS' && s.isBaja);
+
+      return matchSearch && matchCountry && matchPlat && matchStatus;
     });
-  }, [sellersList, searchTerm, selectedCountry, selectedPlatform]);
+  }, [sellersList, searchTerm, selectedCountry, selectedPlatform, selectedStatus]);
 
   // KPIs superiores
   const totalAccounts = sellersList.length;
-  const activeAccounts = sellersList.filter(s => s.estado === true).length;
+  const activeAccounts = sellersList.filter(s => !s.isBaja).length;
+  const bajasAccounts = sellersList.filter(s => s.isBaja).length;
   const syncedApiAccounts = sellersList.filter(s => s.hasOrders).length;
   const countriesCount = new Set(sellersList.map(s => s.codigo_pais).filter(Boolean)).size;
 
@@ -315,27 +446,31 @@ export default function DirectorioClientesPage() {
                 Directorio Oficial de Cuentas & Sellers
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Arquitectura unificada en tiempo real: monedas GMV, monedas de cobro Reply, esquemas tarifarios e ingesta
+                Arquitectura unificada: trazabilidad de vigencia (altas y bajas), monedas GMV, cobro Reply y esquemas tarifarios
               </p>
             </div>
           </div>
         </div>
 
-        {/* Metricas rápidas */}
+        {/* Métricas rápidas */}
         <div className="flex items-center gap-3 divide-x divide-slate-100 bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/60">
-          <div className="px-3.5 text-center">
+          <div className="px-3 text-center">
             <p className="text-xl font-black text-slate-900">{totalAccounts}</p>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Sellers</p>
           </div>
-          <div className="px-3.5 text-center">
+          <div className="px-3 text-center">
             <p className="text-xl font-black text-emerald-600">{activeAccounts}</p>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Activas</p>
           </div>
-          <div className="px-3.5 text-center">
+          <div className="px-3 text-center">
+            <p className="text-xl font-black text-rose-500">{bajasAccounts}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bajas</p>
+          </div>
+          <div className="px-3 text-center">
             <p className="text-xl font-black text-[#4981fb]">{syncedApiAccounts}</p>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Órdenes API</p>
           </div>
-          <div className="px-3.5 text-center">
+          <div className="px-3 text-center">
             <p className="text-xl font-black text-purple-600">{countriesCount}</p>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Países</p>
           </div>
@@ -345,7 +480,7 @@ export default function DirectorioClientesPage() {
       {/* 2. Barra de Búsqueda y Filtros */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col lg:flex-row items-center justify-between gap-4">
         {/* Buscador */}
-        <div className="relative w-full lg:w-96">
+        <div className="relative w-full lg:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -364,8 +499,29 @@ export default function DirectorioClientesPage() {
           )}
         </div>
 
-        {/* Filtros de País & Plataforma */}
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
+        {/* Filtros de Estado, País & Plataforma */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-start lg:justify-end">
+          {/* Filtro de Estado (Activas vs Bajas) */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/70 text-xs font-semibold">
+            {[
+              { id: 'TODOS', label: 'Todas' },
+              { id: 'ACTIVAS', label: '🟢 Activas' },
+              { id: 'BAJAS', label: '🔴 Bajas / Egresos' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setSelectedStatus(tab.id as any)}
+                className={`px-2.5 py-1 rounded-md transition-all text-xs ${
+                  selectedStatus === tab.id
+                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
           {/* País pills */}
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/70 text-xs font-semibold">
             {[
@@ -379,7 +535,7 @@ export default function DirectorioClientesPage() {
               <button
                 key={pill.id}
                 onClick={() => setSelectedCountry(pill.id)}
-                className={`px-2.5 py-1 rounded-md transition-all text-xs ${
+                className={`px-2 py-1 rounded-md transition-all text-xs ${
                   selectedCountry === pill.id
                     ? 'bg-white text-slate-900 shadow-xs font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
@@ -420,6 +576,9 @@ export default function DirectorioClientesPage() {
                   <th className="px-5 py-3.5 text-slate-700">Cuenta / Seller</th>
                   <th className="px-4 py-3.5 text-slate-700 text-center">País</th>
                   <th className="px-4 py-3.5 text-slate-700 text-center">Plataforma</th>
+                  <th className="px-4 py-3.5 text-slate-700 text-center" title="Fecha de alta/ingreso y fecha de baja/egreso de la cuenta">
+                    Vigencia (Alta / Baja)
+                  </th>
                   <th className="px-4 py-3.5 text-slate-700 text-center" title="Moneda en que se registra la facturación bruta GMV del cliente">
                     Moneda GMV
                   </th>
@@ -442,20 +601,25 @@ export default function DirectorioClientesPage() {
                     <tr 
                       key={s.id_seller} 
                       onClick={() => setSelectedSeller(s)}
-                      className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
+                      className={`hover:bg-blue-50/40 transition-colors cursor-pointer group ${s.isBaja ? 'bg-slate-50/60' : ''}`}
                     >
                       {/* 1. Nombre / Holding */}
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <div 
-                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.estado === true ? 'bg-emerald-500 shadow-xs' : 'bg-rose-400'}`} 
-                            title={s.estado === true ? 'Cuenta Activa' : 'Cuenta Inactiva'}
+                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${!s.isBaja ? 'bg-emerald-500 shadow-xs' : 'bg-rose-500'}`} 
+                            title={!s.isBaja ? 'Cuenta Activa' : 'Cuenta Dada de Baja'}
                           />
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-extrabold text-slate-900 group-hover:text-[#275ec9] transition-colors">
+                              <span className={`font-extrabold group-hover:text-[#275ec9] transition-colors ${s.isBaja ? 'text-slate-600 line-through decoration-slate-300' : 'text-slate-900'}`}>
                                 {s.nombre_seller}
                               </span>
+                              {s.isBaja && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
+                                  Baja
+                                </span>
+                              )}
                               {isIdPending && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                                   ID Temp
@@ -502,7 +666,28 @@ export default function DirectorioClientesPage() {
                         </span>
                       </td>
 
-                      {/* 4. Moneda GMV */}
+                      {/* 4. Vigencia (Alta / Baja) */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="flex items-center gap-1 text-[11px] font-mono text-slate-700">
+                            <span className="text-slate-400 font-sans text-[10px]">Alta:</span>
+                            <span className="font-bold">{formatDisplayDate(s.fechaIngreso)}</span>
+                          </div>
+                          {s.isBaja ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
+                              <XCircle className="w-3 h-3 text-rose-500" />
+                              Baja: {formatDisplayDate(s.fechaEgreso)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                              Activa / Vigente
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 5. Moneda GMV */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-center">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-mono text-xs font-black bg-slate-50 text-slate-800 border border-slate-200">
                           <Coins className="w-3 h-3 text-slate-400" />
@@ -510,7 +695,7 @@ export default function DirectorioClientesPage() {
                         </span>
                       </td>
 
-                      {/* 5. Moneda Cobro Reply */}
+                      {/* 6. Moneda Cobro Reply */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-center">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-mono text-xs font-black ${
                           s.rules.monedaCobro === 'USD'
@@ -526,7 +711,7 @@ export default function DirectorioClientesPage() {
                         </span>
                       </td>
 
-                      {/* 6. Escala & Frecuencia */}
+                      {/* 7. Escala & Frecuencia */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
@@ -546,7 +731,7 @@ export default function DirectorioClientesPage() {
                         </div>
                       </td>
 
-                      {/* 7. Facturación Info */}
+                      {/* 8. Facturación Info */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-center">
                         {s.hasFacturacion ? (
                           <div className="flex flex-col items-center">
@@ -564,7 +749,7 @@ export default function DirectorioClientesPage() {
                         )}
                       </td>
 
-                      {/* 8. Órdenes API */}
+                      {/* 9. Órdenes API */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-center">
                         {s.hasOrders ? (
                           <div className="flex flex-col items-center">
@@ -583,7 +768,7 @@ export default function DirectorioClientesPage() {
                         )}
                       </td>
 
-                      {/* 9. Botón Ver Ficha */}
+                      {/* 10. Botón Ver Ficha */}
                       <td className="px-5 py-3.5 whitespace-nowrap text-right">
                         <button
                           onClick={(e) => {
@@ -623,9 +808,15 @@ export default function DirectorioClientesPage() {
                     <h2 className="text-xl font-black tracking-tight text-white">
                       {selectedSeller.nombre_seller}
                     </h2>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                      ● Activa
-                    </span>
+                    {selectedSeller.isBaja ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-400/30">
+                        ● Cuenta Dada de Baja
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        ● Activa
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-300 mt-1 flex items-center gap-2 flex-wrap font-medium">
                     <span>ID: <strong className="text-white font-mono">{selectedSeller.id_seller}</strong></span>
@@ -649,6 +840,124 @@ export default function DirectorioClientesPage() {
             {/* Cuerpo del Modal */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-700 text-xs">
               
+              {/* Tarjeta de Ciclo de Vida & Vigencia (Alta y Baja) */}
+              <div className={`p-4 rounded-2xl border transition-all ${
+                selectedSeller.isBaja 
+                  ? 'bg-gradient-to-r from-rose-50/90 via-amber-50/40 to-slate-50 border-rose-200/90' 
+                  : 'bg-gradient-to-r from-emerald-50/80 via-teal-50/40 to-slate-50 border-emerald-200/80'
+              }`}>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center border shadow-xs ${
+                      selectedSeller.isBaja 
+                        ? 'bg-rose-100/90 border-rose-300 text-rose-700' 
+                        : 'bg-emerald-100/90 border-emerald-300 text-emerald-700'
+                    }`}>
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Ciclo de Vida & Vigencia de la Cuenta
+                        </h4>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                          selectedSeller.isBaja 
+                            ? 'bg-rose-200/80 text-rose-800' 
+                            : 'bg-emerald-200/80 text-emerald-800'
+                        }`}>
+                          {selectedSeller.isBaja ? '● Cuenta Dada de Baja' : '● Cuenta Activa y Operando'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Permanencia: <strong className="text-slate-800">{calculateTenure(selectedSeller.fechaIngreso, selectedSeller.fechaEgreso)}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Botón para editar fechas */}
+                  <button
+                    onClick={() => setIsEditingDates(!isEditingDates)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200/80 shadow-xs transition-all flex items-center gap-1.5"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{isEditingDates ? 'Cancelar Edición' : 'Editar Vigencia'}</span>
+                  </button>
+                </div>
+
+                {/* Formulario de edición rápida si se activa */}
+                {isEditingDates ? (
+                  <div className="mt-4 pt-3 border-t border-slate-200/70 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end animate-in fade-in duration-150">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Fecha de Ingreso (Alta)
+                      </label>
+                      <input
+                        type="date"
+                        value={editFechaIngreso}
+                        onChange={(e) => setEditFechaIngreso(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4981fb]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Fecha de Egreso (Baja)
+                      </label>
+                      <input
+                        type="date"
+                        value={editFechaEgreso}
+                        onChange={(e) => setEditFechaEgreso(e.target.value)}
+                        placeholder="Sin fecha si está activa"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4981fb]"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleSaveDates}
+                        disabled={savingDates}
+                        className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        {savingDates ? (
+                          <span>Guardando...</span>
+                        ) : (
+                          <>
+                            <Save className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Guardar Vigencia</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 pt-3 border-t border-slate-200/60 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Fecha de Alta / Ingreso</span>
+                      <span className="text-sm font-black text-slate-800 font-mono mt-0.5 block">
+                        {formatDisplayDate(selectedSeller.fechaIngreso)}
+                      </span>
+                    </div>
+                    <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Fecha de Baja / Egreso</span>
+                      <span className={`text-sm font-black font-mono mt-0.5 block ${selectedSeller.fechaEgreso ? 'text-rose-600' : 'text-slate-400'}`}>
+                        {selectedSeller.fechaEgreso ? formatDisplayDate(selectedSeller.fechaEgreso) : 'Sin egreso (Vigente)'}
+                      </span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1 p-2.5 bg-white/80 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Condición Actual</span>
+                      <span className={`text-xs font-black uppercase mt-0.5 block ${selectedSeller.isBaja ? 'text-rose-700' : 'text-emerald-700'}`}>
+                        {selectedSeller.isBaja ? 'Cuenta Inactiva / Baja' : 'Activa en Producción'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {saveFeedback && (
+                  <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-lg text-[11px] font-medium text-blue-800 flex items-center gap-2">
+                    <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>{saveFeedback}</span>
+                  </div>
+                )}
+              </div>
+
               {/* Grid de Monedas y Parámetros Clave */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
@@ -813,7 +1122,10 @@ export default function DirectorioClientesPage() {
             </div>
 
             {/* Footer del Modal */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400 font-mono">
+                Migración SQL disponible: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">05_fechas_ingreso_egreso_sellers.sql</code>
+              </span>
               <button
                 onClick={() => setSelectedSeller(null)}
                 className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"

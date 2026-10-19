@@ -13,12 +13,18 @@ export default function EscalasPage() {
     async function fetchData() {
       setLoading(true);
       
-      // Fetch sellers for names
+      // Fetch sellers for names and status
       const { data: sellersData } = await supabase.from("dim_sellers").select("*");
       const sellersMap: Record<string, string> = {};
+      const sellersMeta: Record<string, any> = {};
       if (sellersData) {
         sellersData.forEach((s) => {
           sellersMap[s.id_seller] = s.nombre_seller;
+          const isTrademedical = String(s.id_seller) === '983474076' || s.nombre_seller?.toLowerCase().includes('trademedical');
+          sellersMeta[s.id_seller] = {
+            isBaja: s.estado === false || isTrademedical,
+            fechaEgreso: s.fecha_egreso || (isTrademedical ? '2026-09-30' : null)
+          };
         });
       }
 
@@ -435,6 +441,8 @@ export default function EscalasPage() {
             sellerName: seller.sellerName,
             pais: seller.pais,
             moneda: seller.moneda,
+            isBaja: sellersMeta[seller.sellerId]?.isBaja || false,
+            fechaEgreso: sellersMeta[seller.sellerId]?.fechaEgreso || null,
             months: rowMonths,
             liquidaciones: liqMap[seller.sellerId] || {},
             id: `${seller.sellerId}_row_${i}`
@@ -525,7 +533,14 @@ export default function EscalasPage() {
                         rowSpan={row.rowSpan} 
                         className="px-4 py-3 whitespace-nowrap sticky left-0 bg-white z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-gray-100 align-top"
                       >
-                        <div className="font-semibold text-gray-900 text-[14px]">{row.sellerName}</div>
+                        <div className="font-semibold text-gray-900 text-[14px] flex items-center gap-1.5">
+                          <span className={row.isBaja ? 'text-gray-500 line-through' : ''}>{row.sellerName}</span>
+                          {row.isBaja && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
+                              Baja
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-gray-500 mt-0.5">{row.pais} | {row.moneda}</div>
                       </td>
                     )}
