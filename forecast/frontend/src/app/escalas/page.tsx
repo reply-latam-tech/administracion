@@ -304,38 +304,38 @@ export default function EscalasPage() {
             };
             const currentTc = (pKey && tcMxnMap[pKey]) || 18.12;
             const factVal = Number(row.valor_facturado) || 0;
-            const gmvUsd = factVal > 500000 ? (factVal / currentTc) : factVal;
-            const baseNetaUsd = gmvUsd / 1.16;
+            // GMV en MXN se convierte a USD según Tipo de Cambio mensual directo (sin deducir IVA)
+            const gmvUsd = factVal / currentTc;
             
             let feeUsd = 1000.0;
             let alicuotaVal = 0;
             let tipoCargoVal = 'MINIMO';
-            if (baseNetaUsd >= 230000) {
-              feeUsd = baseNetaUsd * 0.0130;
+            if (gmvUsd >= 230000) {
+              feeUsd = gmvUsd * 0.0130;
               alicuotaVal = 0.0130;
               tipoCargoVal = 'PORCENTUAL';
-            } else if (baseNetaUsd >= 170000) {
-              feeUsd = baseNetaUsd * 0.0163;
+            } else if (gmvUsd >= 170000) {
+              feeUsd = gmvUsd * 0.0163;
               alicuotaVal = 0.0163;
               tipoCargoVal = 'PORCENTUAL';
-            } else if (baseNetaUsd >= 125000) {
-              feeUsd = baseNetaUsd * 0.0195;
+            } else if (gmvUsd >= 125000) {
+              feeUsd = gmvUsd * 0.0195;
               alicuotaVal = 0.0195;
               tipoCargoVal = 'PORCENTUAL';
-            } else if (baseNetaUsd >= 90000) {
-              feeUsd = baseNetaUsd * 0.0228;
+            } else if (gmvUsd >= 90000) {
+              feeUsd = gmvUsd * 0.0228;
               alicuotaVal = 0.0228;
               tipoCargoVal = 'PORCENTUAL';
-            } else if (baseNetaUsd >= 70000) {
-              feeUsd = baseNetaUsd * 0.0244;
+            } else if (gmvUsd >= 70000) {
+              feeUsd = gmvUsd * 0.0244;
               alicuotaVal = 0.0244;
               tipoCargoVal = 'PORCENTUAL';
-            } else if (baseNetaUsd >= 45000) {
-              feeUsd = baseNetaUsd * 0.0276;
+            } else if (gmvUsd >= 45000) {
+              feeUsd = gmvUsd * 0.0276;
               alicuotaVal = 0.0276;
               tipoCargoVal = 'PORCENTUAL';
-            } else if (baseNetaUsd >= 35000) {
-              feeUsd = baseNetaUsd * 0.0293;
+            } else if (gmvUsd >= 35000) {
+              feeUsd = gmvUsd * 0.0293;
               alicuotaVal = 0.0293;
               tipoCargoVal = 'PORCENTUAL';
             } else {

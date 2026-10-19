@@ -81,8 +81,8 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   if (sid === '807100133') {
     // Evacol México ML
     monedaCobro = 'MXN';
-    reglaLiquidacion = 'La facturación bruta (GMV) está en USD. Se deduce el 16% de IVA comercial para obtener la Base Neta. Se cruza con la escala en USD (mínimo garantizado de $1.000 USD o alícuota de 2,93% a 1,30%). El fee resultante en USD se reconvierte a Pesos Mexicanos (MXN) utilizando el Tipo de Cambio oficial mensual y se factura en MXN + 16% de IVA local.';
-    metodoActualizacion = 'Escala fija en USD con umbrales en dólares y cobro reconvertido a MXN.';
+    reglaLiquidacion = 'La facturación bruta (GMV) está en Pesos Mexicanos (MXN). Se convierte a USD según el Tipo de Cambio oficial mensual y se cruza con la escala en USD: si el saldo en USD es menor a $35.000 USD se aplica el cargo mínimo de $1.000 USD; si supera los $35.000 USD se aplica la alícuota correspondiente (2,93% a 1,30%). El fee resultante en USD se reconvierte a Pesos Mexicanos (MXN) multiplicando por el Tipo de Cambio mensual y se factura en MXN sin IVA (0% IVA).';
+    metodoActualizacion = 'Escala en USD con umbrales en dólares y cobro reconvertido a MXN sin IVA.';
   } else if (sid === '941943480') {
     // Natura Colombia
     monedaCobro = 'USD';

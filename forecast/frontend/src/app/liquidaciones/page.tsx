@@ -484,6 +484,12 @@ function MetasFacturacionContent() {
         ivaVal = 0;
       }
 
+      // Soporte para cuentas de México - Cobro en MXN sin IVA
+      if (meta.code === 'MX' || cCode === 'MX') {
+        rowCurrency = 'MXN';
+        ivaVal = 0;
+      }
+
       // Soporte para cuentas con escala en USD (Natura Colombia - seller_id 941943480)
       if (sId === '941943480') {
         rowCurrency = 'USD';
@@ -699,8 +705,11 @@ function MetasFacturacionContent() {
       }
 
       // Soporte para Evacol México ML (seller_id 807100133)
-      // Escala en USD: Mínimo $1.000 USD (hasta $35.000 USD), o 2,93% a 1,30%
-      // Liquidación: GMV en USD -> Quita 16% IVA -> Cruce con Escala USD -> Conversión a MXN vía TC mensual -> Cobro en MXN
+      // Facturación registrada en MXN. Se pasa a USD mediante el tipo de cambio del mes.
+      // Se cruza el saldo en USD con la escala en USD sin IVA.
+      // Si el saldo en USD no llega al mínimo de $35.000 USD, se aplica el fee mínimo de $1.000 USD.
+      // El fee en USD se reconvierte a MXN según el TC del mes para facturar.
+      // Cuentas de México: sin IVA (IVA = 0).
       if (sId === '807100133') {
         rowCurrency = 'MXN';
         const tcMxnMap: Record<string, number> = {
@@ -712,34 +721,31 @@ function MetasFacturacionContent() {
           '2027-08': 18.80, '2027-09': 18.90
         };
         const currentTc = tcMxnMap[mKey] || 18.12;
-        // GMV en USD (si viene en MXN > 500.000, convertir a USD, si ya está en USD usar directo)
-        const gmvUsd = factVal > 500000 ? (factVal / currentTc) : factVal;
-        
-        // Quitar el 16% de IVA a la facturación bruta
-        const baseNetaUsd = gmvUsd / 1.16;
+        // Facturación en MXN convertida a USD
+        const gmvUsd = factVal / currentTc;
 
         let feeUsd = 1000.0;
         let alicuotaVal: any = 'MÍNIMO';
-        if (baseNetaUsd >= 230000) {
-          feeUsd = baseNetaUsd * 0.0130;
+        if (gmvUsd >= 230000) {
+          feeUsd = gmvUsd * 0.0130;
           alicuotaVal = 0.0130;
-        } else if (baseNetaUsd >= 170000) {
-          feeUsd = baseNetaUsd * 0.0163;
+        } else if (gmvUsd >= 170000) {
+          feeUsd = gmvUsd * 0.0163;
           alicuotaVal = 0.0163;
-        } else if (baseNetaUsd >= 125000) {
-          feeUsd = baseNetaUsd * 0.0195;
+        } else if (gmvUsd >= 125000) {
+          feeUsd = gmvUsd * 0.0195;
           alicuotaVal = 0.0195;
-        } else if (baseNetaUsd >= 90000) {
-          feeUsd = baseNetaUsd * 0.0228;
+        } else if (gmvUsd >= 90000) {
+          feeUsd = gmvUsd * 0.0228;
           alicuotaVal = 0.0228;
-        } else if (baseNetaUsd >= 70000) {
-          feeUsd = baseNetaUsd * 0.0244;
+        } else if (gmvUsd >= 70000) {
+          feeUsd = gmvUsd * 0.0244;
           alicuotaVal = 0.0244;
-        } else if (baseNetaUsd >= 45000) {
-          feeUsd = baseNetaUsd * 0.0276;
+        } else if (gmvUsd >= 45000) {
+          feeUsd = gmvUsd * 0.0276;
           alicuotaVal = 0.0276;
-        } else if (baseNetaUsd >= 35000) {
-          feeUsd = baseNetaUsd * 0.0293;
+        } else if (gmvUsd >= 35000) {
+          feeUsd = gmvUsd * 0.0293;
           alicuotaVal = 0.0293;
         } else {
           feeUsd = 1000.0;
@@ -750,8 +756,8 @@ function MetasFacturacionContent() {
         const feeMxn = Math.round(feeUsd * currentTc * 100) / 100;
         montoServicio = feeMxn;
         subtotalVal = feeMxn;
-        ivaVal = Math.round(feeMxn * 0.16 * 100) / 100;
-        totalVal = Math.round((subtotalVal + ivaVal) * 100) / 100;
+        ivaVal = 0; // Cero IVA para cuentas de México
+        totalVal = feeMxn;
         feeVal = alicuotaVal;
       }
 
@@ -2651,9 +2657,10 @@ function MetasFacturacionContent() {
                           {filteredMonths.map(m => {
                             const mData = seller.months[m.key];
                             const isProj = mData?.isProjected;
-                            const isCol = seller.name.includes('Colombia') || seller.name.includes('Evacol') || seller.name.includes('Disuiza') || seller.name.includes('Formex') || seller.name.includes('Natura');
+                            const isMex = seller.name.includes('México') || selectedCountry === 'MX';
                             const isChl = seller.name.includes('Chile') || selectedCountry === 'CL';
-                            const gmvCurrency = isCol ? 'COP' : (isChl ? 'CLP' : executiveKPIs?.currency);
+                            const isCol = !isMex && (seller.name.includes('Colombia') || seller.name.includes('Disuiza') || seller.name.includes('Formex') || seller.name.includes('Natura') || (seller.name.includes('Evacol') && !seller.name.includes('USA')));
+                            const gmvCurrency = isMex ? 'MXN' : (isCol ? 'COP' : (isChl ? 'CLP' : executiveKPIs?.currency));
                             return (
                               <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right border-l ${isProj ? 'bg-orange-50/30 border-orange-100 text-orange-950' : 'border-slate-100 text-slate-800'}`}>
                                 {mData ? (isChl ? `$ ${Math.round(mData.facturacion).toLocaleString('es-CL')} CLP` : formatCurrency(mData.facturacion, gmvCurrency)) : '-'}
