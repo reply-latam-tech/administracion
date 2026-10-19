@@ -47,7 +47,7 @@ const pageTitles: Record<string, { title: string; category: string; description:
     description: "Modelado predictivo de facturación y saltos de escala" 
   },
   "/escalas": { 
-    title: "Matrices de Escalas", 
+    title: "Matriz de Escalas y Tarifas", 
     category: "Configuración", 
     description: "Estructura de alícuotas por volumen y tramos vigentes" 
   },
@@ -67,23 +67,24 @@ export function Header() {
     month: "short"
   }).format(new Date());
 
+  // Formato de última actualización de escalas (ej. "Lunes 19 Oct • 18:38 hs ART")
+  const now = new Date();
+  const diaSemana = now.toLocaleDateString('es-AR', { weekday: 'long' });
+  const diaCapitalizado = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
+  const fechaStr = now.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+  const horaStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const lastUpdateStr = `${diaCapitalizado} ${fechaStr} • ${horaStr} hs ART`;
+
   return (
-    <header className="h-20 bg-white border-b border-slate-200/90 flex items-center justify-between px-8 shrink-0 shadow-[0_1px_4px_rgba(0,0,0,0.02)]">
-      {/* Título & Breadcrumb */}
+    <header className="h-20 bg-white border-b border-slate-200/90 flex items-center justify-between px-8 shrink-0 sticky top-0 z-40 shadow-[0_1px_4px_rgba(0,0,0,0.02)]">
+      {/* Título & Subtítulo sin breadcrumbs ni guion medio */}
       <div>
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-0.5">
-          <span className="text-[#ff5100] font-semibold hover:underline">Reply</span>
-          <span>/</span>
-          <span>{current.category}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-            {current.title}
-          </h1>
-          <span className="hidden md:inline-block text-xs text-slate-500 font-normal">
-            — {current.description}
-          </span>
-        </div>
+        <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-none">
+          {current.title}
+        </h1>
+        <p className="text-xs text-slate-500 font-normal mt-1.5 leading-none">
+          {current.description}
+        </p>
       </div>
 
       {/* Badges de Estado y Acciones Rápidas */}
@@ -96,14 +97,16 @@ export function Header() {
           <span className="font-mono text-[11px] text-slate-500">ART (UTC-3)</span>
         </div>
 
-        {/* Sync Badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#eff5ff] border border-[#daebfe] text-xs text-[#275ec9] font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4981fb] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4981fb]"></span>
+        {/* Última Actualización de la Tabla de Escalas */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-xs text-emerald-900 font-medium shadow-2xs">
+          <span className="relative flex h-2 w-2 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="hidden lg:inline">Sync Diaria:</span>
-          <span className="font-semibold">08:00 AM</span>
+          <span className="text-slate-500 hidden sm:inline text-[11px]">Última actualización:</span>
+          <span className="font-semibold font-mono text-[11px] text-emerald-950">
+            {lastUpdateStr}
+          </span>
         </div>
       </div>
     </header>

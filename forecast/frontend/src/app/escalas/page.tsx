@@ -531,107 +531,80 @@ export default function EscalasPage() {
   }, [filteredSellers, monthsStr, sellersMetaMap, liqMapState]);
 
   return (
-    <div className="space-y-3 w-full h-[calc(100vh-105px)] flex flex-col">
-      {/* 1. Barra de Control Superior Unificada */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col gap-3 shrink-0">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Título & Badge de sellers */}
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-base font-bold text-slate-900 tracking-tight">Matriz de Escalas y Tarifas</h1>
-              <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                {filteredSellers.length} {filteredSellers.length === 1 ? 'cliente' : 'clientes'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Histórico de umbrales ajustados por inflación y proyecciones dinámicas
-            </p>
-          </div>
-
-          {/* Buscador reactivo y Día/Hora de última actualización */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Buscador reactivo con input */}
-            <div className="relative">
-              <Search size={14} className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar cliente por nombre o ID..."
-                className="pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5100]/20 focus:border-[#ff5100] w-64 text-slate-800 placeholder-slate-400 transition-all"
-              />
-              {searchTerm && (
+    <div className="w-full h-[calc(100vh-80px-4rem)] max-h-[calc(100vh-80px-4rem)] flex flex-col gap-2.5 overflow-hidden">
+      {/* 1. Barra de Filtros y Guía Compacta (100% Fija) */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col gap-2 shrink-0 sticky top-0 z-30">
+        {/* Fila 1: Filtros de País / Moneda a la izquierda y Buscador a la derecha */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          {/* Filtros por País / Moneda (Pills) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+              <Globe size={12} /> Filtro:
+            </span>
+            {[
+              { id: 'TODOS', label: 'Todos', count: countryCounts.TODOS, flag: '🌐' },
+              { id: 'AR', label: 'Argentina (ARS)', count: countryCounts.AR, flag: '🇦🇷' },
+              { id: 'CL', label: 'Chile (USD/CLP)', count: countryCounts.CL, flag: '🇨🇱' },
+              { id: 'CO', label: 'Colombia (COP/USD)', count: countryCounts.CO, flag: '🇨🇴' },
+              { id: 'MX', label: 'México (USD/MXN)', count: countryCounts.MX, flag: '🇲🇽' },
+              { id: 'US', label: 'USA (USD)', count: countryCounts.US, flag: '🇺🇸' },
+            ].map((c) => {
+              const isActive = selectedCountry === c.id;
+              return (
                 <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 transition-colors"
-                  title="Limpiar búsqueda"
+                  key={c.id}
+                  onClick={() => setSelectedCountry(c.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#275ec9] text-white shadow-2xs ring-1 ring-[#275ec9]'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
+                  }`}
                 >
-                  <X size={12} />
+                  <span>{c.flag}</span>
+                  <span>{c.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-600'
+                  }`}>
+                    {c.count}
+                  </span>
                 </button>
-              )}
-            </div>
+              );
+            })}
+          </div>
 
-            {/* Badge de última actualización exacta */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50/80 border border-emerald-200/70 text-emerald-900 text-xs shadow-2xs">
-              <span className="relative flex h-2 w-2 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-slate-500 hidden sm:inline text-[11px]">Última actualización:</span>
-              <span className="font-semibold font-mono text-[11px] text-emerald-950">
-                {lastUpdated || 'En tiempo real'}
-              </span>
-            </div>
+          {/* Buscador reactivo por cliente */}
+          <div className="relative shrink-0">
+            <Search size={14} className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar cliente por nombre o ID..."
+              className="pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5100]/20 focus:border-[#ff5100] w-64 text-slate-800 placeholder-slate-400 transition-all"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 transition-colors"
+                title="Limpiar búsqueda"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* 2. Filtros por País / Moneda (Pills) */}
-        <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
-            <Globe size={12} /> Filtro:
-          </span>
-          {[
-            { id: 'TODOS', label: 'Todos', count: countryCounts.TODOS, flag: '🌐' },
-            { id: 'AR', label: 'Argentina (ARS)', count: countryCounts.AR, flag: '🇦🇷' },
-            { id: 'CL', label: 'Chile (USD/CLP)', count: countryCounts.CL, flag: '🇨🇱' },
-            { id: 'CO', label: 'Colombia (COP/USD)', count: countryCounts.CO, flag: '🇨🇴' },
-            { id: 'MX', label: 'México (USD/MXN)', count: countryCounts.MX, flag: '🇲🇽' },
-            { id: 'US', label: 'USA (USD)', count: countryCounts.US, flag: '🇺🇸' },
-          ].map((c) => {
-            const isActive = selectedCountry === c.id;
-            return (
-              <button
-                key={c.id}
-                onClick={() => setSelectedCountry(c.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                  isActive
-                    ? 'bg-[#275ec9] text-white shadow-2xs ring-1 ring-[#275ec9]'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
-                }`}
-              >
-                <span>{c.flag}</span>
-                <span>{c.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-600'
-                }`}>
-                  {c.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 3. Banner Unificado y Compacto (combinando Proyecciones e Inflación REM BCRA) */}
-        <div className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg bg-orange-50/70 border border-orange-200/60 text-[11px] text-orange-950">
-          <div className="flex items-center gap-2 truncate">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ff5100] shrink-0 animate-ping" />
-            <p className="truncate">
-              <strong className="font-semibold text-orange-900">Guía de Proyecciones:</strong> Celdas en <span className="px-1.5 py-0.2 rounded bg-orange-500 text-white font-bold text-[10px]">naranja fuerte</span> indican la escala de facturación proyectada (estimada con la mediana de IPC del REM BCRA); las celdas en naranja suave reflejan los demás umbrales futuros ajustados.
+        {/* Fila 2: Guía de Proyecciones completa y legible (sin cortes) */}
+        <div className="flex items-start sm:items-center justify-between gap-3 px-3 py-1.5 rounded-lg bg-orange-50/70 border border-orange-200/60 text-xs text-orange-950">
+          <div className="flex items-start sm:items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ff5100] shrink-0 mt-1 sm:mt-0 animate-pulse" />
+            <p className="leading-relaxed text-[11px] text-orange-900">
+              <strong className="font-semibold text-orange-950">Guía de Proyecciones:</strong> Las celdas en <span className="px-1.5 py-0.2 rounded bg-orange-500 text-white font-bold text-[10px]">naranja fuerte</span> indican la escala de facturación proyectada (calculada según la mediana del Índice de Precios al Consumidor del REM publicado por el BCRA); las celdas en naranja suave reflejan los demás umbrales futuros ajustados por inflación.
             </p>
           </div>
-          <div className="shrink-0 text-[11px] text-slate-500 font-mono hidden md:inline">
-            Ajuste inflacionario automático
-          </div>
+          <span className="shrink-0 text-[10px] font-mono text-slate-500 hidden xl:inline bg-white/80 px-2 py-0.5 rounded border border-orange-200/50">
+            Ajuste REM BCRA
+          </span>
         </div>
       </div>
 
