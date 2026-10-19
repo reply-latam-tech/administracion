@@ -18,7 +18,9 @@ import {
   ArrowDownRight,
   Search,
   DollarSign,
-  Percent
+  Percent,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -31,6 +33,7 @@ import {
   ReferenceLine, 
   Cell 
 } from 'recharts';
+import { getRateToUSD, formatMoney } from '@/lib/exchangeRates';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -126,6 +129,7 @@ function MetasFacturacionContent() {
   const [monthsList, setMonthsList] = useState<MonthMeta[]>([]);
   const [newsanSubAccounts, setNewsanSubAccounts] = useState<Record<string, Record<string, number>>>({});
   const [newsanMetricas, setNewsanMetricas] = useState<Record<string, { sesiones: number; horas: number }>>({});
+  const [newsanChileExpanded, setNewsanChileExpanded] = useState<boolean>(true);
 
   // 1. Cargar datos de Supabase
   useEffect(() => {
@@ -148,7 +152,7 @@ function MetasFacturacionContent() {
         supabase
           .from('facturacion')
           .select('*')
-          .in('seller_id', [308973138, 256324891])
+          .in('seller_id', [308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429])
       ]);
 
       if (liqsRes.error) {
@@ -209,8 +213,8 @@ function MetasFacturacionContent() {
             countryCode = 'CL';
             countryName = 'Chile';
             flag = '🇨🇱';
-            currency = 'CLP';
-            symbol = '$';
+            currency = 'USD';
+            symbol = 'US$';
           } else if (p === 'CO' || m === 'COP') {
             countryCode = 'CO';
             countryName = 'Colombia';
@@ -371,7 +375,7 @@ function MetasFacturacionContent() {
     const countryLabels: Record<string, { label: string; flag: string; currency: string }> = {
       'AR': { label: 'Argentina (ARS)', flag: '🇦🇷', currency: 'ARS' },
       'MX': { label: 'México (MXN)', flag: '🇲🇽', currency: 'MXN' },
-      'CL': { label: 'Chile (CLP)', flag: '🇨🇱', currency: 'CLP' },
+      'CL': { label: 'Chile (USD)', flag: '🇨🇱', currency: 'USD' },
       'CO': { label: 'Colombia (COP)', flag: '🇨🇴', currency: 'COP' },
       'US': { label: 'USA (USD)', flag: '🇺🇸', currency: 'USD' }
     };
@@ -427,7 +431,7 @@ function MetasFacturacionContent() {
         if (cCode === 'MX') { countryCur = 'MXN'; countrySym = '$'; }
         else if (cCode === 'CO') { countryCur = 'COP'; countrySym = '$'; }
         else if (cCode === 'US') { countryCur = 'USD'; countrySym = 'US$'; }
-        else if (cCode === 'CL') { countryCur = 'CLP'; countrySym = '$'; }
+        else if (cCode === 'CL') { countryCur = 'USD'; countrySym = 'US$'; }
         else if (cCode === 'AR') { countryCur = 'ARS'; countrySym = '$'; }
 
         countriesMap[cCode] = {
@@ -464,6 +468,12 @@ function MetasFacturacionContent() {
       let feeVal = row.tipo_cargo_aplicado === 'MINIMO' ? 'MÍNIMO' : row.alicuota_aplicada;
       let factVal = Number(row.valor_facturado) || 0;
       let rowCurrency = row.moneda || meta.currency;
+
+      // Soporte para cuentas de Chile (Newsan Chile) - Cobro en USD sin IVA
+      if (meta.code === 'CL' || cCode === 'CL') {
+        rowCurrency = 'USD';
+        ivaVal = 0;
+      }
 
       // Soporte para cuentas con escala en USD (Natura Colombia - seller_id 941943480)
       if (sId === '941943480') {
@@ -1350,6 +1360,37 @@ function MetasFacturacionContent() {
               </span>
             </div>
 
+            {/* Banner comercial exclusivo para Chile */}
+            {selectedCountry === 'CL' && (
+              <div className="mx-4 my-3 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-sm border border-blue-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 bg-blue-800/60 rounded-xl text-2xl flex items-center justify-center shadow-inner">🇨🇱</div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-black tracking-wide text-white">Newsan Chile • Facturación Consolidada Multi-Canal</h4>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 border border-blue-400/30">
+                        6 Canales (Falabella, ML, Paris, Walmart, Ripley, Kitchen Center)
+                      </span>
+                    </div>
+                    <p className="text-xs text-blue-200/90 mt-1 leading-relaxed max-w-3xl">
+                      <strong>Criterio Comercial Contractual:</strong> Se suman las ventas brutas en Pesos Chilenos (CLP) de las 6 cuentas, se pasan a USD con el Tipo de Cambio oficial mensual y se cruza con la escala: si el 1% es menor a USD 4.000 se aplica el cargo mínimo garantizado de <strong>US$ 4.000</strong>; si da más, se cobra el 1%. Se factura y cobra en <strong>USD sin IVA</strong> (exportación de servicios a Chile).
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-5 bg-white/10 px-4 py-2.5 rounded-xl border border-white/10 backdrop-blur-xs shrink-0">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-blue-200 font-semibold block">Mínimo Mensual</span>
+                    <span className="text-sm font-black text-white">US$ 4.000,00</span>
+                  </div>
+                  <div className="h-8 w-px bg-white/20"></div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-blue-200 font-semibold block">Moneda de Cobro</span>
+                    <span className="text-sm font-black text-emerald-400">USD</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full text-xs text-left text-slate-600">
                 <thead className="text-[11px] text-slate-500 uppercase bg-slate-50/90 border-b border-slate-200 sticky top-0 z-20 backdrop-blur-xs">
@@ -1383,113 +1424,261 @@ function MetasFacturacionContent() {
 
                 <tbody className="divide-y divide-slate-100">
                   {/* Filas de Sellers del país seleccionado */}
-                  {Object.values(groupedData[selectedCountry]?.sellersMap || {})
-                    .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((seller) => {
-                      const isRowSelected = selectedSellerId === seller.id;
+                  {(() => {
+                    if (selectedCountry === 'CL') {
+                      const allCLSellers = Object.values(groupedData[selectedCountry]?.sellersMap || {})
+                        .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                      
+                      const newsanCLSellers = allCLSellers.filter(s => s.name.toLowerCase().includes('newsan'));
+                      const otherCLSellers = allCLSellers.filter(s => !s.name.toLowerCase().includes('newsan'));
+
+                      // Totales consolidados de Newsan Chile por mes
+                      const newsanMonthlyTotals: Record<string, number> = {};
+                      filteredMonths.forEach(m => {
+                        newsanMonthlyTotals[m.key] = newsanCLSellers.reduce((sum, s) => sum + (s.months[m.key]?.subtotal || 0), 0);
+                      });
+                      const newsanGrandTotal = Object.values(newsanMonthlyTotals).reduce((sum, v) => sum + v, 0);
 
                       return (
-                        <tr 
-                          key={seller.id} 
-                          onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
-                          title={`Haz clic para ${isRowSelected ? 'deseleccionar' : 'ver gráfico y métricas exclusivas de'} ${seller.name}`}
-                          className={`cursor-pointer transition-all ${
-                            isRowSelected 
-                              ? 'bg-blue-50/80 font-bold border-l-4 border-l-blue-600 shadow-xs' 
-                              : 'hover:bg-blue-50/40 transition-colors'
-                          }`}
-                        >
-                          <td className={`px-5 py-3 font-semibold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap transition-colors ${
-                            isRowSelected 
-                              ? 'bg-blue-50 text-blue-950 border-blue-200' 
-                              : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-100'
-                          }`}>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-2.5 h-2.5 rounded-full transition-all ${
-                                  seller.isBaja
-                                    ? 'bg-rose-500'
-                                    : isRowSelected 
-                                    ? 'bg-blue-600 ring-4 ring-blue-200 scale-110' 
-                                    : 'bg-blue-400 group-hover:bg-blue-600'
-                                }`}></span>
-                                <span className={`truncate max-w-[180px] ${seller.isBaja ? 'text-slate-500 line-through decoration-slate-300' : ''}`}>{seller.name}</span>
-                                {seller.isBaja && (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
-                                    BAJA
+                        <>
+                          {/* FILA CONSOLIDADA NEWSAN CHILE */}
+                          {newsanCLSellers.length > 0 && (
+                            <tr 
+                              className="bg-blue-50/70 hover:bg-blue-100/60 font-bold transition-all border-b-2 border-blue-200 cursor-pointer"
+                              onClick={() => setNewsanChileExpanded(prev => !prev)}
+                              title="Haz clic para colapsar o expandir el desglose por canal de Newsan Chile"
+                            >
+                              <td className="px-5 py-3 font-extrabold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r bg-blue-50 text-blue-950 border-blue-200 whitespace-nowrap">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    {newsanChileExpanded ? (
+                                      <ChevronDown className="w-4 h-4 text-blue-700 transition-transform" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4 text-blue-700 transition-transform" />
+                                    )}
+                                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                                    <span className="font-extrabold text-blue-950">Newsan Chile (Consolidado 6 Canales)</span>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-600 text-white">
+                                    OFICIAL • US$ 4.000/mes
                                   </span>
-                                )}
-                              </div>
-                              {isRowSelected && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600 text-white tracking-wider">
-                                  ACTIVO
-                                </span>
-                              )}
-                            </div>
-                          </td>
+                                </div>
+                              </td>
 
-                          {filteredMonths.map(m => {
-                            const monthData = seller.months[m.key];
-                            const val = monthData?.subtotal || 0;
-                            const isProj = m.isProjected;
+                              {filteredMonths.map(m => {
+                                const val = newsanMonthlyTotals[m.key] || 0;
+                                return (
+                                  <td key={m.key} className="px-3 py-2 text-right whitespace-nowrap border-l border-blue-150 font-black text-blue-950">
+                                    {val > 0 ? formatCurrency(val, 'USD') : '-'}
+                                  </td>
+                                );
+                              })}
 
-                            // Mes cronológico anterior en monthsList para calcular variación
-                            const curIdx = monthsList.findIndex(x => x.key === m.key);
-                            const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                            const prevVal = prevMonth ? (seller.months[prevMonth.key]?.subtotal || 0) : 0;
-                            const variation = calculateVariation(
-                              val,
-                              prevVal,
-                              m.key,
-                              prevMonth?.key || '',
-                              variationMode
-                            );
+                              <td className="px-5 py-3 text-right font-black border-l whitespace-nowrap bg-blue-100/90 text-blue-950 border-blue-250">
+                                {formatCurrency(newsanGrandTotal, 'USD')}
+                              </td>
+                            </tr>
+                          )}
 
+                          {/* SUB-FILAS INDIVIDUALES DE CANALES NEWSAN CHILE (SI EXPANDIDO) */}
+                          {newsanChileExpanded && newsanCLSellers
+                            .sort((a, b) => b.totalRow - a.totalRow)
+                            .map(seller => {
+                              const isRowSelected = selectedSellerId === seller.id;
+                              return (
+                                <tr 
+                                  key={seller.id}
+                                  onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
+                                  className={`cursor-pointer transition-all ${
+                                    isRowSelected 
+                                      ? 'bg-blue-50/90 font-bold border-l-4 border-l-blue-600 shadow-xs' 
+                                      : 'hover:bg-slate-50/80 transition-colors'
+                                  }`}
+                                >
+                                  <td className={`px-5 py-2 font-medium sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap pl-9 transition-colors ${
+                                    isRowSelected ? 'bg-blue-50 text-blue-950 border-blue-200 font-bold' : 'bg-white text-slate-700 border-slate-100'
+                                  }`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                        <span className="truncate max-w-[190px]">{seller.name}</span>
+                                      </div>
+                                      <span className="text-[9px] text-slate-400 font-normal">Prorrateo</span>
+                                    </div>
+                                  </td>
+
+                                  {filteredMonths.map(m => {
+                                    const val = seller.months[m.key]?.subtotal || 0;
+                                    return (
+                                      <td key={m.key} className="px-3 py-2 text-right whitespace-nowrap border-l border-slate-100 text-slate-700 font-mono text-[11px]">
+                                        {val > 0 ? formatCurrency(val, 'USD') : '-'}
+                                      </td>
+                                    );
+                                  })}
+
+                                  <td className="px-5 py-2 text-right font-semibold border-l whitespace-nowrap text-slate-800 bg-slate-50/40 border-slate-200 font-mono text-[11px]">
+                                    {formatCurrency(seller.totalRow, 'USD')}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+
+                          {/* OTROS SELLERS DE CHILE (EJ. TRADEMEDICAL) */}
+                          {otherCLSellers.map(seller => {
+                            const isRowSelected = selectedSellerId === seller.id;
                             return (
-                              <td 
-                                key={m.key} 
-                                className={`px-3 py-2 text-right whitespace-nowrap border-l ${
-                                  isRowSelected
-                                    ? isProj
-                                      ? 'bg-orange-100/50 text-orange-950 border-orange-200/80 font-bold'
-                                      : 'bg-blue-50/80 text-blue-950 border-blue-150 font-bold'
-                                    : isProj 
-                                      ? 'bg-orange-50/30 text-orange-950 border-orange-100 font-medium' 
-                                      : 'border-slate-100 text-slate-800'
+                              <tr 
+                                key={seller.id}
+                                onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
+                                className={`cursor-pointer transition-all ${
+                                  isRowSelected 
+                                    ? 'bg-blue-50/80 font-bold border-l-4 border-l-blue-600 shadow-xs' 
+                                    : 'hover:bg-blue-50/40 transition-colors'
                                 }`}
                               >
-                                <div className="flex flex-col items-end justify-center">
-                                  <span className="leading-tight">
-                                    {val > 0 ? formatCurrency(val, monthData?.moneda || executiveKPIs?.currency) : '-'}
-                                  </span>
-                                  {variationMode !== 'none' && variation !== null && (
-                                    <span 
-                                      className={`text-[9.5px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
-                                        variation >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                                      }`}
-                                      title={`Variación ${variationMode === 'diaria' ? 'diaria ponderada' : 'mensual MoM'}: ${(variation * 100).toFixed(1)}%`}
-                                    >
-                                      <span>{variation >= 0 ? '▲' : '▼'}</span>
-                                      <span>{Math.abs(variation * 100).toFixed(1)}%</span>
+                                <td className={`px-5 py-3 font-semibold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap transition-colors ${
+                                  isRowSelected 
+                                    ? 'bg-blue-50 text-blue-950 border-blue-200' 
+                                    : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-100'
+                                }`}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-2.5 h-2.5 rounded-full ${seller.isBaja ? 'bg-rose-500' : 'bg-blue-400'}`}></span>
+                                      <span className={`truncate max-w-[180px] ${seller.isBaja ? 'text-slate-500 line-through decoration-slate-300' : ''}`}>{seller.name}</span>
+                                      {seller.isBaja && (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
+                                          BAJA
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                {filteredMonths.map(m => {
+                                  const val = seller.months[m.key]?.subtotal || 0;
+                                  return (
+                                    <td key={m.key} className="px-3 py-2 text-right whitespace-nowrap border-l border-slate-100 text-slate-800">
+                                      {val > 0 ? formatCurrency(val, 'USD') : '-'}
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-5 py-3 text-right font-bold border-l whitespace-nowrap text-slate-900 bg-slate-50/50 border-slate-200">
+                                  {formatCurrency(seller.totalRow, 'USD')}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </>
+                      );
+                    }
+
+                    return Object.values(groupedData[selectedCountry]?.sellersMap || {})
+                      .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((seller) => {
+                        const isRowSelected = selectedSellerId === seller.id;
+
+                        return (
+                          <tr 
+                            key={seller.id} 
+                            onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
+                            title={`Haz clic para ${isRowSelected ? 'deseleccionar' : 'ver gráfico y métricas exclusivas de'} ${seller.name}`}
+                            className={`cursor-pointer transition-all ${
+                              isRowSelected 
+                                ? 'bg-blue-50/80 font-bold border-l-4 border-l-blue-600 shadow-xs' 
+                                : 'hover:bg-blue-50/40 transition-colors'
+                            }`}
+                          >
+                            <td className={`px-5 py-3 font-semibold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap transition-colors ${
+                              isRowSelected 
+                                ? 'bg-blue-50 text-blue-950 border-blue-200' 
+                                : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-100'
+                            }`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2.5 h-2.5 rounded-full transition-all ${
+                                    seller.isBaja
+                                      ? 'bg-rose-500'
+                                      : isRowSelected 
+                                      ? 'bg-blue-600 ring-4 ring-blue-200 scale-110' 
+                                      : 'bg-blue-400 group-hover:bg-blue-600'
+                                  }`}></span>
+                                  <span className={`truncate max-w-[180px] ${seller.isBaja ? 'text-slate-500 line-through decoration-slate-300' : ''}`}>{seller.name}</span>
+                                  {seller.isBaja && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
+                                      BAJA
                                     </span>
                                   )}
                                 </div>
-                              </td>
-                            );
-                          })}
+                                {isRowSelected && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600 text-white tracking-wider">
+                                    ACTIVO
+                                  </span>
+                                )}
+                              </div>
+                            </td>
 
-                          {/* Total Acumulado del Seller */}
-                          <td className={`px-5 py-3 text-right font-bold border-l whitespace-nowrap ${
-                            isRowSelected 
-                              ? 'bg-blue-100/80 text-blue-950 border-blue-250 font-black' 
-                              : 'text-slate-900 bg-slate-50/50 border-slate-200'
-                          }`}>
-                            {formatCurrency(seller.totalRow, (seller.name.includes('Natura Colombia') || seller.name.includes('Disuiza') || seller.name.includes('ADDI') || seller.name.includes('Formex') || seller.name.includes('USA') || seller.name.includes('Amazon')) ? 'USD' : executiveKPIs?.currency)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            {filteredMonths.map(m => {
+                              const monthData = seller.months[m.key];
+                              const val = monthData?.subtotal || 0;
+                              const isProj = m.isProjected;
+
+                              // Mes cronológico anterior en monthsList para calcular variación
+                              const curIdx = monthsList.findIndex(x => x.key === m.key);
+                              const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
+                              const prevVal = prevMonth ? (seller.months[prevMonth.key]?.subtotal || 0) : 0;
+                              const variation = calculateVariation(
+                                val,
+                                prevVal,
+                                m.key,
+                                prevMonth?.key || '',
+                                variationMode
+                              );
+
+                              return (
+                                <td 
+                                  key={m.key} 
+                                  className={`px-3 py-2 text-right whitespace-nowrap border-l ${
+                                    isRowSelected
+                                      ? isProj
+                                        ? 'bg-orange-100/50 text-orange-950 border-orange-200/80 font-bold'
+                                        : 'bg-blue-50/80 text-blue-950 border-blue-150 font-bold'
+                                      : isProj 
+                                        ? 'bg-orange-50/30 text-orange-950 border-orange-100 font-medium' 
+                                        : 'border-slate-100 text-slate-800'
+                                  }`}
+                                >
+                                  <div className="flex flex-col items-end justify-center">
+                                    <span className="leading-tight">
+                                      {val > 0 ? formatCurrency(val, monthData?.moneda || executiveKPIs?.currency) : '-'}
+                                    </span>
+                                    {variationMode !== 'none' && variation !== null && (
+                                      <span 
+                                        className={`text-[9.5px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
+                                          variation >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                        }`}
+                                        title={`Variación ${variationMode === 'diaria' ? 'diaria ponderada' : 'mensual MoM'}: ${(variation * 100).toFixed(1)}%`}
+                                      >
+                                        <span>{variation >= 0 ? '▲' : '▼'}</span>
+                                        <span>{Math.abs(variation * 100).toFixed(1)}%</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                              );
+                            })}
+
+                            {/* Total Acumulado del Seller */}
+                            <td className={`px-5 py-3 text-right font-bold border-l whitespace-nowrap ${
+                              isRowSelected 
+                                ? 'bg-blue-100/80 text-blue-950 border-blue-250 font-black' 
+                                : 'text-slate-900 bg-slate-50/50 border-slate-200'
+                            }`}>
+                              {formatCurrency(seller.totalRow, (seller.name.includes('Natura Colombia') || seller.name.includes('Disuiza') || seller.name.includes('ADDI') || seller.name.includes('Formex') || seller.name.includes('USA') || seller.name.includes('Amazon') || seller.name.includes('Newsan Chile') || selectedCountry === 'CL') ? 'USD' : executiveKPIs?.currency)}
+                            </td>
+                          </tr>
+                        );
+                      });
+                  })()}
 
                   {/* Fila de SUBTOTAL DEL PAÍS */}
                   <tr className="bg-blue-50/90 border-t-2 border-b-2 border-blue-200 text-blue-950 font-bold sticky bottom-0 z-20 shadow-xs">
@@ -1585,15 +1774,310 @@ function MetasFacturacionContent() {
 
                 {(() => {
                   let hasRenderedNewsan = false;
+                  let hasRenderedNewsanChile = false;
                   const allSellers = Object.values(groupedData[selectedCountry]?.sellersMap || {})
                     .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
                     .sort((a, b) => a.name.localeCompare(b.name));
 
                   return allSellers.map((seller, sIdx) => {
                     const isNewsan = seller.name.toLowerCase().includes('newsan');
+                    const isNewsanAR = isNewsan && (selectedCountry === 'AR' || seller.name.toLowerCase().includes('argentina') || seller.id === '256189964' || seller.id === '989595440');
+                    const isNewsanCL = isNewsan && (selectedCountry === 'CL' || seller.name.toLowerCase().includes('chile'));
 
-                    // Si es una cuenta de Newsan, renderizamos el bloque consolidado unificado (Excel Lisbeth)
-                    if (isNewsan) {
+                    // =====================================================================
+                    // A. BLOQUE MULTICANAL CONSOLIDADO NEWSAN CHILE (6 CUENTAS)
+                    // =====================================================================
+                    if (isNewsanCL) {
+                      if (hasRenderedNewsanChile) return null;
+                      hasRenderedNewsanChile = true;
+
+                      const CHILE_CHANNELS = [
+                        { id: '977559914', name: 'Newsan Falabella', platform: 'Falabella', color: 'bg-orange-500' },
+                        { id: '942368053', name: 'Newsan Mercado Libre', platform: 'Mercado Libre', color: 'bg-yellow-500' },
+                        { id: '978106559', name: 'Newsan Paris', platform: 'Paris (Cencosud)', color: 'bg-blue-500' },
+                        { id: '919428720', name: 'Newsan Walmart', platform: 'Walmart / Lider', color: 'bg-sky-500' },
+                        { id: '962651791', name: 'Newsan Ripley', platform: 'Ripley', color: 'bg-purple-500' },
+                        { id: '936492429', name: 'Newsan Kitchen Center', platform: 'Kitchen Center', color: 'bg-emerald-500' },
+                      ];
+
+                      return (
+                        <tbody key="newsan_chile_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
+                          {/* 1. CABECERA GENERAL DE NEWSAN CHILE */}
+                          <tr className="bg-blue-100/80 border-b border-blue-200">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100/95 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-blue-950 border-r border-blue-200">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                                  <span className="text-xs uppercase tracking-wide font-black">Newsan Total (Chile)</span>
+                                </div>
+                                <span className="text-[10px] bg-blue-800 text-white font-bold px-2 py-0.5 rounded shadow-xs">
+                                  Consolidado Oficial • 6 Canales
+                                </span>
+                              </div>
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-blue-950 border-l border-blue-200/80 bg-blue-100/60">
+                                Newsan Chile Total
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* 2. SECCIÓN VENTAS BRUTAS (GMV) POR CANAL EN CLP */}
+                          <tr className="bg-slate-100/90 border-b border-slate-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100/95 z-10">
+                              <div className="flex items-center justify-between">
+                                <span>Facturación Bruta (GMV) por Canal — Pesos Chilenos (CLP)</span>
+                                <span className="text-[9px] font-medium text-slate-500 lowercase">ventas brutas extraídas de canales</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {CHILE_CHANNELS.map(ch => (
+                            <tr key={ch.id} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${ch.color}`}></span>
+                                  <span>{ch.name}</span>
+                                </div>
+                              </td>
+                              {filteredMonths.map(m => {
+                                const valCLP = newsanSubAccounts[ch.id]?.[m.key] || 0;
+                                return (
+                                  <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-800 font-mono text-[11px]">
+                                    {valCLP > 0 ? `$ ${Math.round(valCLP).toLocaleString('es-CL')} CLP` : '-'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+
+                          {/* Facturación Total en CLP */}
+                          <tr className="bg-slate-50 hover:bg-slate-100/60 transition-colors border-b-2 border-slate-300 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-900 font-bold">
+                              Total Facturación Bruta (CLP)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const totalCLP = CHILE_CHANNELS.reduce((sum, ch) => sum + (newsanSubAccounts[ch.id]?.[m.key] || 0), 0);
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-slate-200 font-bold text-slate-900 font-mono text-[11px]">
+                                  {totalCLP > 0 ? `$ ${Math.round(totalCLP).toLocaleString('es-CL')} CLP` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 3. SECCIÓN CONVERSIÓN A USD & TIPO DE CAMBIO */}
+                          <tr className="bg-indigo-50/70 border-b border-indigo-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-indigo-950 sticky left-0 bg-indigo-50/95 z-10">
+                              <div className="flex items-center justify-between">
+                                <span>Conversión Multimoneda & Tipo de Cambio Oficial (CLP / USD)</span>
+                                <span className="text-[9px] font-medium text-indigo-700 lowercase">cotización oficial mensual pactada</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Tipo de Cambio Oficial */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-900 font-semibold pl-9">
+                              Tipo de Cambio Oficial (CLP / USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tc = getRateToUSD('CLP', m.key) || 950.0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-indigo-900 font-mono text-[11px] font-bold">
+                                  {tc.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Desglose por canal en USD */}
+                          {CHILE_CHANNELS.map(ch => (
+                            <tr key={`usd_${ch.id}`} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                                <span>{ch.name} (USD)</span>
+                              </td>
+                              {filteredMonths.map(m => {
+                                const valCLP = newsanSubAccounts[ch.id]?.[m.key] || 0;
+                                const tc = getRateToUSD('CLP', m.key) || 950.0;
+                                const valUSD = valCLP / tc;
+                                const totalCLP = CHILE_CHANNELS.reduce((sum, c) => sum + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                                const totalUSD = totalCLP / tc;
+                                const share = totalUSD > 0 ? (valUSD / totalUSD) * 100 : 0;
+                                return (
+                                  <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-800">
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-mono text-[11px]">{valUSD > 0 ? `US$ ${valUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</span>
+                                      {valUSD > 0 && <span className="text-[9px] text-slate-400">({share.toFixed(1)}%)</span>}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+
+                          {/* Facturación Total en USD */}
+                          <tr className="bg-indigo-50/40 hover:bg-indigo-50/60 transition-colors border-b-2 border-indigo-300 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-indigo-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-950 font-bold">
+                              Facturación Total Consolidada (USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const totalCLP = CHILE_CHANNELS.reduce((sum, ch) => sum + (newsanSubAccounts[ch.id]?.[m.key] || 0), 0);
+                              const tc = getRateToUSD('CLP', m.key) || 950.0;
+                              const totalUSD = totalCLP / tc;
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-indigo-200 font-black text-indigo-950 font-mono text-[11px]">
+                                  {totalUSD > 0 ? `US$ ${totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 4. SECCIÓN ESCALA COMERCIAL & FEE A COBRAR (USD) */}
+                          <tr className="bg-emerald-50/80 border-b border-emerald-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-emerald-950 sticky left-0 bg-emerald-50/95 z-10">
+                              <div className="flex items-center justify-between">
+                                <span>Liquidación Comercial & Honorarios Reply (USD)</span>
+                                <span className="text-[9px] font-medium text-emerald-700 lowercase">mínimo contractual US$ 4.000 o 1% s/ GMV en USD</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Cálculo 1% s/ GMV USD */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                              Cálculo Alícuota 1% s/ GMV en USD
+                            </td>
+                            {filteredMonths.map(m => {
+                              const totalCLP = CHILE_CHANNELS.reduce((sum, ch) => sum + (newsanSubAccounts[ch.id]?.[m.key] || 0), 0);
+                              const tc = getRateToUSD('CLP', m.key) || 950.0;
+                              const totalUSD = totalCLP / tc;
+                              const fee1pct = totalUSD * 0.01;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-700">
+                                  {totalUSD > 0 ? `US$ ${fee1pct.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Mínimo Contractual */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                              Mínimo Comercial Contractual
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-700">
+                                US$ 4.000,00
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* Regla / Alícuota Aplicada */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-semibold pl-9">
+                              Alícuota / Concepto Aplicado
+                            </td>
+                            {filteredMonths.map(m => {
+                              const totalCLP = CHILE_CHANNELS.reduce((sum, ch) => sum + (newsanSubAccounts[ch.id]?.[m.key] || 0), 0);
+                              const tc = getRateToUSD('CLP', m.key) || 950.0;
+                              const totalUSD = totalCLP / tc;
+                              const fee1pct = totalUSD * 0.01;
+                              const esMinimo = fee1pct < 4000.0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-bold text-[11px]">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] ${esMinimo ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'}`}>
+                                    {esMinimo ? 'MÍNIMO' : '1,00%'}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Desglose de Fee Prorrateado por Canal */}
+                          <tr className="bg-slate-50/80 border-b border-slate-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[9.5px] uppercase tracking-wider text-slate-600 sticky left-0 bg-slate-50/95 z-10 pl-9">
+                              Prorrateo de Fee por Canal (según % de ventas brutas)
+                            </td>
+                          </tr>
+
+                          {CHILE_CHANNELS.map(ch => (
+                            <tr key={`fee_${ch.id}`} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                              <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 text-xs pl-12">
+                                <span>Fee {ch.name}</span>
+                              </td>
+                              {filteredMonths.map(m => {
+                                const totalCLP = CHILE_CHANNELS.reduce((sum, c) => sum + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                                const tc = getRateToUSD('CLP', m.key) || 950.0;
+                                const totalUSD = totalCLP / tc;
+                                const feeConsolidado = Math.max(4000.0, totalUSD * 0.01);
+                                const valCLP = newsanSubAccounts[ch.id]?.[m.key] || 0;
+                                const valUSD = valCLP / tc;
+                                const feeShare = totalUSD > 0 ? (valUSD / totalUSD) * feeConsolidado : 0;
+                                return (
+                                  <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-700">
+                                    {feeShare > 0 ? `US$ ${feeShare.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+
+                          {/* Subtotal Honorarios Reply */}
+                          <tr className="bg-blue-100/70 hover:bg-blue-100 transition-colors border-b border-blue-200 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black">
+                              Subtotal Honorarios Reply (USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const totalCLP = CHILE_CHANNELS.reduce((sum, ch) => sum + (newsanSubAccounts[ch.id]?.[m.key] || 0), 0);
+                              const tc = getRateToUSD('CLP', m.key) || 950.0;
+                              const totalUSD = totalCLP / tc;
+                              const feeConsolidado = Math.max(4000.0, totalUSD * 0.01);
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 font-mono text-[11px]">
+                                  US$ {feeConsolidado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* IVA Exportación (0%) */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-500 text-xs">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium">
+                              IVA (0% Exento - Exportación de Servicios a Chile)
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-400">
+                                US$ 0,00
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* Total Factura en USD */}
+                          <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors border-b-2 border-emerald-300 font-black">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100/95 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs">
+                              Total Factura a Cobrar (USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const totalCLP = CHILE_CHANNELS.reduce((sum, ch) => sum + (newsanSubAccounts[ch.id]?.[m.key] || 0), 0);
+                              const tc = getRateToUSD('CLP', m.key) || 950.0;
+                              const totalUSD = totalCLP / tc;
+                              const feeConsolidado = Math.max(4000.0, totalUSD * 0.01);
+                              return (
+                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-300 font-black text-emerald-950 font-mono text-xs">
+                                  US$ {feeConsolidado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+                      );
+                    }
+
+                    // =====================================================================
+                    // B. BLOQUE NEWSAN ARGENTINA (ML + TIENDA WEB)
+                    // =====================================================================
+                    if (isNewsanAR) {
                       if (hasRenderedNewsan) return null;
                       hasRenderedNewsan = true;
 
@@ -2007,10 +2491,12 @@ function MetasFacturacionContent() {
                           {filteredMonths.map(m => {
                             const mData = seller.months[m.key];
                             const isProj = mData?.isProjected;
-                            const gmvCurrency = (seller.name.includes('Colombia') || seller.name.includes('Evacol') || seller.name.includes('Disuiza') || seller.name.includes('Formex') || seller.name.includes('Natura')) ? 'COP' : executiveKPIs?.currency;
+                            const isCol = seller.name.includes('Colombia') || seller.name.includes('Evacol') || seller.name.includes('Disuiza') || seller.name.includes('Formex') || seller.name.includes('Natura');
+                            const isChl = seller.name.includes('Chile') || selectedCountry === 'CL';
+                            const gmvCurrency = isCol ? 'COP' : (isChl ? 'CLP' : executiveKPIs?.currency);
                             return (
                               <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right border-l ${isProj ? 'bg-orange-50/30 border-orange-100 text-orange-950' : 'border-slate-100 text-slate-800'}`}>
-                                {mData ? formatCurrency(mData.facturacion, gmvCurrency) : '-'}
+                                {mData ? (isChl ? `$ ${Math.round(mData.facturacion).toLocaleString('es-CL')} CLP` : formatCurrency(mData.facturacion, gmvCurrency)) : '-'}
                               </td>
                             );
                           })}

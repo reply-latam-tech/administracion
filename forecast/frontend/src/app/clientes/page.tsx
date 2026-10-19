@@ -133,6 +133,11 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'ARS';
     reglaLiquidacion = 'Liquidación basada en métricas operativas de Tienda Web: Sesiones mensuales y Horas Extras de soporte técnico. Escala con cargo mínimo garantizado más tarifa por sesión y tarifa por hora extra. Actualización semestral (Abril y Septiembre). Facturación en ARS + 21% IVA.';
     metodoActualizacion = 'Ajuste semestral por inflación oficial acumulada (Abril y Septiembre).';
+  } else if (['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('newsan') && p === 'CL')) {
+    // Newsan Chile Multicanal (6 Cuentas)
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'Las 6 cuentas de Newsan Chile (Mercado Libre, Falabella, Ripley, Walmart, Paris y Kitchen Center) registran su facturación bruta (GMV) en Pesos Chilenos (CLP) y se convierten mensualmente a USD según el Tipo de Cambio oficial. La suma total consolidada se cruza con la escala comercial: si el 1% es menor a $4.000 USD se cobra el cargo mínimo garantizado de $4.000 USD; si supera esa cifra, se cobra el 1% de la facturación consolidada en USD. Se factura y cobra en USD sin IVA (exportación de servicios a Chile).';
+    metodoActualizacion = 'Escala fija consolidada en USD con piso mínimo de $4.000 USD o 1% s/ GMV en USD.';
   } else if (p === 'CL') {
     monedaCobro = 'CLP';
     reglaLiquidacion = 'Facturación en Pesos Chilenos (CLP) cruzada con la escala pactada por canal (Falabella, ML, Paris, etc.). Cobro en CLP.';
@@ -145,7 +150,8 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   }
 
   // 2. Moneda de la escala comercial
-  let monedaEscala = escalaMoneda || (['941943480', '964690754', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591'].includes(sid) ? 'USD' : (p === 'CL' ? 'CLP' : 'ARS'));
+  const newsanChileIds = ['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'];
+  let monedaEscala = escalaMoneda || (['941943480', '964690754', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('newsan') && p === 'CL') ? 'USD' : (p === 'CL' ? 'CLP' : 'ARS'));
 
   return {
     monedaCobro,

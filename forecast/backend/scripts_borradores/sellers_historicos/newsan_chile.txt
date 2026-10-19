@@ -1,0 +1,35 @@
+dim_sellers
+
+id_seller: No tienen
+nombre_seller: (Newsan ML
+Newsan Falabella
+Newsan Ripley
+Newsan Walmart
+Newsan Paris
+Newsan Kitchencenter) respectivamente
+
+canal: Mercado Libre, Falabella, Ripley, Walmart, Paris, Kitchencenter. respectivamente
+pais: CL (Chile)
+moneda: CLP (pesos chilenos)
+moneda_cobro: USD (dólares estadounidenses)  
+estado: TRUE
+cobrar_botmaker: FALSE
+frecuencia_actualizacion: FIJA
+
+
+--
+facturacion
+
+07/2026	08/2026	09/2026
+46.631.083	52.887.211	28.970.049
+114.764.400	118.791.263	104.473.770
+6.468.425	5.460.560	3.015.240
+2.095.870	2.732.900	7.869.523
+23.202.690	15.903.660	15.515.730
+21.469.720	12.709.840	2.149.970
+
+--
+escala
+
+Minimo USD 4000
+mayor a USD 4000, va el 1% de la suma de facturacuon bruta en dolares de todas esas cuentas
