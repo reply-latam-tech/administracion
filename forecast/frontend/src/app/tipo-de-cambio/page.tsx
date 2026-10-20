@@ -10,13 +10,10 @@ import {
   Download, 
   Database, 
   RefreshCw, 
-  Check, 
-  Copy, 
   Globe, 
   TrendingUp,
   Search,
   ExternalLink,
-  Info,
   DollarSign
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -100,7 +97,6 @@ export default function TipoDeCambioPage() {
   const [selectedStatus, setSelectedStatus] = useState<'ALL' | 'REAL' | 'PROYECTADO'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCurrencyTab, setSelectedCurrencyTab] = useState<string>('all');
-  const [copiedSql, setCopiedSql] = useState(false);
 
   // Cargar datos de Supabase
   const fetchData = async () => {
@@ -220,13 +216,6 @@ export default function TipoDeCambioPage() {
     document.body.removeChild(link);
   };
 
-  const copySqlNotice = () => {
-    const sqlPath = 'forecast/backend/migrations/03_tabla_tipo_de_cambio.sql';
-    navigator.clipboard.writeText(sqlPath);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col p-6 space-y-6">
       {/* 1. Header Principal */}
@@ -283,31 +272,7 @@ export default function TipoDeCambioPage() {
         </div>
       </div>
 
-      {/* 2. Banner informativo de Migración si aún no está creada en DB */}
-      {!isLiveFromDb && (
-        <div className="bg-gradient-to-r from-blue-50 via-indigo-50/60 to-blue-50 border border-blue-200 p-4 rounded-xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-          <div className="flex items-start gap-3 text-blue-900">
-            <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-slate-800">
-                Migración SQL disponible: <code className="bg-white/80 px-1.5 py-0.5 rounded text-blue-700 font-mono text-[11px] border border-blue-200">03_tabla_tipo_de_cambio.sql</code>
-              </p>
-              <p className="text-slate-600 mt-0.5 text-[11px]">
-                Los 33 meses de tipos de cambio de <code className="text-slate-700 font-mono">tipo_de_cambio.txt</code> se encuentran visualizados correctamente. Para habilitar edición en tiempo real en la base de datos, ejecuta la migración en el SQL Editor de Supabase.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={copySqlNotice}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-blue-700 hover:bg-blue-50 border border-blue-200 font-bold rounded-lg shrink-0 cursor-pointer transition-all shadow-2xs text-xs"
-          >
-            {copiedSql ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-            {copiedSql ? "¡Ruta copiada!" : "Copiar ruta SQL"}
-          </button>
-        </div>
-      )}
-
-      {/* 3. Cards de Resumen por Moneda (Última Cotización Oficial Registrada) */}
+      {/* 2. Cards de Resumen por Moneda (Última Cotización Oficial Registrada) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
         {CURRENCIES.map(curr => {
           const val = latestRow ? (latestRow[curr.key as keyof TipoCambioRow] as number | null) : null;
