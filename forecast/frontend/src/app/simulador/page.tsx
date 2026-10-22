@@ -261,13 +261,6 @@ export default function SimuladorPage() {
 
   return (
     <div className="space-y-6 pb-12 w-full h-full overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm shrink-0">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Simulador Cartesiano de Liquidación</h1>
-          <p className="text-sm text-gray-500">Visualizá los saltos y el &quot;efecto precipicio&quot; (cliffs) en los fees</p>
-        </div>
-      </div>
-
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col p-6 gap-6 overflow-y-auto">
         
         {/* Controles */}

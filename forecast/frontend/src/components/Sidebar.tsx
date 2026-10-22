@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { 
-  LayoutDashboard, 
   TrendingUp, 
   Users, 
   Layers, 
@@ -18,13 +17,22 @@ import {
   Table,
   ChevronDown,
   ChevronRight,
-  Coins
+  Coins,
+  LogOut
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 function SidebarContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentView = searchParams.get("view") || "subtotales";
+
+  // Autenticación de usuario actual
+  const { user, signOut } = useAuth();
+  const userEmail = user?.email || "";
+  const userAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || (userEmail ? userEmail.split("@")[0].replace(".", " ") : "Usuario");
+  const initial = (userName.charAt(0) || "U").toUpperCase();
 
   // Estado del acordeón de Metas de Facturación (abierto por defecto si estamos en /liquidaciones)
   const isLiquidacionesActive = pathname === "/liquidaciones";
@@ -66,23 +74,7 @@ function SidebarContent() {
 
         {/* Navigation */}
         <nav className="px-3 space-y-1">
-          {/* 1. Overview */}
-          <Link
-            href="/overview"
-            className={`group flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              pathname === "/overview"
-                ? "bg-[#eff5ff] text-[#275ec9] font-semibold shadow-xs"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <LayoutDashboard size={18} className={pathname === "/overview" ? "text-[#4981fb]" : "text-slate-400 group-hover:text-slate-600"} />
-              <span>Overview</span>
-            </div>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">KPIs</span>
-          </Link>
-
-          {/* 2. Directorio */}
+          {/* 1. Directorio */}
           <Link
             href="/clientes"
             className={`group flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -280,20 +272,38 @@ function SidebarContent() {
       {/* Footer / User Profile & System Status */}
       <div className="p-3.5 border-t border-slate-100 bg-slate-50/70 space-y-2.5">
         {/* User Profile Card */}
-        <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
           <div className="relative shrink-0">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#ff5100] to-[#ff7a3d] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              R
-            </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+            {userAvatar ? (
+              <img
+                src={userAvatar}
+                alt={userName}
+                className="w-9 h-9 rounded-full object-cover shadow-xs border border-slate-100"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#ff5100] to-[#ff7a3d] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                {initial}
+              </div>
+            )}
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" title="En línea"></span>
           </div>
+
           <div className="flex-1 min-w-0 text-left">
-            <div className="font-semibold text-slate-800 text-xs truncate leading-tight">Reply Team</div>
-            <div className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">Administración</div>
+            <div className="font-semibold text-slate-800 text-xs truncate leading-tight capitalize" title={userName}>
+              {userName}
+            </div>
+            <div className="text-[10px] text-slate-400 truncate leading-tight mt-0.5 font-mono" title={userEmail}>
+              {userEmail}
+            </div>
           </div>
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-50 text-[#ff5100] border border-orange-200 uppercase shrink-0">
-            Admin
-          </span>
+
+          <button
+            onClick={signOut}
+            title="Cerrar sesión"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
 
         {/* Status card */}

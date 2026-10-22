@@ -16,11 +16,6 @@ const pageTitles: Record<string, { title: string; category: string; description:
     category: "Forecast", 
     description: "Seguimiento diario de ventas acumuladas y proyección a fin de mes" 
   },
-  "/overview": { 
-    title: "Overview de Negocio", 
-    category: "Métricas Macro", 
-    description: "Comparativa consolidada mes a mes y KPIs globales" 
-  },
   "/clientes": { 
     title: "Directorio de Clientes", 
     category: "Gestión", 
@@ -90,7 +85,7 @@ export function Header() {
       {/* Badges de Estado y Acciones Rápidas */}
       <div className="flex items-center gap-3">
         {/* Fecha y Timezone */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs text-slate-600">
+        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs text-slate-600">
           <Calendar size={13} className="text-slate-400" />
           <span className="capitalize">{todayStr}</span>
           <span className="text-slate-300">|</span>
