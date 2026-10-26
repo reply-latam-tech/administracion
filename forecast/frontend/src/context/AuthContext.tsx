@@ -4,17 +4,36 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
+export type UserRole = 'propietario' | 'directivo' | 'administracion' | 'analista';
+
+export const OWNER_EMAIL = "matias.molesini@replylatam.com";
+
+export function resolveUserRole(email?: string | null, appMetaRole?: string | null): UserRole {
+  if (!email) return 'analista';
+  if (email.trim().toLowerCase() === OWNER_EMAIL) return 'propietario';
+  if (appMetaRole && ['propietario', 'directivo', 'administracion', 'analista'].includes(appMetaRole)) {
+    return appMetaRole as UserRole;
+  }
+  return 'analista';
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
   isAuthorized: boolean;
+  role: UserRole;
+  isPropietario: boolean;
+  isDirectivo: boolean;
+  isAdministracion: boolean;
+  isAnalista: boolean;
   authError: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string) => Promise<{ success: boolean; message?: string }>;
-  loginAsDevUser: (email?: string) => void;
+  loginAsDevUser: (email?: string, customRole?: UserRole) => void;
   signOut: () => Promise<void>;
   clearError: () => void;
+  refreshRole: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,6 +48,7 @@ export function isReplyEmail(email?: string | null): boolean {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [role, setRole] = useState<UserRole>('analista');
   const [loading, setLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -45,6 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (parsed?.user?.email && isReplyEmail(parsed.user.email)) {
               setUser(parsed.user);
               setSession(parsed);
+              const devRole = resolveUserRole(parsed.user.email, parsed.user.app_metadata?.role);
+              setRole(devRole);
               setIsAuthorized(true);
               setLoading(false);
               return;
@@ -56,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setUser(null);
       setSession(null);
+      setRole('analista');
       setIsAuthorized(false);
       setLoading(false);
       return;
@@ -66,6 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isReplyEmail(email)) {
       setUser(currentSession.user);
       setSession(currentSession);
+      const computedRole = resolveUserRole(email, currentSession.user.app_metadata?.role);
+      setRole(computedRole);
       setIsAuthorized(true);
       setAuthError(null);
     } else {
@@ -73,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut();
       setUser(null);
       setSession(null);
+      setRole('analista');
       setIsAuthorized(false);
       setAuthError(
         `Acceso no autorizado: La cuenta (${email}) no pertenece al dominio ${ALLOWED_DOMAIN}. Por favor ingresá con tu correo corporativo de Reply Latam.`
@@ -81,10 +107,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   };
 
-  const loginAsDevUser = (email = "matias.molesini@replylatam.com") => {
+  const loginAsDevUser = (email = OWNER_EMAIL, customRole: UserRole = 'propietario') => {
     const mockUser: User = {
       id: "dev-matias-molesini",
-      app_metadata: { provider: "google" },
+      app_metadata: { provider: "google", role: customRole },
       user_metadata: {
         full_name: "Matias Molesini",
         name: "Matias Molesini",
@@ -110,8 +136,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setUser(mockUser);
     setSession(mockSession);
+    setRole(customRole);
     setIsAuthorized(true);
     setAuthError(null);
+  };
+
+  const refreshRole = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch('/api/admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        const found = data.users?.find((u: any) => u.id === user.id || u.email?.toLowerCase() === user.email?.toLowerCase());
+        if (found?.rol) {
+          setRole(found.rol);
+        }
+      }
+    } catch {
+      // No-op
+    }
   };
 
   useEffect(() => {
@@ -202,6 +245,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearError = () => setAuthError(null);
 
+  const isPropietario = role === 'propietario';
+  const isDirectivo = role === 'directivo' || isPropietario;
+  const isAdministracion = role === 'administracion' || isPropietario;
+  const isAnalista = role === 'analista';
+
   return (
     <AuthContext.Provider
       value={{
@@ -209,12 +257,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         loading,
         isAuthorized,
+        role,
+        isPropietario,
+        isDirectivo,
+        isAdministracion,
+        isAnalista,
         authError,
         signInWithGoogle,
         signInWithEmail,
         loginAsDevUser,
         signOut,
-        clearError
+        clearError,
+        refreshRole
       }}
     >
       {children}

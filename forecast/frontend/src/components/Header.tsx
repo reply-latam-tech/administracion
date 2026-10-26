@@ -46,6 +46,21 @@ const pageTitles: Record<string, { title: string; category: string; description:
     category: "Configuración", 
     description: "Estructura de alícuotas por volumen y tramos vigentes" 
   },
+  "/tipo-de-cambio": { 
+    title: "Tipos de Cambio Oficiales", 
+    category: "FX Regional", 
+    description: "Cotizaciones mensuales para liquidación, proyección y conversión a USD" 
+  },
+  "/usuarios": { 
+    title: "Gestión de Usuarios y Roles (RBAC)", 
+    category: "Seguridad & Acceso", 
+    description: "Supervisión de colaboradores, asignación de permisos y auditoría de accesos" 
+  },
+  "/auditoria-proyecciones": { 
+    title: "Auditoría Estadística de Proyecciones", 
+    category: "Data Science & BI", 
+    description: "Evaluación empírica de desvíos, residuos y convergencia temporal día a día" 
+  },
 };
 
 export function Header() {

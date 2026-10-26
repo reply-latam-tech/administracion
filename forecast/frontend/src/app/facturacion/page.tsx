@@ -66,11 +66,20 @@ function getDefaultCurrencyForCountry(countryCode: string): string {
   return COUNTRY_CONFIG[countryCode]?.defaultCurrency || 'ARS';
 }
 
+// Cache en memoria para navegación instantánea (0ms) entre vistas
+let facturacionCache: {
+  sellers: any[];
+  facturacion: any[];
+  estMensual: any[];
+  estDiaria: any[];
+  timestamp: number;
+} | null = null;
+
 export default function FacturacionPage() {
-  // Datos crudos de Supabase
-  const [rawSellers, setRawSellers] = useState<any[]>([]);
-  const [rawFacturacion, setRawFacturacion] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Datos crudos de Supabase (inicializados desde caché si existe para render instantáneo)
+  const [rawSellers, setRawSellers] = useState<any[]>(() => facturacionCache?.sellers || []);
+  const [rawFacturacion, setRawFacturacion] = useState<any[]>(() => facturacionCache?.facturacion || []);
+  const [loading, setLoading] = useState(() => !facturacionCache);
 
   // Estados de control y visualización
   // 'USD' = Unificado en Dólares (estándar para comparar sin distorsión)
@@ -85,33 +94,54 @@ export default function FacturacionPage() {
   const [collapsedCountries, setCollapsedCountries] = useState<Record<string, boolean>>({});
 
   // Estacionalidad
-  const [estMensual, setEstMensual] = useState<any[]>([]);
-  const [estDiaria, setEstDiaria] = useState<any[]>([]);
+  const [estMensual, setEstMensual] = useState<any[]>(() => facturacionCache?.estMensual || []);
+  const [estDiaria, setEstDiaria] = useState<any[]>(() => facturacionCache?.estDiaria || []);
 
   useEffect(() => {
     async function fetchData() {
-      setLoading(true);
+      // Si no hay cache, mostramos loading inicial
+      if (!facturacionCache) {
+        setLoading(true);
+      }
       try {
-        const { data: sellersData, error: errSellers } = await supabase
-          .from('dim_sellers')
-          .select('*');
+        // Ejecución concurrente en paralelo (Promise.all) con selección de columnas optimizada
+        const [sellersRes, factRes, estMensualRes, estDiariaRes] = await Promise.all([
+          supabase
+            .from('dim_sellers')
+            .select('*'),
+          supabase
+            .from('facturacion')
+            .select('seller_id, periodo, valor_facturado, estado')
+            .order('periodo', { ascending: true }),
+          supabase
+            .from('estacionalidad_mensual')
+            .select('seller_id, mes, indice_peso'),
+          supabase
+            .from('estacionalidad_diaria')
+            .select('seller_id, tipo, llave, indice_peso')
+        ]);
 
-        if (errSellers) console.error('Error sellers:', errSellers);
+        if (sellersRes.error) console.error('Error sellers:', sellersRes.error);
+        if (factRes.error) console.error('Error facturacion:', factRes.error);
 
-        const { data: factData, error: errFact } = await supabase
-          .from('facturacion')
-          .select('*')
-          .order('periodo', { ascending: true });
+        const sellersData = sellersRes.data || [];
+        const factData = factRes.data || [];
+        const estMensualData = estMensualRes.data || [];
+        const estDiariaData = estDiariaRes.data || [];
 
-        if (errFact) console.error('Error facturacion:', errFact);
+        // Guardar en cache en memoria
+        facturacionCache = {
+          sellers: sellersData,
+          facturacion: factData,
+          estMensual: estMensualData,
+          estDiaria: estDiariaData,
+          timestamp: Date.now()
+        };
 
-        const { data: estMensualData } = await supabase.from('estacionalidad_mensual').select('*');
-        const { data: estDiariaData } = await supabase.from('estacionalidad_diaria').select('*');
-
-        setRawSellers(sellersData || []);
-        setRawFacturacion(factData || []);
-        setEstMensual(estMensualData || []);
-        setEstDiaria(estDiariaData || []);
+        setRawSellers(sellersData);
+        setRawFacturacion(factData);
+        setEstMensual(estMensualData);
+        setEstDiaria(estDiariaData);
       } catch (err) {
         console.error('Error global cargando datos:', err);
       } finally {
@@ -168,6 +198,13 @@ export default function FacturacionPage() {
 
     const sortedPeriodos = Array.from(periodosSet).sort();
 
+    // Precalcular mapa de período previo YoY para optimizar rendimiento O(1)
+    const prevYearMap: Record<string, string> = {};
+    sortedPeriodos.forEach(p => {
+      const [y, m, d] = p.split('-');
+      prevYearMap[p] = `${parseInt(y, 10) - 1}-${m}-${d}`;
+    });
+
     // Determinar moneda de salida para un seller
     const getTargetCurrency = (sellerMoneda: string) => {
       if (currencyView === 'ORIGINAL') return sellerMoneda;
@@ -211,11 +248,9 @@ export default function FacturacionPage() {
           // Variación mensual
           const varM = prevVal > 0 ? (displayVal - prevVal) / prevVal : 0;
 
-          // Variación anual (YoY)
-          const date = new Date(p + "T12:00:00");
-          date.setFullYear(date.getFullYear() - 1);
-          const prevYearP = date.toISOString().split('T')[0];
-          const rawPrevYearVal = rawMap[sId]?.[prevYearP];
+          // Variación anual (YoY) optimizada
+          const prevYearP = prevYearMap[p];
+          const rawPrevYearVal = prevYearP ? rawMap[sId]?.[prevYearP] : undefined;
           let varA = 0;
           if (rawPrevYearVal && rawPrevYearVal > 0) {
             const displayPrevYearVal = convertCurrency(rawPrevYearVal, sInfo.moneda, targetCur, prevYearP);
@@ -327,15 +362,28 @@ export default function FacturacionPage() {
       return true;
     });
 
+    // Ordenar sellers por volumen acumulado total ($) descendente
+    const sortedSellersByVolume = [...chartSellersList].sort((a, b) => (b.totalPeriodos || 0) - (a.totalPeriodos || 0));
+
+    // Regla de negocio solicitada: Top 9 cuentas con mayor volumen $ y la 10ma agrupa a "Otros"
+    const needsGrouping = sortedSellersByVolume.length > 10;
+    const topSellers = needsGrouping ? sortedSellersByVolume.slice(0, 9) : sortedSellersByVolume;
+    const otherSellers = needsGrouping ? sortedSellersByVolume.slice(9) : [];
+
+    const chartSellerNames: string[] = topSellers.map(s => s.sellerName);
+    if (needsGrouping) {
+      chartSellerNames.push('Otros');
+    }
+
     const chartDataset: any[] = [];
-    const chartSellerNames = new Set<string>();
+    const chartDatasetMap: Record<string, any> = {};
 
     sortedPeriodos.forEach(p => {
       const mStr = formatMonthStr(p);
       const rowItem: any = { name: mStr, periodo: p, total: 0 };
 
-      chartSellersList.forEach(s => {
-        chartSellerNames.add(s.sellerName);
+      // 1. Asignar los top sellers individuales
+      topSellers.forEach(s => {
         const cell = s.months[p];
         const val = cell ? cell.valor : 0;
         rowItem[s.sellerName] = val;
@@ -346,10 +394,32 @@ export default function FacturacionPage() {
         rowItem[`${s.sellerName}_moneda`] = s.monedaDisplay;
       });
 
+      // 2. Agrupar el resto de cuentas en "Otros"
+      if (needsGrouping) {
+        let othersVal = 0;
+        let isOthersProjected = true;
+        let othersCountActive = 0;
+        otherSellers.forEach(s => {
+          const cell = s.months[p];
+          if (cell && cell.valor > 0) {
+            othersVal += cell.valor;
+            othersCountActive++;
+            if (cell.estado === 'REAL') isOthersProjected = false;
+          }
+        });
+        rowItem['Otros'] = othersVal;
+        rowItem.total += othersVal;
+        rowItem['Otros_estado'] = (othersVal > 0 && isOthersProjected) ? 'PROYECTADO' : 'REAL';
+        rowItem['Otros_moneda'] = topSellers[0]?.monedaDisplay || globalCurrency;
+        rowItem['Otros_count'] = otherSellers.length;
+        rowItem['Otros_active_count'] = othersCountActive;
+      }
+
       chartDataset.push(rowItem);
+      chartDatasetMap[p] = rowItem;
     });
 
-    // Calcular variaciones en chartData
+    // Calcular variaciones en chartData optimizado
     for (let i = 0; i < chartDataset.length; i++) {
       if (i > 0) {
         const prevT = chartDataset[i - 1].total;
@@ -358,10 +428,9 @@ export default function FacturacionPage() {
         chartDataset[i].total_varM = 0;
       }
 
-      const d = new Date(chartDataset[i].periodo + "T12:00:00");
-      d.setFullYear(d.getFullYear() - 1);
-      const prevYearStr = d.toISOString().split('T')[0];
-      const prevYearRow = chartDataset.find(c => c.periodo === prevYearStr);
+      const p = chartDataset[i].periodo;
+      const prevYearStr = prevYearMap[p];
+      const prevYearRow = prevYearStr ? chartDatasetMap[prevYearStr] : null;
       if (prevYearRow && prevYearRow.total) {
         chartDataset[i].total_varA = (chartDataset[i].total - prevYearRow.total) / prevYearRow.total;
       } else {
@@ -407,11 +476,11 @@ export default function FacturacionPage() {
       }
     });
 
-    // Seller con mayor facturación en el último mes
+    // Seller con mayor facturación en el último mes (excluyendo 'Otros')
     let topSeller = { name: '-', valor: 0 };
     if (latestMonth) {
       Object.keys(latestMonth).forEach(k => {
-        if (!['name', 'periodo', 'total', 'total_varM', 'total_varA'].includes(k) && !k.includes('_')) {
+        if (!['name', 'periodo', 'total', 'total_varM', 'total_varA', 'Otros', 'Otros_count', 'Otros_active_count'].includes(k) && !k.includes('_')) {
           const v = latestMonth[k];
           if (v > topSeller.valor) {
             topSeller = { name: k, valor: v };
@@ -461,7 +530,7 @@ export default function FacturacionPage() {
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-bold text-slate-900">{label}</span>
               <span className="text-[11px] font-normal text-slate-400">
-                ({activeEntries.length} {activeEntries.length === 1 ? 'cliente' : 'clientes'})
+                ({activeEntries.length} {activeEntries.length === 1 ? 'grupo' : 'grupos'})
               </span>
             </div>
             <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
@@ -469,21 +538,29 @@ export default function FacturacionPage() {
             </span>
           </div>
 
-          <div className="space-y-1.5 mb-2.5 max-h-[280px] overflow-y-auto pr-1">
-            {displayedEntries.map((entry: any, index: number) => {
-              const varValue = rowData[`${entry.name}_var${variationType === 'monthly' ? 'M' : 'A'}`];
+          <div className="space-y-1.5 mb-2.5 max-h-[300px] overflow-y-auto pr-1">
+            {activeEntries.map((entry: any, index: number) => {
+              const isOthers = entry.name === 'Otros';
+              const displayName = isOthers ? `Otros (${rowData.Otros_count || 'resto'} cuentas)` : entry.name;
+              const varValue = isOthers ? null : rowData[`${entry.name}_var${variationType === 'monthly' ? 'M' : 'A'}`];
               const percentage = total > 0 ? (entry.value / total) * 100 : 0;
               return (
-                <div key={index} className="flex justify-between items-center gap-2 py-0.5">
+                <div key={index} className={`flex justify-between items-center gap-2 py-0.5 ${isOthers ? 'pt-1.5 border-t border-dashed border-slate-200 mt-1' : ''}`}>
                   <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                    <span className="text-slate-700 font-medium truncate text-xs" title={entry.name}>
-                      {entry.name}
+                    <div 
+                      className="w-2.5 h-2.5 rounded-full shrink-0" 
+                      style={{ backgroundColor: isOthers ? '#94A3B8' : entry.color }} 
+                    />
+                    <span 
+                      className={`truncate text-xs ${isOthers ? 'text-slate-600 font-bold italic' : 'text-slate-700 font-medium'}`} 
+                      title={displayName}
+                    >
+                      {displayName}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right">
-                      <span className="font-bold text-slate-900 leading-tight block text-xs">
+                      <span className={`font-bold leading-tight block text-xs ${isOthers ? 'text-slate-700' : 'text-slate-900'}`}>
                         {formatMoney(entry.value, tooltipCurrency)}
                       </span>
                       <span className="text-[10px] text-slate-400 font-medium leading-none block">
@@ -505,30 +582,6 @@ export default function FacturacionPage() {
                 </div>
               );
             })}
-
-            {hasOthers && (
-              <div className="flex justify-between items-center gap-2 pt-1.5 border-t border-dashed border-slate-200">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <div className="w-2 h-2 rounded-full shrink-0 bg-slate-400" />
-                  <span className="text-slate-500 font-semibold italic truncate text-xs">
-                    Otros ({remainingEntries.length} clientes)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right">
-                    <span className="font-bold text-slate-700 leading-tight block text-xs">
-                      {formatMoney(othersTotalValue, tooltipCurrency)}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-medium leading-none block">
-                      {othersPercentage.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="w-12 text-right">
-                    <span className="text-[10px] text-slate-400 font-mono">—</span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="border-t border-slate-200 pt-2 flex justify-between items-center bg-slate-50 -mx-4 -mb-4 px-4 py-2.5 rounded-b-xl">
@@ -924,10 +977,10 @@ export default function FacturacionPage() {
                 {processedData.chartSellerNames.filter(name => !selectedSeller || name === selectedSeller).map((name, index) => {
                   const colors = [
                     '#4981FB', '#FF5100', '#10B981', '#F59E0B', '#8B5CF6', 
-                    '#06B6D4', '#EC4899', '#14B8A6', '#6366F1', '#F97316', 
-                    '#84CC16', '#A855F7', '#3B82F6', '#E11D48', '#0EA5E9', '#D97706'
+                    '#06B6D4', '#EC4899', '#14B8A6', '#6366F1'
                   ];
-                  const color = colors[index % colors.length];
+                  const isOthers = name === 'Otros';
+                  const color = isOthers ? '#94A3B8' : colors[index % colors.length];
                   return (
                     <Bar key={name} dataKey={name} stackId="a" fill={color}>
                       {processedData.chartDataset.map((entry, idx) => {
