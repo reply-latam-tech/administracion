@@ -1,0 +1,28 @@
+name: Monthly Forecast Rebalance
+
+on:
+  schedule:
+    # Corre el día 1 de cada mes a las 12:00 PM UTC (09:00 AM en Argentina UTC-3)
+    - cron: '0 12 1 * *'
+  workflow_dispatch: # Permite ejecutar el rebalanceo manualmente desde GitHub Actions
+
+jobs:
+  rebalance_forecast:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run monthly forecast rebalance
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          cd forecast/poc_api
+          node rebalance_monthly_forecast.js
