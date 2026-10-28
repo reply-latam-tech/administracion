@@ -151,12 +151,18 @@ async function main() {
     
     for (const seller of sellers) {
         const SELLER_ID = seller.id_seller;
+        // Mapeo si el ID en Supabase difiere del seller ID real en Mercado Libre
+        const SELLER_MELI_MAP = {
+            942368053: "1529028605" // Newsan Chile ML -> INTSAN_CHILE en Mercado Libre Chile
+        };
+        const meliSellerId = SELLER_MELI_MAP[SELLER_ID] || SELLER_ID;
+
         console.log(`\n===========================================`);
-        console.log(`Procesando Seller: ${seller.nombre_seller} (${SELLER_ID})`);
+        console.log(`Procesando Seller: ${seller.nombre_seller} (${SELLER_ID}${meliSellerId !== SELLER_ID ? ' -> MELI: ' + meliSellerId : ''})`);
         
-        let sellerInfo = await getSellerTokensFromFirestore(firestoreToken, SELLER_ID);
+        let sellerInfo = await getSellerTokensFromFirestore(firestoreToken, meliSellerId);
         if (!sellerInfo) {
-            console.log(`--> ⚠️ Seller ${SELLER_ID} no encontrado en Firestore (no linkeado). Omitiendo.`);
+            console.log(`--> ⚠️ Seller ${SELLER_ID} (MELI: ${meliSellerId}) no encontrado en Firestore (no linkeado). Omitiendo.`);
             continue;
         }
         
@@ -179,7 +185,7 @@ async function main() {
         while (offset + limit <= 10050) { // Mercado Libre hard limit at 10000
             if (offset > 10000) break; 
             
-            const mlUrl = `https://api.mercadolibre.com/orders/search?seller=${SELLER_ID}&order.date_created.from=${fromIso}&order.date_created.to=${toIso}&offset=${offset}&limit=${limit}`;
+            const mlUrl = `https://api.mercadolibre.com/orders/search?seller=${meliSellerId}&order.date_created.from=${fromIso}&order.date_created.to=${toIso}&offset=${offset}&limit=${limit}`;
             const mlRes = await fetch(mlUrl, {
                 headers: { "Authorization": `Bearer ${newTokens.access_token}` }
             });
