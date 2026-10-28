@@ -230,9 +230,146 @@ async function main() {
         console.log(`--> ✅ Completado! Órdenes upserted: ${totalInserted}`);
     }
     
+    // 3. Sincronizar automáticamente la proyección fin de mes con public.facturacion
+    await syncFacturacionProyectada();
+    
   } catch (err) {
     console.error("Error global:", err);
   }
 }
 
-main();
+async function syncFacturacionProyectada() {
+    console.log(`\n===========================================`);
+    console.log("3. Sincronizando proyecciones con public.facturacion (Camino 2)...");
+
+    // 1. Intentar llamar a la RPC en Supabase (si fue creada en Postgres)
+    try {
+        const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/sincronizar_facturacion_proyectada`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
+
+        if (rpcRes.ok) {
+            const rpcData = await rpcRes.json();
+            console.log("--> ✅ Sincronización exitosa vía RPC Postgres:", rpcData);
+            return;
+        } else {
+            const errTxt = await rpcRes.text();
+            console.log(`--> ℹ️ RPC Postgres no disponible (${rpcRes.status}): ${errTxt.slice(0, 80)}. Ejecutando sincronización directa vía API REST...`);
+        }
+    } catch (e) {
+        console.log(`--> ⚠️ Error al invocar RPC: ${e.message}. Ejecutando sincronización directa vía API REST...`);
+    }
+
+    // 2. Fallback nativo vía REST (garantiza funcionamiento sin depender de migración manual)
+    try {
+        const now = new Date();
+        const dStr = now.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+        const [year, month] = dStr.split("-");
+        const currentPeriod = `${year}-${month}-01`;
+
+        let prevYear = parseInt(year, 10);
+        let prevMonth = parseInt(month, 10) - 1;
+        if (prevMonth === 0) {
+            prevMonth = 12;
+            prevYear -= 1;
+        }
+        const prevPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+
+        // Obtener proyecciones del mes corriente
+        const proyRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/seguimiento_diario_proyecciones?select=seller_id,fecha,proyeccion_fin_mes&fecha=gte.${currentPeriod}&order=fecha.desc`,
+            {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+            }
+        );
+        if (!proyRes.ok) throw new Error("Error consultando seguimiento_diario_proyecciones: " + await proyRes.text());
+        const proys = await proyRes.json();
+
+        // Quedarse con la proyección más reciente por seller
+        const latestProy = new Map();
+        for (const p of proys) {
+            if (!latestProy.has(p.seller_id)) {
+                latestProy.set(p.seller_id, p);
+            }
+        }
+
+        // Obtener facturación previa para calcular variaciones
+        const prevRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/facturacion?select=seller_id,valor_facturado&periodo=eq.${prevPeriod}`,
+            {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+            }
+        );
+        const prevFacts = prevRes.ok ? await prevRes.json() : [];
+        const prevMap = new Map();
+        prevFacts.forEach(pf => prevMap.set(pf.seller_id, pf.valor_facturado));
+
+        // Obtener filas de facturacion del mes actual que sean PROYECTADO
+        const factRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/facturacion?select=id,seller_id,valor_facturado&periodo=eq.${currentPeriod}&estado=eq.PROYECTADO`,
+            {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+            }
+        );
+        if (!factRes.ok) throw new Error("Error consultando facturacion: " + await factRes.text());
+        const facts = await factRes.json();
+
+        let updatedCount = 0;
+        for (const f of facts) {
+            const p = latestProy.get(f.seller_id);
+            if (!p || p.proyeccion_fin_mes == null) continue;
+
+            const nuevoValor = Math.round(Number(p.proyeccion_fin_mes));
+            const prevVal = prevMap.get(f.seller_id);
+            let varM = null;
+            if (prevVal && prevVal > 0) {
+                varM = parseFloat(((nuevoValor - prevVal) / prevVal).toFixed(4));
+            }
+
+            const patchBody = {
+                valor_facturado: nuevoValor
+            };
+            if (varM !== null) {
+                patchBody.variacion_mensual = varM;
+            }
+
+            const patchRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/facturacion?id=eq.${f.id}`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify(patchBody)
+                }
+            );
+
+            if (patchRes.ok) {
+                updatedCount++;
+                console.log(`--> Seller ${f.seller_id}: de $${Number(f.valor_facturado).toLocaleString('es-AR')} a $${nuevoValor.toLocaleString('es-AR')} (${varM !== null ? (varM * 100).toFixed(2) + '%' : 's/d'})`);
+            } else {
+                console.error(`--> Error actualizando seller ${f.seller_id}:`, await patchRes.text());
+            }
+        }
+
+        console.log(`--> ✅ Sincronización finalizada: ${updatedCount} sellers actualizados en public.facturacion para el periodo ${currentPeriod}.`);
+    } catch (e) {
+        console.error("--> ❌ Error en sincronización de facturación proyectada:", e.message);
+    }
+}
+
+if (process.argv.includes('--sync-only')) {
+    syncFacturacionProyectada();
+} else {
+    main();
+}
+
