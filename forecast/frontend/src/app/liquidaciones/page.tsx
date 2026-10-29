@@ -385,7 +385,7 @@ function MetasFacturacionContent() {
       'AR': { label: 'Argentina (ARS)', flag: '🇦🇷', currency: 'ARS' },
       'MX': { label: 'México (MXN)', flag: '🇲🇽', currency: 'MXN' },
       'CL': { label: 'Chile (USD)', flag: '🇨🇱', currency: 'USD' },
-      'CO': { label: 'Colombia (COP)', flag: '🇨🇴', currency: 'COP' },
+      'CO': { label: 'Colombia (USD)', flag: '🇨🇴', currency: 'USD' },
       'US': { label: 'USA (USD)', flag: '🇺🇸', currency: 'USD' }
     };
     return Array.from(set).map(c => ({
@@ -438,7 +438,7 @@ function MetasFacturacionContent() {
         let countryCur = meta.currency;
         let countrySym = meta.symbol;
         if (cCode === 'MX') { countryCur = 'MXN'; countrySym = '$'; }
-        else if (cCode === 'CO') { countryCur = 'COP'; countrySym = '$'; }
+        else if (cCode === 'CO') { countryCur = 'USD'; countrySym = 'US$'; }
         else if (cCode === 'US') { countryCur = 'USD'; countrySym = 'US$'; }
         else if (cCode === 'CL') { countryCur = 'USD'; countrySym = 'US$'; }
         else if (cCode === 'AR') { countryCur = 'ARS'; countrySym = '$'; }
@@ -484,10 +484,11 @@ function MetasFacturacionContent() {
         ivaVal = 0;
       }
 
-      // Soporte para cuentas de México (Evacol México) - Cobro en USD sin IVA
+      // Soporte para cuentas de México (Evacol México / Natura México) - Cobro en USD/MXN sin IVA
       if (meta.code === 'MX' || cCode === 'MX') {
-        rowCurrency = 'USD';
+        rowCurrency = row.moneda || 'USD';
         ivaVal = 0;
+        totalVal = subtotalVal;
       }
 
       // Soporte para cuentas con escala en USD (Natura Colombia - seller_id 941943480)
@@ -556,9 +557,9 @@ function MetasFacturacionContent() {
       }
 
       // Soporte para Evacol Colombia ML (seller_id 928666257)
-      // Escala en USD (Mínimo $1.000 USD o 4% a 2%) -> Reconversión y cobro en COP
+      // Escala en USD (Mínimo $1.000 USD o 4% a 2%) -> Liquidación y cobro en USD sin IVA
       if (sId === '928666257') {
-        rowCurrency = 'COP'; // Se factura y cobra en COP
+        rowCurrency = 'USD'; // Se factura y reporta en USD
         ivaVal = 0;
         const tcCopMap: Record<string, number> = {
           '2026-02': 3769.00, '2026-03': 3660.00, '2026-04': 3660.00,
@@ -594,11 +595,9 @@ function MetasFacturacionContent() {
           alicuotaVal = 'MÍNIMO';
         }
 
-        // Reconversión a COP multiplicando por TC Oficial:
-        const feeCop = Math.round(feeUsd * currentTc);
-        montoServicio = feeCop;
-        subtotalVal = feeCop;
-        totalVal = feeCop;
+        montoServicio = Math.round(feeUsd * 100) / 100;
+        subtotalVal = montoServicio;
+        totalVal = montoServicio;
         feeVal = alicuotaVal;
       }
 
@@ -2780,11 +2779,11 @@ function MetasFacturacionContent() {
                   {/* Fila Total GMV */}
                   <tr className="bg-slate-100 text-slate-700 font-bold text-xs border-b border-slate-200">
                     <td className="px-6 py-2.5 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                      TOTAL VENTAS DE LA CARTERA (GMV {selectedCountry === 'CL' ? 'USD' : groupedData[selectedCountry]?.country.currency})
+                      TOTAL VENTAS DE LA CARTERA (GMV {selectedCountry === 'CO' ? 'COP' : (selectedCountry === 'CL' ? 'USD' : groupedData[selectedCountry]?.country.currency)})
                     </td>
                     {filteredMonths.map(m => (
                       <td key={m.key} className="px-6 py-2.5 text-right font-mono border-l border-slate-200 whitespace-nowrap">
-                        {formatCurrency(detailedCountryTotals[m.key]?.gmv || 0, executiveKPIs?.currency)}
+                        {formatCurrency(detailedCountryTotals[m.key]?.gmv || 0, selectedCountry === 'CO' ? 'COP' : executiveKPIs?.currency)}
                       </td>
                     ))}
                   </tr>

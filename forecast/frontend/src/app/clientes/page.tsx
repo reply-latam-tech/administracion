@@ -95,9 +95,9 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     metodoActualizacion = 'Alícuota fija del 2% con piso mínimo de $1.500 USD.';
   } else if (sid === '928666257') {
     // Evacol Colombia ML
-    monedaCobro = 'COP';
-    reglaLiquidacion = 'Ventas brutas en COP se convierten a USD vía TC oficial. Se cruza con la escala en USD (mínimo de $1.000 USD o alícuota de 4,00% a 2,00%). El honorario en USD se reconvierte a Pesos Colombianos (COP) multiplicando por el TC oficial del mes y se factura en COP sin IVA.';
-    metodoActualizacion = 'Escala en USD con cobro reconvertido y liquidado en COP.';
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'Ventas brutas en COP se convierten a USD vía TC oficial. Se cruza con la escala en USD (mínimo de $1.000 USD o alícuota de 4,00% a 2,00%). Se factura y cobra en USD sin IVA (exportación de servicios).';
+    metodoActualizacion = 'Escala en USD con cobro liquidado en USD sin IVA.';
   } else if (sid === '928424062') {
     // Evacol Colombia ADDI
     monedaCobro = 'USD';
