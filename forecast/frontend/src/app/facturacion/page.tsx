@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Fragment } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   ArrowUpRight, 
@@ -1027,18 +1027,28 @@ export default function FacturacionPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto overflow-y-auto flex-1">
-          <table className="w-full text-sm text-left text-slate-600">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50/90 border-b border-slate-200 sticky top-0 z-20">
-              <tr>
-                <th scope="col" className="px-4 py-3 font-semibold min-w-[240px] sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
+        <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">
+          <table className="w-full text-sm text-left text-slate-600 border-separate border-spacing-0">
+            <thead className="text-xs text-slate-600 uppercase sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+              <tr className="bg-slate-100">
+                <th scope="col" className="px-4 py-3 font-extrabold min-w-[260px] sticky left-0 top-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-b border-slate-200 text-slate-800">
                   Seller / Cliente
                 </th>
-                {processedData.sortedPeriodos.map((p) => (
-                  <th key={p} scope="col" className="px-4 py-3 font-medium text-right whitespace-nowrap min-w-[140px] border-l border-slate-100">
-                    {formatMonthStr(p)}
-                  </th>
-                ))}
+                {processedData.sortedPeriodos.map((p) => {
+                  const isProj = p >= '2026-10-01';
+                  return (
+                    <th key={p} scope="col" className={`px-4 py-3 font-bold text-right whitespace-nowrap min-w-[140px] border-l border-b border-slate-200 sticky top-0 z-20 ${isProj ? 'bg-orange-50/95 text-orange-950' : 'bg-slate-100 text-slate-700'}`}>
+                      <div className="flex flex-col items-end">
+                        <span>{formatMonthStr(p)}</span>
+                        {isProj && (
+                          <span className="text-[9px] text-orange-600 font-extrabold uppercase tracking-wider">
+                            *PROY
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -1067,13 +1077,13 @@ export default function FacturacionPage() {
                   });
 
                   return (
-                    <tbody key={cCode} className="border-b-4 border-slate-100/90">
+                    <Fragment key={cCode}>
                       {/* Fila Encabezado de País (Colapsable) */}
                       <tr 
                         onClick={() => toggleCountryCollapse(cCode)}
-                        className="bg-slate-100/80 hover:bg-slate-200/70 cursor-pointer transition-colors border-y border-slate-200 select-none"
+                        className="bg-slate-100/90 hover:bg-slate-200/80 cursor-pointer transition-colors border-y border-slate-200 select-none"
                       >
-                        <td className="px-4 py-3 sticky left-0 bg-slate-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200 font-bold text-slate-900">
+                        <td className="px-4 py-3 sticky left-0 bg-slate-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-b border-slate-200 font-bold text-slate-900">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               {isCollapsed ? <ChevronRight size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
@@ -1097,7 +1107,7 @@ export default function FacturacionPage() {
                           const varM = countryGroup.monthlyVarM[p] || 0;
                           const cCur = currencyView === 'ORIGINAL' ? countryGroup.country.defaultCurrency : currencyView;
                           return (
-                            <td key={p} className="px-4 py-2.5 text-right font-extrabold text-slate-900 border-l border-slate-200/80 whitespace-nowrap bg-slate-100/50">
+                            <td key={p} className="px-4 py-2.5 text-right font-extrabold text-slate-900 border-l border-b border-slate-200/80 whitespace-nowrap bg-slate-100/70">
                               <div className="text-xs">
                                 {subtotalVal > 0 ? formatMoney(subtotalVal, cCur) : '-'}
                               </div>
@@ -1122,7 +1132,7 @@ export default function FacturacionPage() {
                               isSelected ? 'bg-blue-50/90' : 'bg-white hover:bg-slate-50/80'
                             }`}
                           >
-                            <td className={`px-4 py-3 whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-100 ${
+                            <td className={`px-4 py-3 whitespace-nowrap sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-b border-slate-100 ${
                               isSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-slate-50'
                             }`}>
                               <div className="flex items-center gap-2 pl-4">
@@ -1158,7 +1168,7 @@ export default function FacturacionPage() {
                               
                               if (!cellData || !cellData.valor) {
                                 return (
-                                  <td key={p} className="px-4 py-3 text-right border-l border-slate-100">
+                                  <td key={p} className="px-4 py-3 text-right border-l border-b border-slate-100">
                                     <span className="text-slate-300 font-mono">-</span>
                                   </td>
                                 );
@@ -1170,7 +1180,7 @@ export default function FacturacionPage() {
                               const isProjected = cellData.estado === 'PROYECTADO';
 
                               return (
-                                <td key={p} className={`px-4 py-3 text-right border-l border-slate-100 relative ${isProjected ? 'bg-orange-50/25' : ''}`}>
+                                <td key={p} className={`px-4 py-3 text-right border-l border-b border-slate-100 relative ${isProjected ? 'bg-orange-50/25' : ''}`}>
                                   {isProjected && (
                                      <div className="absolute top-0 right-0 mt-1 mr-1 flex">
                                        <span className="relative flex h-1.5 w-1.5">
@@ -1207,14 +1217,14 @@ export default function FacturacionPage() {
                           </tr>
                         );
                       })}
-                    </tbody>
+                    </Fragment>
                   );
                 })
               )}
 
               {/* Fila de TOTAL GLOBAL CONSOLIDADO */}
               {!loading && countriesToDisplay.length > 0 && (
-                <tr className="bg-blue-50/90 border-t-2 border-b-2 border-blue-200 text-blue-950 font-black sticky bottom-0 z-20 shadow-xs">
+                <tr className="bg-blue-50 border-t-2 border-b-2 border-blue-200 text-blue-950 font-black sticky bottom-0 z-20 shadow-xs">
                   <td className="px-5 py-3.5 sticky left-0 bg-blue-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-blue-200 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <Globe size={18} className="text-blue-700" />
@@ -1228,7 +1238,7 @@ export default function FacturacionPage() {
                     const totalMonth = processedData.globalMonthlyTotals[p] || 0;
                     const varM = processedData.globalMonthlyVarM[p] || 0;
                     return (
-                      <td key={p} className="px-4 py-3 text-right font-black border-l border-blue-200 whitespace-nowrap text-blue-950">
+                      <td key={p} className="px-4 py-3 text-right font-black border-l border-blue-200 whitespace-nowrap text-blue-950 bg-blue-50">
                         <div className="text-sm">
                           {totalMonth > 0 ? formatMoney(totalMonth, processedData.globalCurrency) : '-'}
                         </div>
