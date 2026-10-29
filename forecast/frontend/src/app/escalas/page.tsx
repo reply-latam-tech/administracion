@@ -610,13 +610,13 @@ export default function EscalasPage() {
 
       {/* 4. Tabla de Escalas */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-        <div className="overflow-auto flex-1 relative">
-          <table className="w-full text-sm text-left text-gray-600">
-            <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100 sticky top-0 z-20">
-              <tr>
-                <th scope="col" className="px-4 py-3 font-semibold min-w-[180px] sticky left-0 bg-gray-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Seller</th>
+        <div className="overflow-auto max-h-[680px] flex-1 relative border-t border-gray-100">
+          <table className="w-full text-sm text-left text-gray-600 border-separate border-spacing-0">
+            <thead className="text-xs text-gray-500 uppercase sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+              <tr className="bg-gray-50">
+                <th scope="col" className="px-4 py-3 font-semibold min-w-[180px] sticky left-0 top-0 bg-gray-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-b border-gray-200">Seller</th>
                 {monthsStr.map((m) => (
-                  <th key={m} scope="col" className="px-4 py-3 font-medium text-center whitespace-nowrap min-w-[160px]">{m}</th>
+                  <th key={m} scope="col" className="px-4 py-3 font-medium text-center whitespace-nowrap min-w-[160px] border-l border-b border-gray-200 sticky top-0 z-20 bg-gray-50">{m}</th>
                 ))}
               </tr>
             </thead>

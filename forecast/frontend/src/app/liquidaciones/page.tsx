@@ -1522,21 +1522,21 @@ function MetasFacturacionContent() {
               </div>
             )}
 
-            <div className="overflow-x-auto overflow-y-auto flex-1">
-              <table className="w-full text-xs text-left text-slate-600">
-                <thead className="text-[11px] text-slate-500 uppercase bg-slate-50/90 border-b border-slate-200 sticky top-0 z-20 backdrop-blur-xs">
-                  <tr>
-                    <th scope="col" className="px-5 py-3.5 font-bold sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)] min-w-[220px]">
+            <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">
+              <table className="w-full text-xs text-left text-slate-600 border-separate border-spacing-0">
+                <thead className="text-[11px] text-slate-500 uppercase sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+                  <tr className="bg-slate-100">
+                    <th scope="col" className="px-5 py-3.5 font-bold sticky left-0 top-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)] min-w-[220px] border-r border-b border-slate-200">
                       Cliente / Seller
                     </th>
                     {filteredMonths.map(m => (
                       <th 
                         key={m.key} 
                         scope="col" 
-                        className={`px-3 py-3 font-bold text-right min-w-[115px] border-l ${
+                        className={`px-3 py-3 font-bold text-right min-w-[115px] border-l border-b border-slate-200 sticky top-0 z-20 ${
                           m.isProjected 
-                            ? 'bg-orange-50/90 text-orange-950 border-orange-200/80' 
-                            : 'border-slate-200 text-slate-700'
+                            ? 'bg-orange-50/95 text-orange-950' 
+                            : 'bg-slate-100 text-slate-700'
                         }`}
                       >
                         <div className="flex flex-col items-end">
@@ -1547,7 +1547,7 @@ function MetasFacturacionContent() {
                         </div>
                       </th>
                     ))}
-                    <th scope="col" className="px-5 py-3.5 font-bold text-right min-w-[130px] bg-slate-100/80 text-slate-800 border-l border-slate-200">
+                    <th scope="col" className="px-5 py-3.5 font-bold text-right min-w-[130px] bg-slate-100 text-slate-800 border-l border-b border-slate-200 sticky top-0 z-20">
                       Total Acumulado
                     </th>
                   </tr>
@@ -1922,16 +1922,23 @@ function MetasFacturacionContent() {
                   </span>
                 </div>
 
-            <div className="overflow-x-auto overflow-y-auto flex-1">
-              <table className="w-full text-xs text-left text-slate-600">
-                <thead className="text-[11px] text-slate-500 uppercase bg-slate-50 border-b border-slate-200 sticky top-0 z-20">
-                  <tr>
-                    <th scope="col" className="px-6 py-4 font-semibold sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[200px]">
+            <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">
+              <table className="w-full text-xs text-left text-slate-600 border-separate border-spacing-0">
+                <thead className="text-[11px] text-slate-500 uppercase sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+                  <tr className="bg-slate-100">
+                    <th scope="col" className="px-6 py-4 font-bold sticky left-0 top-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[200px] border-r border-b border-slate-200 text-slate-800">
                       Concepto
                     </th>
                     {filteredMonths.map(m => (
-                      <th key={m.key} scope="col" className="px-6 py-4 font-semibold text-right min-w-[140px] uppercase border-l border-slate-100">
-                        {m.shortLabel}
+                      <th key={m.key} scope="col" className={`px-6 py-4 font-bold text-right min-w-[140px] uppercase border-l border-b border-slate-200 sticky top-0 z-20 ${m.isProjected ? 'bg-orange-50/95 text-orange-950' : 'bg-slate-100 text-slate-700'}`}>
+                        <div className="flex flex-col items-end">
+                          <span>{m.shortLabel}</span>
+                          {m.isProjected && (
+                            <span className="text-[9px] text-[#ff5100] font-medium lowercase">
+                              (proyectado)
+                            </span>
+                          )}
+                        </div>
                       </th>
                     ))}
                   </tr>

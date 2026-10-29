@@ -629,12 +629,12 @@ export default function TipoDeCambioPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 font-bold tracking-wider">
+        <div className="overflow-x-auto overflow-y-auto max-h-[680px] relative border-t border-slate-100">
+          <table className="w-full text-left text-xs border-separate border-spacing-0">
+            <thead className="sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+              <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold tracking-wider">
                 {/* Columna fija de Moneda */}
-                <th className="py-3 px-4 sticky left-0 z-30 bg-slate-100/95 backdrop-blur-xs min-w-[210px] border-r border-slate-200 text-slate-800 text-left font-bold shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                <th className="py-3 px-4 sticky left-0 top-0 z-30 bg-slate-100 min-w-[210px] border-r border-b border-slate-200 text-slate-800 text-left font-bold shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                   Moneda / País
                 </th>
 
@@ -644,8 +644,8 @@ export default function TipoDeCambioPage() {
                   return (
                     <th 
                       key={row.periodo} 
-                      className={`py-2.5 px-3.5 text-center min-w-[105px] whitespace-nowrap border-r border-slate-100 ${
-                        isProj ? 'bg-purple-50/60' : ''
+                      className={`py-2.5 px-3.5 text-center min-w-[105px] whitespace-nowrap border-r border-b border-slate-200 sticky top-0 z-20 ${
+                        isProj ? 'bg-purple-50/95 text-purple-950' : 'bg-slate-100 text-slate-800'
                       }`}
                     >
                       <div className="font-bold text-slate-800 text-[11px]">

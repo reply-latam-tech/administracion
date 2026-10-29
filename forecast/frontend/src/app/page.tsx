@@ -403,15 +403,15 @@ export default function DashboardPage() {
           </div>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left text-slate-600">
-            <thead className="text-[11px] text-slate-400 uppercase tracking-wider bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10">
-              <tr>
-                <th scope="col" className="px-6 py-3.5 font-bold text-slate-700 sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+        <div className="overflow-x-auto overflow-y-auto max-h-[680px] relative border-t border-slate-100">
+          <table className="w-full text-sm text-left text-slate-600 border-separate border-spacing-0">
+            <thead className="text-[11px] text-slate-500 uppercase tracking-wider sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+              <tr className="bg-slate-100">
+                <th scope="col" className="px-6 py-3.5 font-bold text-slate-700 sticky left-0 top-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r border-b border-slate-200">
                   Seller
                 </th>
                 {matrixData.months.map(m => (
-                  <th key={m} scope="col" className="px-4 py-3.5 font-bold text-slate-700 text-center min-w-[160px] border-l border-slate-100">
+                  <th key={m} scope="col" className="px-4 py-3.5 font-bold text-slate-700 text-center min-w-[160px] border-l border-b border-slate-200 sticky top-0 z-20 bg-slate-100">
                     {m}
                   </th>
                 ))}

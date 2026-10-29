@@ -728,11 +728,11 @@ export default function MetasPage() {
 
       {/* 3. Tabla Matricial Interactiva de Metas */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col flex-1 min-h-[380px]">
-        <div className="overflow-x-auto overflow-y-auto flex-1">
-          <table className="w-full text-xs text-left text-slate-600 border-collapse">
-            <thead className="text-[11px] uppercase tracking-wider bg-slate-50/90 sticky top-0 z-20 border-b border-slate-200">
-              <tr>
-                <th scope="col" className="px-5 py-3.5 font-bold text-slate-700 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] min-w-[210px]">
+        <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">
+          <table className="w-full text-xs text-left text-slate-600 border-separate border-spacing-0">
+            <thead className="text-[11px] uppercase tracking-wider sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+              <tr className="bg-slate-100">
+                <th scope="col" className="px-5 py-3.5 font-bold text-slate-700 sticky left-0 top-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] min-w-[210px] border-r border-b border-slate-200">
                   Seller / Cliente
                 </th>
                 {allPeriodos.map((p) => {
@@ -741,8 +741,8 @@ export default function MetasPage() {
                     <th 
                       key={p} 
                       scope="col" 
-                      className={`px-3 py-3 font-bold text-center min-w-[170px] border-l border-slate-200 ${
-                        isProjected ? "bg-orange-50/40 text-[#ff5100]" : "text-slate-600"
+                      className={`px-3 py-3 font-bold text-center min-w-[170px] border-l border-b border-slate-200 sticky top-0 z-20 ${
+                        isProjected ? "bg-orange-50/95 text-[#ff5100]" : "bg-slate-100 text-slate-700"
                       }`}
                     >
                       <div className="flex flex-col items-center gap-0.5">
