@@ -95,8 +95,8 @@ function MetasFacturacionContent() {
   // Cliente seleccionado en la tabla para dinamizar el gráfico y cards (null = todos)
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   
-  // Modo de variación porcentual: 'mensual' (MoM), 'diaria' (Run-rate diario), 'none' (ocultar)
-  const [variationMode, setVariationMode] = useState<'mensual' | 'diaria' | 'none'>('mensual');
+  // Modo de variación porcentual: 'mensual' (MoM), 'diaria' (Run-rate diario), 'anual' (YoY), 'none' (ocultar)
+  const [variationMode, setVariationMode] = useState<'mensual' | 'diaria' | 'anual' | 'none'>('mensual');
 
   // Filtro temporal: "LAST_12" (6 reales + 6 proyectados), "2026", "REAL_ONLY", "ALL"
   const [timelineFilter, setTimelineFilter] = useState<'LAST_12' | '2026' | 'REAL_ONLY' | 'ALL'>('LAST_12');
@@ -126,12 +126,12 @@ function MetasFacturacionContent() {
     prevVal: number,
     currentMonthKey: string,
     prevMonthKey: string,
-    mode: 'mensual' | 'diaria' | 'none'
+    mode: 'mensual' | 'diaria' | 'anual' | 'none'
   ): number | null => {
     if (mode === 'none') return null;
     if (!prevVal || prevVal <= 0 || !currentVal || currentVal <= 0) return null;
 
-    if (mode === 'mensual') {
+    if (mode === 'mensual' || mode === 'anual') {
       return (currentVal - prevVal) / prevVal;
     }
 
@@ -143,6 +143,31 @@ function MetasFacturacionContent() {
 
     if (prevDaily <= 0) return null;
     return (currentDaily - prevDaily) / prevDaily;
+  };
+
+  // Helper para resolver el valor y período de comparación según el modo (mensual/diaria vs anual YoY)
+  const getComparisonData = (
+    mKey: string,
+    mode: 'mensual' | 'diaria' | 'anual' | 'none',
+    monthsRecord: Record<string, any> | undefined,
+    monthsListRef: MonthMeta[]
+  ): { compVal: number; compKey: string } => {
+    if (mode === 'none' || !monthsRecord) return { compVal: 0, compKey: '' };
+
+    if (mode === 'anual') {
+      const [year, month] = mKey.split('-').map(Number);
+      const yoyKey = `${year - 1}-${String(month).padStart(2, '0')}`;
+      const item = monthsRecord[yoyKey];
+      const compVal = typeof item === 'number' ? item : (item?.subtotal || 0);
+      return { compVal, compKey: yoyKey };
+    }
+
+    const curIdx = monthsListRef.findIndex(x => x.key === mKey);
+    const prevMonth = curIdx > 0 ? monthsListRef[curIdx - 1] : null;
+    const compKey = prevMonth?.key || '';
+    const item = prevMonth ? monthsRecord[compKey] : null;
+    const compVal = typeof item === 'number' ? item : (item?.subtotal || 0);
+    return { compVal, compKey };
   };
 
   const [loading, setLoading] = useState(true);
@@ -914,13 +939,26 @@ function MetasFacturacionContent() {
       : (prevRealMonth ? (activeCountryData.monthlyTotals[prevRealMonth.key] || 0) : 0);
 
     let momGrowth = 0;
-    if (prevRealSubtotal > 0 && lastRealMonth && prevRealMonth) {
+    if (lastRealMonth) {
       if (variationMode === 'diaria') {
-        const curD = getDaysInMonth(lastRealMonth.key);
-        const preD = getDaysInMonth(prevRealMonth.key);
-        momGrowth = (((lastRealSubtotal / curD) - (prevRealSubtotal / preD)) / (prevRealSubtotal / preD)) * 100;
+        if (prevRealSubtotal > 0 && prevRealMonth) {
+          const curD = getDaysInMonth(lastRealMonth.key);
+          const preD = getDaysInMonth(prevRealMonth.key);
+          momGrowth = (((lastRealSubtotal / curD) - (prevRealSubtotal / preD)) / (prevRealSubtotal / preD)) * 100;
+        }
+      } else if (variationMode === 'anual') {
+        const [y, mon] = lastRealMonth.key.split('-').map(Number);
+        const yoyKey = `${y - 1}-${String(mon).padStart(2, '0')}`;
+        const yoySubtotal = selectedSellerObj
+          ? (selectedSellerObj.months[yoyKey]?.subtotal || 0)
+          : (activeCountryData.monthlyTotals[yoyKey] || 0);
+        if (yoySubtotal > 0) {
+          momGrowth = ((lastRealSubtotal - yoySubtotal) / yoySubtotal) * 100;
+        }
       } else {
-        momGrowth = ((lastRealSubtotal - prevRealSubtotal) / prevRealSubtotal) * 100;
+        if (prevRealSubtotal > 0 && prevRealMonth) {
+          momGrowth = ((lastRealSubtotal - prevRealSubtotal) / prevRealSubtotal) * 100;
+        }
       }
     }
 
@@ -1351,6 +1389,17 @@ function MetasFacturacionContent() {
                     % Diaria
                   </button>
                   <button
+                    onClick={() => setVariationMode('anual')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      variationMode === 'anual' 
+                        ? 'bg-white text-blue-700 shadow-2xs font-bold' 
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Variación Interanual YoY (Mismo mes vs. Año anterior)"
+                  >
+                    % Anual (YoY)
+                  </button>
+                  <button
                     onClick={() => setVariationMode('none')}
                     className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
                       variationMode === 'none' 
@@ -1422,7 +1471,10 @@ function MetasFacturacionContent() {
                       executiveKPIs.momGrowth >= 0 ? 'text-emerald-600' : 'text-rose-600'
                     }`}>
                       {executiveKPIs.momGrowth >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                      {Math.abs(executiveKPIs.momGrowth).toFixed(1)}% {variationMode === 'diaria' ? 'Diario' : 'MoM'}
+                      {Math.abs(executiveKPIs.momGrowth).toFixed(1)}% {
+                        variationMode === 'diaria' ? 'Diario' : 
+                        variationMode === 'anual' ? 'YoY' : 'MoM'
+                      }
                     </span>
                   )}
                 </div>
@@ -1597,7 +1649,9 @@ function MetasFacturacionContent() {
                   </h3>
                   {variationMode !== 'none' && (
                     <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                      Variación en celdas: <strong className="text-blue-600">{variationMode === 'diaria' ? '% Diaria (Ritmo)' : '% Mensual (MoM)'}</strong>
+                      Variación en celdas: <strong className="text-blue-600">
+                        {variationMode === 'diaria' ? '% Diaria (Ritmo)' : variationMode === 'anual' ? '% Anual (YoY)' : '% Mensual (MoM)'}
+                      </strong>
                     </span>
                   )}
                 </div>
@@ -1732,14 +1786,12 @@ function MetasFacturacionContent() {
                             const val = monthData?.subtotal || 0;
                             const isProj = m.isProjected;
 
-                            const curIdx = monthsList.findIndex(x => x.key === m.key);
-                            const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                            const prevVal = prevMonth ? (seller.months[prevMonth.key]?.subtotal || 0) : 0;
+                            const { compVal, compKey } = getComparisonData(m.key, variationMode, seller.months, monthsList);
                             const variation = calculateVariation(
                               val,
-                              prevVal,
+                              compVal,
                               m.key,
-                              prevMonth?.key || '',
+                              compKey,
                               variationMode
                             );
 
@@ -1765,7 +1817,11 @@ function MetasFacturacionContent() {
                                       className={`text-[9.5px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
                                         variation >= 0 ? 'text-emerald-600' : 'text-rose-600'
                                       }`}
-                                      title={`Variación ${variationMode === 'diaria' ? 'diaria ponderada' : 'mensual MoM'}: ${(variation * 100).toFixed(1)}%`}
+                                      title={`Variación ${
+                                        variationMode === 'diaria' ? 'diaria ponderada' : 
+                                        variationMode === 'anual' ? `interanual YoY vs. ${compKey}` : 
+                                        'mensual MoM'
+                                      }: ${(variation * 100).toFixed(1)}%`}
                                     >
                                       <span>{variation >= 0 ? '▲' : '▼'}</span>
                                       <span>{Math.abs(variation * 100).toFixed(1)}%</span>
@@ -1797,10 +1853,12 @@ function MetasFacturacionContent() {
                       const otherCLSellers = allCLSellers.filter(s => !s.name.toLowerCase().includes('newsan'));
 
                       const newsanMonthlyTotals: Record<string, number> = {};
-                      filteredMonths.forEach(m => {
-                        newsanMonthlyTotals[m.key] = newsanCLSellers.reduce((sum, s) => sum + (s.months[m.key]?.subtotal || 0), 0);
+                      newsanCLSellers.forEach(s => {
+                        Object.keys(s.months).forEach(mKey => {
+                          newsanMonthlyTotals[mKey] = (newsanMonthlyTotals[mKey] || 0) + (s.months[mKey]?.subtotal || 0);
+                        });
                       });
-                      const newsanGrandTotal = Object.values(newsanMonthlyTotals).reduce((sum, v) => sum + v, 0);
+                      const newsanGrandTotal = filteredMonths.reduce((sum, m) => sum + (newsanMonthlyTotals[m.key] || 0), 0);
                       const clCur = currencyView === 'ORIGINAL' ? 'USD' : currencyView;
 
                       return (
@@ -1832,14 +1890,12 @@ function MetasFacturacionContent() {
                                 const val = newsanMonthlyTotals[m.key] || 0;
                                 const isProj = m.isProjected;
 
-                                const curIdx = monthsList.findIndex(x => x.key === m.key);
-                                const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                                const prevVal = prevMonth ? (newsanMonthlyTotals[prevMonth.key] || 0) : 0;
+                                const { compVal, compKey } = getComparisonData(m.key, variationMode, newsanMonthlyTotals, monthsList);
                                 const variation = calculateVariation(
                                   val,
-                                  prevVal,
+                                  compVal,
                                   m.key,
-                                  prevMonth?.key || '',
+                                  compKey,
                                   variationMode
                                 );
 
@@ -1859,6 +1915,11 @@ function MetasFacturacionContent() {
                                           className={`text-[9px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
                                             variation >= 0 ? 'text-emerald-700' : 'text-rose-700'
                                           }`}
+                                          title={`Variación ${
+                                            variationMode === 'diaria' ? 'diaria ponderada' : 
+                                            variationMode === 'anual' ? `interanual YoY vs. ${compKey}` : 
+                                            'mensual MoM'
+                                          }: ${(variation * 100).toFixed(1)}%`}
                                         >
                                           <span>{variation >= 0 ? '▲' : '▼'}</span>
                                           <span>{Math.abs(variation * 100).toFixed(1)}%</span>
@@ -1970,10 +2031,8 @@ function MetasFacturacionContent() {
 
                                   {filteredMonths.map(m => {
                                     const subtotalVal = cGroup.monthlyTotals[m.key] || 0;
-                                    const curIdx = monthsList.findIndex(x => x.key === m.key);
-                                    const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                                    const prevVal = prevMonth ? (cGroup.monthlyTotals[prevMonth.key] || 0) : 0;
-                                    const varCountry = calculateVariation(subtotalVal, prevVal, m.key, prevMonth?.key || '', variationMode);
+                                    const { compVal, compKey } = getComparisonData(m.key, variationMode, cGroup.monthlyTotals, monthsList);
+                                    const varCountry = calculateVariation(subtotalVal, compVal, m.key, compKey, variationMode);
 
                                     return (
                                       <td key={m.key} className="px-3 py-2 text-right font-extrabold text-slate-900 border-l border-slate-200 whitespace-nowrap bg-slate-100/70">
@@ -1986,6 +2045,11 @@ function MetasFacturacionContent() {
                                               className={`text-[9px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
                                                 varCountry >= 0 ? 'text-emerald-700' : 'text-rose-700'
                                               }`}
+                                              title={`Variación ${
+                                                variationMode === 'diaria' ? 'diaria ponderada' : 
+                                                variationMode === 'anual' ? `interanual YoY vs. ${compKey}` : 
+                                                'mensual MoM'
+                                              }: ${(varCountry * 100).toFixed(1)}%`}
                                             >
                                               <span>{varCountry >= 0 ? '▲' : '▼'}</span>
                                               <span>{Math.abs(varCountry * 100).toFixed(1)}%</span>
@@ -2031,10 +2095,8 @@ function MetasFacturacionContent() {
 
                             {filteredMonths.map(m => {
                               const totalMonth = groupedData['ALL']?.monthlyTotals[m.key] || 0;
-                              const curIdx = monthsList.findIndex(x => x.key === m.key);
-                              const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                              const prevTotal = prevMonth ? (groupedData['ALL']?.monthlyTotals[prevMonth.key] || 0) : 0;
-                              const varGlobal = calculateVariation(totalMonth, prevTotal, m.key, prevMonth?.key || '', variationMode);
+                              const { compVal, compKey } = getComparisonData(m.key, variationMode, groupedData['ALL']?.monthlyTotals, monthsList);
+                              const varGlobal = calculateVariation(totalMonth, compVal, m.key, compKey, variationMode);
                               const globalCur = groupedData['ALL']?.country.currency || 'USD';
 
                               return (
@@ -2048,6 +2110,11 @@ function MetasFacturacionContent() {
                                         className={`text-[9.5px] font-black leading-none mt-0.5 inline-flex items-center gap-0.5 ${
                                           varGlobal >= 0 ? 'text-emerald-700' : 'text-rose-700'
                                         }`}
+                                        title={`Variación global ${
+                                          variationMode === 'diaria' ? 'diaria ponderada' : 
+                                          variationMode === 'anual' ? `interanual YoY vs. ${compKey}` : 
+                                          'mensual MoM'
+                                        }: ${(varGlobal * 100).toFixed(1)}%`}
                                       >
                                         <span>{varGlobal >= 0 ? '▲' : '▼'}</span>
                                         <span>{Math.abs(varGlobal * 100).toFixed(1)}%</span>
@@ -2094,14 +2161,12 @@ function MetasFacturacionContent() {
 
                           {filteredMonths.map(m => {
                             const totalMonth = activeGroup?.monthlyTotals[m.key] || 0;
-                            const curIdx = monthsList.findIndex(x => x.key === m.key);
-                            const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                            const prevTotalMonth = prevMonth ? (activeGroup?.monthlyTotals[prevMonth.key] || 0) : 0;
+                            const { compVal, compKey } = getComparisonData(m.key, variationMode, activeGroup?.monthlyTotals, monthsList);
                             const subtotalVariation = calculateVariation(
                               totalMonth,
-                              prevTotalMonth,
+                              compVal,
                               m.key,
-                              prevMonth?.key || '',
+                              compKey,
                               variationMode
                             );
 
@@ -2119,6 +2184,11 @@ function MetasFacturacionContent() {
                                       className={`text-[9.5px] font-black leading-none mt-0.5 inline-flex items-center gap-0.5 ${
                                         subtotalVariation >= 0 ? 'text-emerald-700' : 'text-rose-700'
                                       }`}
+                                      title={`Variación subtotal ${
+                                        variationMode === 'diaria' ? 'diaria ponderada' : 
+                                        variationMode === 'anual' ? `interanual YoY vs. ${compKey}` : 
+                                        'mensual MoM'
+                                      }: ${(subtotalVariation * 100).toFixed(1)}%`}
                                     >
                                       <span>{subtotalVariation >= 0 ? '▲' : '▼'}</span>
                                       <span>{Math.abs(subtotalVariation * 100).toFixed(1)}%</span>
