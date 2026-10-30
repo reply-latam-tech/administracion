@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, Suspense } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, Fragment } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { 
@@ -33,7 +33,7 @@ import {
   ReferenceLine, 
   Cell 
 } from 'recharts';
-import { getRateToUSD, formatMoney } from '@/lib/exchangeRates';
+import { getRateToUSD, formatMoney, convertCurrency } from '@/lib/exchangeRates';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -67,6 +67,19 @@ function MetasFacturacionContent() {
 
   // Filtro de país / moneda activo (inicializado desde URL o 'AR' por defecto)
   const [selectedCountry, setSelectedCountry] = useState<string>(countryParam || 'AR');
+
+  // Vista multimoneda: 'ORIGINAL' (moneda corriente de cada cuenta/país) | 'USD' | 'ARS'
+  const [currencyView, setCurrencyView] = useState<'ORIGINAL' | 'USD' | 'ARS'>('ORIGINAL');
+
+  // Estado de colapso de secciones por país cuando se visualiza 'ALL' (Todos los mercados)
+  const [collapsedCountries, setCollapsedCountries] = useState<Record<string, boolean>>({});
+
+  const toggleCountryCollapse = (countryCode: string) => {
+    setCollapsedCountries(prev => ({
+      ...prev,
+      [countryCode]: !prev[countryCode]
+    }));
+  };
 
   // Si cambia el query param country en la URL, sincronizar estado local
   useEffect(() => {
@@ -324,7 +337,7 @@ function MetasFacturacionContent() {
         return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
       }
       if (currency === 'USD') {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+        return `US$ ${Math.round(val).toLocaleString('en-US')}`;
       }
       if (currency === 'COP') {
         return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
@@ -337,13 +350,14 @@ function MetasFacturacionContent() {
 
   const formatShortCurrency = (val: number, currency = 'ARS') => {
     if (!val || val === 0) return '0';
+    const prefix = currency === 'USD' ? 'US$' : '$';
     if (Math.abs(val) >= 1_000_000) {
-      return `$${(val / 1_000_000).toFixed(1)}M`;
+      return `${prefix}${(val / 1_000_000).toFixed(1)}M`;
     }
     if (Math.abs(val) >= 1_000) {
-      return `$${(val / 1_000).toFixed(0)}K`;
+      return `${prefix}${(val / 1_000).toFixed(0)}K`;
     }
-    return `$${Math.round(val)}`;
+    return `${prefix}${Math.round(val)}`;
   };
 
   const formatPercent = (val: number | string | null) => {
@@ -373,7 +387,7 @@ function MetasFacturacionContent() {
     return monthsList;
   }, [monthsList, timelineFilter]);
 
-  // Lista de países únicos detectados
+  // Lista de países únicos detectados (con opción consolidada 'ALL')
   const availableCountries = useMemo(() => {
     const set = new Set<string>();
     rawLiquidaciones.forEach(row => {
@@ -383,17 +397,25 @@ function MetasFacturacionContent() {
     });
     const countryLabels: Record<string, { label: string; flag: string; currency: string }> = {
       'AR': { label: 'Argentina (ARS)', flag: '🇦🇷', currency: 'ARS' },
-      'MX': { label: 'México (MXN)', flag: '🇲🇽', currency: 'MXN' },
+      'MX': { label: 'México (USD)', flag: '🇲🇽', currency: 'USD' },
       'CL': { label: 'Chile (USD)', flag: '🇨🇱', currency: 'USD' },
       'CO': { label: 'Colombia (USD)', flag: '🇨🇴', currency: 'USD' },
       'US': { label: 'USA (USD)', flag: '🇺🇸', currency: 'USD' }
     };
-    return Array.from(set).map(c => ({
-      code: c,
-      label: countryLabels[c]?.label || c,
-      flag: countryLabels[c]?.flag || '🌐',
-      currency: countryLabels[c]?.currency || 'ARS'
-    }));
+    const preferredOrder = ['AR', 'CL', 'CO', 'MX', 'US'];
+    const list = preferredOrder
+      .filter(code => set.has(code))
+      .map(c => ({
+        code: c,
+        label: countryLabels[c]?.label || c,
+        flag: countryLabels[c]?.flag || '🌐',
+        currency: countryLabels[c]?.currency || 'ARS'
+      }));
+
+    return [
+      { code: 'ALL', label: 'Todos (Consolidado)', flag: '🌐', currency: 'USD' },
+      ...list
+    ];
   }, [rawLiquidaciones, sellersMap]);
 
   // Agrupamiento estructurado por País -> Clientes -> Meses (Subtotales)
@@ -406,9 +428,11 @@ function MetasFacturacionContent() {
         isBaja?: boolean;
         months: Record<string, {
           subtotal: number;
+          originalSubtotal?: number;
           isProjected: boolean;
           estado: string;
           moneda?: string;
+          originalMoneda?: string;
           facturacion: number;
           fee: any;
           botmaker: number;
@@ -437,7 +461,7 @@ function MetasFacturacionContent() {
       if (!countriesMap[cCode]) {
         let countryCur = meta.currency;
         let countrySym = meta.symbol;
-        if (cCode === 'MX') { countryCur = 'MXN'; countrySym = '$'; }
+        if (cCode === 'MX') { countryCur = 'USD'; countrySym = 'US$'; }
         else if (cCode === 'CO') { countryCur = 'USD'; countrySym = 'US$'; }
         else if (cCode === 'US') { countryCur = 'USD'; countrySym = 'US$'; }
         else if (cCode === 'CL') { countryCur = 'USD'; countrySym = 'US$'; }
@@ -762,11 +786,25 @@ function MetasFacturacionContent() {
 
       const isProj = row.estado === 'PROYECTADO';
 
+      // Conversión dinámica de visualización según currencyView
+      let displaySubtotal = subtotalVal;
+      let displayCurrency = rowCurrency;
+
+      if (currencyView === 'USD') {
+        displaySubtotal = convertCurrency(subtotalVal, rowCurrency, 'USD', mKey);
+        displayCurrency = 'USD';
+      } else if (currencyView === 'ARS') {
+        displaySubtotal = convertCurrency(subtotalVal, rowCurrency, 'ARS', mKey);
+        displayCurrency = 'ARS';
+      }
+
       countriesMap[cCode].sellersMap[sId].months[mKey] = {
-        subtotal: subtotalVal,
+        subtotal: displaySubtotal,
+        originalSubtotal: subtotalVal,
         isProjected: isProj,
         estado: row.estado || 'REAL',
-        moneda: rowCurrency,
+        moneda: displayCurrency,
+        originalMoneda: rowCurrency,
         facturacion: factVal,
         fee: feeVal,
         botmaker: Number(row.botmaker) || 0,
@@ -775,18 +813,50 @@ function MetasFacturacionContent() {
         total: totalVal
       };
 
-      countriesMap[cCode].sellersMap[sId].totalRow += subtotalVal;
-      countriesMap[cCode].monthlyTotals[mKey] = (countriesMap[cCode].monthlyTotals[mKey] || 0) + subtotalVal;
-      countriesMap[cCode].grandTotal += subtotalVal;
+      countriesMap[cCode].sellersMap[sId].totalRow += displaySubtotal;
+      countriesMap[cCode].monthlyTotals[mKey] = (countriesMap[cCode].monthlyTotals[mKey] || 0) + displaySubtotal;
+      countriesMap[cCode].grandTotal += displaySubtotal;
     });
 
+    // Construcción de la entrada consolidada 'ALL' (Todos los mercados / Latam)
+    const allMonthlyTotals: Record<string, number> = {};
+    let allGrandTotal = 0;
+    const allSellersMap: Record<string, any> = {};
+
+    Object.entries(countriesMap).forEach(([cCode, cData]) => {
+      Object.entries(cData.sellersMap).forEach(([sId, seller]) => {
+        allSellersMap[sId] = seller;
+        Object.entries(seller.months).forEach(([mKey, mData]: [string, any]) => {
+          let globalVal = mData.subtotal;
+          if (currencyView === 'ORIGINAL') {
+            globalVal = convertCurrency(mData.originalSubtotal, mData.originalMoneda || 'USD', 'USD', mKey);
+          }
+          allMonthlyTotals[mKey] = (allMonthlyTotals[mKey] || 0) + globalVal;
+          allGrandTotal += globalVal;
+        });
+      });
+    });
+
+    countriesMap['ALL'] = {
+      country: {
+        code: 'ALL',
+        name: 'Todos los Mercados (Consolidado)',
+        flag: '🌐',
+        currency: currencyView === 'ARS' ? 'ARS' : 'USD',
+        symbol: currencyView === 'ARS' ? '$' : 'US$'
+      },
+      sellersMap: allSellersMap,
+      monthlyTotals: allMonthlyTotals,
+      grandTotal: allGrandTotal
+    };
+
     return countriesMap;
-  }, [rawLiquidaciones, sellersMap]);
+  }, [rawLiquidaciones, sellersMap, currencyView]);
 
   // Obtener el cliente seleccionado si existe
   const selectedSellerObj = useMemo(() => {
     if (!selectedSellerId) return null;
-    return groupedData[selectedCountry]?.sellersMap[selectedSellerId] || null;
+    return groupedData[selectedCountry]?.sellersMap[selectedSellerId] || groupedData['ALL']?.sellersMap[selectedSellerId] || null;
   }, [groupedData, selectedCountry, selectedSellerId]);
 
   // Datos para el Gráfico de Barras superior (según país o cliente seleccionado)
@@ -1131,29 +1201,73 @@ function MetasFacturacionContent() {
           {/* Disponible globalmente en ambas pestañas (Subtotales y Detallado)          */}
           {/* ========================================================================= */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-            {/* Segmentación por País / Moneda */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
-                <Globe size={13} />
-                Mercado:
-              </span>
-              {availableCountries.map(c => {
-                const isSelected = selectedCountry === c.code;
-                return (
-                  <button
-                    key={c.code}
-                    onClick={() => handleCountryChange(c.code)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                    }`}
-                  >
-                    <span>{c.flag}</span>
-                    <span>{c.label}</span>
-                  </button>
-                );
-              })}
+            {/* Segmentación por Mercado / País y Selector Multimoneda */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Selector de Mercado */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
+                  <Globe size={13} />
+                  Mercado:
+                </span>
+                {availableCountries.map(c => {
+                  const isSelected = selectedCountry === c.code;
+                  return (
+                    <button
+                      key={c.code}
+                      onClick={() => handleCountryChange(c.code)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+                      }`}
+                    >
+                      <span>{c.flag}</span>
+                      <span>{c.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selector Multimoneda de Visualización */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs">
+                <span className="text-[11px] font-bold text-slate-500 pl-2 pr-1 flex items-center gap-1">
+                  <DollarSign size={11} className="text-blue-600" />
+                  Moneda:
+                </span>
+                <button
+                  onClick={() => setCurrencyView('ORIGINAL')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    currencyView === 'ORIGINAL'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Visualizar cada cliente en su moneda nativa contractual (moneda corriente)"
+                >
+                  <span>🪙 Moneda Origen</span>
+                </button>
+                <button
+                  onClick={() => setCurrencyView('USD')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    currencyView === 'USD'
+                      ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Unificar todas las cuentas a dólares estadounidenses (USD) usando cotizaciones oficiales mensuales"
+                >
+                  <span>💵 USD (Unificado)</span>
+                </button>
+                <button
+                  onClick={() => setCurrencyView('ARS')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    currencyView === 'ARS'
+                      ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Unificar todas las cuentas a pesos argentinos (ARS)"
+                >
+                  <span>🇦🇷 ARS (Unificado)</span>
+                </button>
+              </div>
             </div>
 
             {/* Filtros Temporales & Buscador */}
@@ -1399,11 +1513,15 @@ function MetasFacturacionContent() {
                   <BarChart3 size={18} className="text-[#4981fb]" />
                   {executiveKPIs?.isSellerSelected ? (
                     <span>
-                      Evolución Mensual de Ingresos — <span className="text-blue-600 font-extrabold">{executiveKPIs.sellerName}</span> ({groupedData[selectedCountry]?.country.currency})
+                      Evolución Mensual de Ingresos — <span className="text-blue-600 font-extrabold">{executiveKPIs.sellerName}</span> ({executiveKPIs.currency})
+                    </span>
+                  ) : selectedCountry === 'ALL' ? (
+                    <span>
+                      Evolución Mensual de Ingresos Reply — <span className="text-blue-600 font-extrabold">Latam Consolidado</span> ({executiveKPIs?.currency})
                     </span>
                   ) : (
                     <span>
-                      Evolución Mensual de Ingresos Reply (Subtotal Neto) — {groupedData[selectedCountry]?.country.flag} {groupedData[selectedCountry]?.country.name}
+                      Evolución Mensual de Ingresos Reply (Subtotal Neto) — {groupedData[selectedCountry]?.country.flag} {groupedData[selectedCountry]?.country.name} ({executiveKPIs?.currency})
                     </span>
                   )}
                 </h2>
@@ -1466,7 +1584,11 @@ function MetasFacturacionContent() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    Matriz de Ingresos Netos por Cliente (Subtotales en {groupedData[selectedCountry]?.country.currency})
+                    Matriz de Ingresos Netos por Cliente (Subtotales en {
+                      selectedCountry === 'ALL'
+                        ? (currencyView === 'ORIGINAL' ? 'Moneda Origen de cada cuenta' : `${currencyView} Unificado`)
+                        : (currencyView === 'ORIGINAL' ? groupedData[selectedCountry]?.country.currency : currencyView)
+                    })
                     {selectedSellerObj && (
                       <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
                         Filtrando por {selectedSellerObj.name}
@@ -1487,7 +1609,10 @@ function MetasFacturacionContent() {
                 </p>
               </div>
               <span className="text-xs text-slate-400 font-medium self-start sm:self-auto">
-                {Object.keys(groupedData[selectedCountry]?.sellersMap || {}).length} cuentas listadas
+                {selectedCountry === 'ALL'
+                  ? `${Object.keys(groupedData['ALL']?.sellersMap || {}).length} cuentas en todos los mercados`
+                  : `${Object.keys(groupedData[selectedCountry]?.sellersMap || {}).length} cuentas listadas`
+                }
               </span>
             </div>
 
@@ -1554,25 +1679,132 @@ function MetasFacturacionContent() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {/* Filas de Sellers del país seleccionado */}
                   {(() => {
-                    if (selectedCountry === 'CL') {
-                      const allCLSellers = Object.values(groupedData[selectedCountry]?.sellersMap || {})
+                    // Helper para renderizar una fila de seller estándar
+                    const renderSellerRow = (seller: any, countryCode: string) => {
+                      const isRowSelected = selectedSellerId === seller.id;
+                      const cCur = currencyView === 'ORIGINAL' 
+                        ? (seller.moneda || groupedData[countryCode]?.country.currency || 'USD') 
+                        : currencyView;
+
+                      return (
+                        <tr 
+                          key={seller.id} 
+                          onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
+                          title={`Haz clic para ${isRowSelected ? 'deseleccionar' : 'ver gráfico y métricas exclusivas de'} ${seller.name}`}
+                          className={`cursor-pointer transition-all ${
+                            isRowSelected 
+                              ? 'bg-blue-50/80 font-bold border-l-4 border-l-blue-600 shadow-xs' 
+                              : 'hover:bg-blue-50/40 transition-colors'
+                          }`}
+                        >
+                          <td className={`px-5 py-3 font-semibold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap transition-colors ${
+                            isRowSelected 
+                              ? 'bg-blue-50 text-blue-950 border-blue-200' 
+                              : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-100'
+                          }`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2.5 h-2.5 rounded-full transition-all ${
+                                  seller.isBaja
+                                    ? 'bg-rose-500'
+                                    : isRowSelected 
+                                    ? 'bg-blue-600 ring-4 ring-blue-200 scale-110' 
+                                    : 'bg-blue-400 group-hover:bg-blue-600'
+                                }`}></span>
+                                <span className={`truncate max-w-[180px] ${seller.isBaja ? 'text-slate-500 line-through decoration-slate-300' : ''}`}>{seller.name}</span>
+                                {seller.isBaja && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
+                                    BAJA
+                                  </span>
+                                )}
+                              </div>
+                              {isRowSelected && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600 text-white tracking-wider">
+                                  ACTIVO
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {filteredMonths.map(m => {
+                            const monthData = seller.months[m.key];
+                            const val = monthData?.subtotal || 0;
+                            const isProj = m.isProjected;
+
+                            const curIdx = monthsList.findIndex(x => x.key === m.key);
+                            const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
+                            const prevVal = prevMonth ? (seller.months[prevMonth.key]?.subtotal || 0) : 0;
+                            const variation = calculateVariation(
+                              val,
+                              prevVal,
+                              m.key,
+                              prevMonth?.key || '',
+                              variationMode
+                            );
+
+                            return (
+                              <td 
+                                key={m.key} 
+                                className={`px-3 py-2 text-right whitespace-nowrap border-l ${
+                                  isRowSelected
+                                    ? isProj
+                                      ? 'bg-orange-100/50 text-orange-950 border-orange-200/80 font-bold'
+                                      : 'bg-blue-50/80 text-blue-950 border-blue-150 font-bold'
+                                    : isProj 
+                                      ? 'bg-orange-50/30 text-orange-950 border-orange-100 font-medium' 
+                                      : 'border-slate-100 text-slate-800'
+                                }`}
+                              >
+                                <div className="flex flex-col items-end justify-center">
+                                  <span className="leading-tight">
+                                    {val > 0 ? formatCurrency(val, cCur) : '-'}
+                                  </span>
+                                  {variationMode !== 'none' && variation !== null && (
+                                    <span 
+                                      className={`text-[9.5px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
+                                        variation >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                      }`}
+                                      title={`Variación ${variationMode === 'diaria' ? 'diaria ponderada' : 'mensual MoM'}: ${(variation * 100).toFixed(1)}%`}
+                                    >
+                                      <span>{variation >= 0 ? '▲' : '▼'}</span>
+                                      <span>{Math.abs(variation * 100).toFixed(1)}%</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+
+                          {/* Total Acumulado del Seller */}
+                          <td className={`px-5 py-3 text-right font-bold border-l whitespace-nowrap ${
+                            isRowSelected 
+                              ? 'bg-blue-100/80 text-blue-950 border-blue-250 font-black' 
+                              : 'text-slate-900 bg-slate-50/50 border-slate-200'
+                          }`}>
+                            {formatCurrency(seller.totalRow, cCur)}
+                          </td>
+                        </tr>
+                      );
+                    };
+
+                    // Helper para renderizar el bloque de Chile (Newsan 6 canales + otros)
+                    const renderChileBlock = (clSellersMap: Record<string, any>) => {
+                      const allCLSellers = Object.values(clSellersMap)
                         .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
                       
                       const newsanCLSellers = allCLSellers.filter(s => s.name.toLowerCase().includes('newsan'));
                       const otherCLSellers = allCLSellers.filter(s => !s.name.toLowerCase().includes('newsan'));
 
-                      // Totales consolidados de Newsan Chile por mes
                       const newsanMonthlyTotals: Record<string, number> = {};
                       filteredMonths.forEach(m => {
                         newsanMonthlyTotals[m.key] = newsanCLSellers.reduce((sum, s) => sum + (s.months[m.key]?.subtotal || 0), 0);
                       });
                       const newsanGrandTotal = Object.values(newsanMonthlyTotals).reduce((sum, v) => sum + v, 0);
+                      const clCur = currencyView === 'ORIGINAL' ? 'USD' : currencyView;
 
                       return (
-                        <>
-                          {/* FILA CONSOLIDADA NEWSAN CHILE */}
+                        <Fragment key="chile-content-block">
                           {newsanCLSellers.length > 0 && (
                             <tr 
                               className="bg-blue-50/70 hover:bg-blue-100/60 font-bold transition-all border-b-2 border-blue-200 cursor-pointer"
@@ -1591,22 +1823,54 @@ function MetasFacturacionContent() {
                                     <span className="font-extrabold text-blue-950">Newsan Chile (Consolidado 6 Canales)</span>
                                   </div>
                                   <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-600 text-white">
-                                    OFICIAL • US$ 4.000/mes
+                                    OFICIAL • {currencyView === 'ARS' ? formatShortCurrency(newsanMonthlyTotals[filteredMonths[0]?.key] || 0, 'ARS') + '/mes' : 'US$ 4.000/mes'}
                                   </span>
                                 </div>
                               </td>
 
                               {filteredMonths.map(m => {
                                 const val = newsanMonthlyTotals[m.key] || 0;
+                                const isProj = m.isProjected;
+
+                                const curIdx = monthsList.findIndex(x => x.key === m.key);
+                                const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
+                                const prevVal = prevMonth ? (newsanMonthlyTotals[prevMonth.key] || 0) : 0;
+                                const variation = calculateVariation(
+                                  val,
+                                  prevVal,
+                                  m.key,
+                                  prevMonth?.key || '',
+                                  variationMode
+                                );
+
                                 return (
-                                  <td key={m.key} className="px-3 py-2 text-right whitespace-nowrap border-l border-blue-150 font-black text-blue-950">
-                                    {val > 0 ? formatCurrency(val, 'USD') : '-'}
+                                  <td 
+                                    key={m.key} 
+                                    className={`px-3 py-2 text-right whitespace-nowrap border-l font-bold ${
+                                      isProj ? 'bg-orange-50/60 text-orange-950 border-orange-200' : 'bg-blue-50/40 text-blue-950 border-blue-150'
+                                    }`}
+                                  >
+                                    <div className="flex flex-col items-end justify-center">
+                                      <span className="leading-tight">
+                                        {val > 0 ? formatCurrency(val, clCur) : '-'}
+                                      </span>
+                                      {variationMode !== 'none' && variation !== null && (
+                                        <span 
+                                          className={`text-[9px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
+                                            variation >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                                          }`}
+                                        >
+                                          <span>{variation >= 0 ? '▲' : '▼'}</span>
+                                          <span>{Math.abs(variation * 100).toFixed(1)}%</span>
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                 );
                               })}
 
-                              <td className="px-5 py-3 text-right font-black border-l whitespace-nowrap bg-blue-100/90 text-blue-950 border-blue-250">
-                                {formatCurrency(newsanGrandTotal, 'USD')}
+                              <td className="px-5 py-3 text-right font-black border-l whitespace-nowrap text-blue-950 bg-blue-100/60 border-blue-200">
+                                {formatCurrency(newsanGrandTotal, clCur)}
                               </td>
                             </tr>
                           )}
@@ -1642,155 +1906,151 @@ function MetasFacturacionContent() {
                                     const val = seller.months[m.key]?.subtotal || 0;
                                     return (
                                       <td key={m.key} className="px-3 py-2 text-right whitespace-nowrap border-l border-slate-100 text-slate-700 font-mono text-[11px]">
-                                        {val > 0 ? formatCurrency(val, 'USD') : '-'}
+                                        {val > 0 ? formatCurrency(val, clCur) : '-'}
                                       </td>
                                     );
                                   })}
 
                                   <td className="px-5 py-2 text-right font-semibold border-l whitespace-nowrap text-slate-800 bg-slate-50/40 border-slate-200 font-mono text-[11px]">
-                                    {formatCurrency(seller.totalRow, 'USD')}
+                                    {formatCurrency(seller.totalRow, clCur)}
                                   </td>
                                 </tr>
                               );
                             })}
 
                           {/* OTROS SELLERS DE CHILE (EJ. TRADEMEDICAL) */}
-                          {otherCLSellers.map(seller => {
-                            const isRowSelected = selectedSellerId === seller.id;
+                          {otherCLSellers.map(seller => renderSellerRow(seller, 'CL'))}
+                        </Fragment>
+                      );
+                    };
+
+                    // CASO 1: SELECCIONADO "ALL" (TODOS LOS MERCADOS SEGMENTADOS POR PAÍS)
+                    if (selectedCountry === 'ALL') {
+                      const countryOrder = ['AR', 'CL', 'CO', 'MX', 'US'];
+                      const activeCountries = countryOrder.filter(code => !!groupedData[code]);
+
+                      return (
+                        <>
+                          {activeCountries.map(cCode => {
+                            const cGroup = groupedData[cCode];
+                            const isCollapsed = !!collapsedCountries[cCode];
+                            const sellersList = Object.values(cGroup.sellersMap)
+                              .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                              .sort((a, b) => a.name.localeCompare(b.name));
+
+                            if (searchTerm.trim() && sellersList.length === 0) return null;
+
+                            const cCur = currencyView === 'ORIGINAL' ? cGroup.country.currency : currencyView;
+
                             return (
-                              <tr 
-                                key={seller.id}
-                                onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
-                                className={`cursor-pointer transition-all ${
-                                  isRowSelected 
-                                    ? 'bg-blue-50/80 font-bold border-l-4 border-l-blue-600 shadow-xs' 
-                                    : 'hover:bg-blue-50/40 transition-colors'
-                                }`}
-                              >
-                                <td className={`px-5 py-3 font-semibold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap transition-colors ${
-                                  isRowSelected 
-                                    ? 'bg-blue-50 text-blue-950 border-blue-200' 
-                                    : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-100'
-                                }`}>
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className={`w-2.5 h-2.5 rounded-full ${seller.isBaja ? 'bg-rose-500' : 'bg-blue-400'}`}></span>
-                                      <span className={`truncate max-w-[180px] ${seller.isBaja ? 'text-slate-500 line-through decoration-slate-300' : ''}`}>{seller.name}</span>
-                                      {seller.isBaja && (
-                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
-                                          BAJA
+                              <Fragment key={`country-group-${cCode}`}>
+                                {/* Encabezado de País (Colapsable con Totales) */}
+                                <tr 
+                                  onClick={() => toggleCountryCollapse(cCode)}
+                                  className="bg-slate-100/95 hover:bg-slate-200/90 cursor-pointer transition-colors border-y-2 border-slate-200/90 select-none"
+                                  title="Haz clic para colapsar o expandir las cuentas de este mercado"
+                                >
+                                  <td className="px-5 py-3 sticky left-0 bg-slate-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)] border-r border-slate-200 font-bold text-slate-900 whitespace-nowrap">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        {isCollapsed ? <ChevronRight size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+                                        <span className="text-base">{cGroup.country.flag}</span>
+                                        <span className="text-xs font-black text-slate-900 tracking-tight uppercase">
+                                          {cGroup.country.name}
                                         </span>
-                                      )}
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-slate-600 border border-slate-200">
+                                          {sellersList.length} {sellersList.length === 1 ? 'cuenta' : 'cuentas'}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                                        {cCur}
+                                      </span>
                                     </div>
-                                  </div>
-                                </td>
-                                {filteredMonths.map(m => {
-                                  const val = seller.months[m.key]?.subtotal || 0;
-                                  return (
-                                    <td key={m.key} className="px-3 py-2 text-right whitespace-nowrap border-l border-slate-100 text-slate-800">
-                                      {val > 0 ? formatCurrency(val, 'USD') : '-'}
-                                    </td>
-                                  );
-                                })}
-                                <td className="px-5 py-3 text-right font-bold border-l whitespace-nowrap text-slate-900 bg-slate-50/50 border-slate-200">
-                                  {formatCurrency(seller.totalRow, 'USD')}
-                                </td>
-                              </tr>
+                                  </td>
+
+                                  {filteredMonths.map(m => {
+                                    const subtotalVal = cGroup.monthlyTotals[m.key] || 0;
+                                    const curIdx = monthsList.findIndex(x => x.key === m.key);
+                                    const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
+                                    const prevVal = prevMonth ? (cGroup.monthlyTotals[prevMonth.key] || 0) : 0;
+                                    const varCountry = calculateVariation(subtotalVal, prevVal, m.key, prevMonth?.key || '', variationMode);
+
+                                    return (
+                                      <td key={m.key} className="px-3 py-2 text-right font-extrabold text-slate-900 border-l border-slate-200 whitespace-nowrap bg-slate-100/70">
+                                        <div className="flex flex-col items-end justify-center">
+                                          <span className="leading-tight text-xs font-black">
+                                            {subtotalVal > 0 ? formatCurrency(subtotalVal, cCur) : '-'}
+                                          </span>
+                                          {variationMode !== 'none' && varCountry !== null && (
+                                            <span 
+                                              className={`text-[9px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
+                                                varCountry >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                                              }`}
+                                            >
+                                              <span>{varCountry >= 0 ? '▲' : '▼'}</span>
+                                              <span>{Math.abs(varCountry * 100).toFixed(1)}%</span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+
+                                  <td className="px-5 py-3 text-right font-black border-l whitespace-nowrap text-slate-900 bg-slate-200/70 border-slate-300">
+                                    {formatCurrency(cGroup.grandTotal, cCur)}
+                                  </td>
+                                </tr>
+
+                                {/* Cuentas del País (si no está colapsado) */}
+                                {!isCollapsed && (
+                                  cCode === 'CL' 
+                                    ? renderChileBlock(cGroup.sellersMap)
+                                    : sellersList.map(seller => renderSellerRow(seller, cCode))
+                                )}
+                              </Fragment>
                             );
                           })}
-                        </>
-                      );
-                    }
 
-                    return Object.values(groupedData[selectedCountry]?.sellersMap || {})
-                      .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((seller) => {
-                        const isRowSelected = selectedSellerId === seller.id;
-
-                        return (
-                          <tr 
-                            key={seller.id} 
-                            onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
-                            title={`Haz clic para ${isRowSelected ? 'deseleccionar' : 'ver gráfico y métricas exclusivas de'} ${seller.name}`}
-                            className={`cursor-pointer transition-all ${
-                              isRowSelected 
-                                ? 'bg-blue-50/80 font-bold border-l-4 border-l-blue-600 shadow-xs' 
-                                : 'hover:bg-blue-50/40 transition-colors'
-                            }`}
-                          >
-                            <td className={`px-5 py-3 font-semibold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap transition-colors ${
-                              isRowSelected 
-                                ? 'bg-blue-50 text-blue-950 border-blue-200' 
-                                : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-100'
-                            }`}>
+                          {/* FILA DE TOTAL GLOBAL CONSOLIDADO */}
+                          <tr className="bg-blue-50/95 border-t-2 border-b-2 border-blue-300 text-blue-950 font-black sticky bottom-0 z-20 shadow-xs">
+                            <td className="px-5 py-3.5 sticky left-0 bg-blue-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-blue-200 whitespace-nowrap">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2">
-                                  <span className={`w-2.5 h-2.5 rounded-full transition-all ${
-                                    seller.isBaja
-                                      ? 'bg-rose-500'
-                                      : isRowSelected 
-                                      ? 'bg-blue-600 ring-4 ring-blue-200 scale-110' 
-                                      : 'bg-blue-400 group-hover:bg-blue-600'
-                                  }`}></span>
-                                  <span className={`truncate max-w-[180px] ${seller.isBaja ? 'text-slate-500 line-through decoration-slate-300' : ''}`}>{seller.name}</span>
-                                  {seller.isBaja && (
-                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
-                                      BAJA
-                                    </span>
-                                  )}
+                                  <Globe size={16} className="text-blue-700" />
+                                  <span className="text-xs uppercase tracking-wider font-black text-blue-950">
+                                    TOTAL GLOBAL CONSOLIDADO ({groupedData['ALL']?.country.currency})
+                                  </span>
                                 </div>
-                                {isRowSelected && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-600 text-white tracking-wider">
-                                    ACTIVO
+                                {currencyView === 'ORIGINAL' && (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-blue-200/80 text-blue-800">
+                                    Unificado en USD
                                   </span>
                                 )}
                               </div>
                             </td>
 
                             {filteredMonths.map(m => {
-                              const monthData = seller.months[m.key];
-                              const val = monthData?.subtotal || 0;
-                              const isProj = m.isProjected;
-
-                              // Mes cronológico anterior en monthsList para calcular variación
+                              const totalMonth = groupedData['ALL']?.monthlyTotals[m.key] || 0;
                               const curIdx = monthsList.findIndex(x => x.key === m.key);
                               const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                              const prevVal = prevMonth ? (seller.months[prevMonth.key]?.subtotal || 0) : 0;
-                              const variation = calculateVariation(
-                                val,
-                                prevVal,
-                                m.key,
-                                prevMonth?.key || '',
-                                variationMode
-                              );
+                              const prevTotal = prevMonth ? (groupedData['ALL']?.monthlyTotals[prevMonth.key] || 0) : 0;
+                              const varGlobal = calculateVariation(totalMonth, prevTotal, m.key, prevMonth?.key || '', variationMode);
+                              const globalCur = groupedData['ALL']?.country.currency || 'USD';
 
                               return (
-                                <td 
-                                  key={m.key} 
-                                  className={`px-3 py-2 text-right whitespace-nowrap border-l ${
-                                    isRowSelected
-                                      ? isProj
-                                        ? 'bg-orange-100/50 text-orange-950 border-orange-200/80 font-bold'
-                                        : 'bg-blue-50/80 text-blue-950 border-blue-150 font-bold'
-                                      : isProj 
-                                        ? 'bg-orange-50/30 text-orange-950 border-orange-100 font-medium' 
-                                        : 'border-slate-100 text-slate-800'
-                                  }`}
-                                >
+                                <td key={m.key} className="px-3 py-2.5 text-right font-black border-l border-blue-200 whitespace-nowrap bg-blue-50">
                                   <div className="flex flex-col items-end justify-center">
-                                    <span className="leading-tight">
-                                      {val > 0 ? formatCurrency(val, monthData?.moneda || executiveKPIs?.currency) : '-'}
+                                    <span className="leading-tight text-blue-950 font-black">
+                                      {formatCurrency(totalMonth, globalCur)}
                                     </span>
-                                    {variationMode !== 'none' && variation !== null && (
+                                    {variationMode !== 'none' && varGlobal !== null && (
                                       <span 
-                                        className={`text-[9.5px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
-                                          variation >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                        className={`text-[9.5px] font-black leading-none mt-0.5 inline-flex items-center gap-0.5 ${
+                                          varGlobal >= 0 ? 'text-emerald-700' : 'text-rose-700'
                                         }`}
-                                        title={`Variación ${variationMode === 'diaria' ? 'diaria ponderada' : 'mensual MoM'}: ${(variation * 100).toFixed(1)}%`}
                                       >
-                                        <span>{variation >= 0 ? '▲' : '▼'}</span>
-                                        <span>{Math.abs(variation * 100).toFixed(1)}%</span>
+                                        <span>{varGlobal >= 0 ? '▲' : '▼'}</span>
+                                        <span>{Math.abs(varGlobal * 100).toFixed(1)}%</span>
                                       </span>
                                     )}
                                   </div>
@@ -1798,74 +2058,84 @@ function MetasFacturacionContent() {
                               );
                             })}
 
-                            {/* Total Acumulado del Seller */}
-                            <td className={`px-5 py-3 text-right font-bold border-l whitespace-nowrap ${
-                              isRowSelected 
-                                ? 'bg-blue-100/80 text-blue-950 border-blue-250 font-black' 
-                                : 'text-slate-900 bg-slate-50/50 border-slate-200'
-                            }`}>
-                              {formatCurrency(seller.totalRow, (seller.name.includes('Natura Colombia') || seller.name.includes('Disuiza') || seller.name.includes('ADDI') || seller.name.includes('Formex') || seller.name.includes('USA') || seller.name.includes('Amazon') || seller.name.includes('Newsan Chile') || selectedCountry === 'CL') ? 'USD' : executiveKPIs?.currency)}
+                            <td className="px-5 py-3.5 text-right font-black text-sm bg-blue-100 text-blue-950 border-l border-blue-300 whitespace-nowrap">
+                              {formatCurrency(groupedData['ALL']?.grandTotal || 0, groupedData['ALL']?.country.currency || 'USD')}
                             </td>
                           </tr>
-                        );
-                      });
-                  })()}
-
-                  {/* Fila de SUBTOTAL DEL PAÍS */}
-                  <tr className="bg-blue-50/90 border-t-2 border-b-2 border-blue-200 text-blue-950 font-bold sticky bottom-0 z-20 shadow-xs">
-                    <td className="px-5 py-3.5 sticky left-0 bg-blue-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-blue-200 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <span>{groupedData[selectedCountry]?.country.flag}</span>
-                        <span className="text-xs uppercase tracking-wider font-extrabold">
-                          Subtotal {groupedData[selectedCountry]?.country.name} ({groupedData[selectedCountry]?.country.currency})
-                        </span>
-                      </div>
-                    </td>
-
-                    {filteredMonths.map(m => {
-                      const totalMonth = groupedData[selectedCountry]?.monthlyTotals[m.key] || 0;
-
-                      // Mes cronológico anterior en monthsList para variación del subtotal de cartera
-                      const curIdx = monthsList.findIndex(x => x.key === m.key);
-                      const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
-                      const prevTotalMonth = prevMonth ? (groupedData[selectedCountry]?.monthlyTotals[prevMonth.key] || 0) : 0;
-                      const subtotalVariation = calculateVariation(
-                        totalMonth,
-                        prevTotalMonth,
-                        m.key,
-                        prevMonth?.key || '',
-                        variationMode
+                        </>
                       );
+                    }
 
-                      return (
-                        <td 
-                          key={m.key} 
-                          className="px-3 py-2.5 text-right font-black border-l border-blue-200 whitespace-nowrap"
-                        >
-                          <div className="flex flex-col items-end justify-center">
-                            <span className="leading-tight">
-                              {formatCurrency(totalMonth, executiveKPIs?.currency)}
-                            </span>
-                            {variationMode !== 'none' && subtotalVariation !== null && (
-                              <span 
-                                className={`text-[9.5px] font-black leading-none mt-0.5 inline-flex items-center gap-0.5 ${
-                                  subtotalVariation >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                                }`}
-                                title={`Variación ${variationMode === 'diaria' ? 'diaria ponderada' : 'mensual MoM'} de cartera: ${(subtotalVariation * 100).toFixed(1)}%`}
-                              >
-                                <span>{subtotalVariation >= 0 ? '▲' : '▼'}</span>
-                                <span>{Math.abs(subtotalVariation * 100).toFixed(1)}%</span>
+                    // CASO 2: SELECCIONADO UN PAÍS ESPECÍFICO (AR, CL, CO, MX, US)
+                    const activeGroup = groupedData[selectedCountry];
+                    const activeCur = currencyView === 'ORIGINAL' ? activeGroup?.country.currency : currencyView;
+
+                    return (
+                      <>
+                        {selectedCountry === 'CL' ? (
+                          renderChileBlock(activeGroup?.sellersMap || {})
+                        ) : (
+                          Object.values(activeGroup?.sellersMap || {})
+                            .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(seller => renderSellerRow(seller, selectedCountry))
+                        )}
+
+                        {/* Fila de SUBTOTAL DEL PAÍS */}
+                        <tr className="bg-blue-50/90 border-t-2 border-b-2 border-blue-200 text-blue-950 font-bold sticky bottom-0 z-20 shadow-xs">
+                          <td className="px-5 py-3.5 sticky left-0 bg-blue-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-blue-200 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span>{activeGroup?.country.flag}</span>
+                              <span className="text-xs uppercase tracking-wider font-extrabold">
+                                Subtotal {activeGroup?.country.name} ({activeCur})
                               </span>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
+                            </div>
+                          </td>
 
-                    <td className="px-5 py-3.5 text-right font-black text-sm bg-blue-100/90 text-blue-950 border-l border-blue-300 whitespace-nowrap">
-                      {formatCurrency(groupedData[selectedCountry]?.grandTotal || 0, executiveKPIs?.currency)}
-                    </td>
-                  </tr>
+                          {filteredMonths.map(m => {
+                            const totalMonth = activeGroup?.monthlyTotals[m.key] || 0;
+                            const curIdx = monthsList.findIndex(x => x.key === m.key);
+                            const prevMonth = curIdx > 0 ? monthsList[curIdx - 1] : null;
+                            const prevTotalMonth = prevMonth ? (activeGroup?.monthlyTotals[prevMonth.key] || 0) : 0;
+                            const subtotalVariation = calculateVariation(
+                              totalMonth,
+                              prevTotalMonth,
+                              m.key,
+                              prevMonth?.key || '',
+                              variationMode
+                            );
+
+                            return (
+                              <td 
+                                key={m.key} 
+                                className="px-3 py-2.5 text-right font-black border-l border-blue-200 whitespace-nowrap"
+                              >
+                                <div className="flex flex-col items-end justify-center">
+                                  <span className="leading-tight">
+                                    {formatCurrency(totalMonth, activeCur)}
+                                  </span>
+                                  {variationMode !== 'none' && subtotalVariation !== null && (
+                                    <span 
+                                      className={`text-[9.5px] font-black leading-none mt-0.5 inline-flex items-center gap-0.5 ${
+                                        subtotalVariation >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                                      }`}
+                                    >
+                                      <span>{subtotalVariation >= 0 ? '▲' : '▼'}</span>
+                                      <span>{Math.abs(subtotalVariation * 100).toFixed(1)}%</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+
+                          <td className="px-5 py-3.5 text-right font-black text-sm bg-blue-100/90 text-blue-950 border-l border-blue-300 whitespace-nowrap">
+                            {formatCurrency(activeGroup?.grandTotal || 0, activeCur)}
+                          </td>
+                        </tr>
+                      </>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
