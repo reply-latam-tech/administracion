@@ -210,7 +210,7 @@ async function main() {
                     const itemsCount = (order.order_items || []).reduce((acc, item) => acc + (item.quantity || 0), 0);
                     ordersToInsert.push({
                         order_id: order.id,
-                        seller_id: order.seller.id,
+                        seller_id: Number(SELLER_ID),
                         date_created: order.date_created,
                         date_closed: order.date_closed,
                         status: order.status,
