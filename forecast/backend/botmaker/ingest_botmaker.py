@@ -33,22 +33,35 @@ def get_sellers_map():
     # Alias manuales para cuentas de botmaker que no coinciden exactamente
     alias_map = {
         "dapsa_1": "dapsa",
+        "dapsa": "dapsa",
         "juanvaldez_1": "juan valdez",
         "juanvaldez": "juan valdez",
         "cafemartinez_1": "cafe martinez",
         "laespumeria_1": "la espumeria",
-        "laespumeria_2": "la espumeria",
+        "laespumeria_2": "pinturas online",
         "morixe_1": "morixe",
-        "sodastream_1": "sodastream",
+        "sodastream_1": "soda stream ml",
+        "sodastream": "soda stream ml",
         "stylestore_1": "stylestore",
-        "bellapaloma_1": "bellapaloma",
-        "dapopmakeup_1": "dapopmakeup",
-        "dapopmakeup_2": "dapopmakeup",
+        "bellapaloma_1": "bella paloma",
+        "dapopmakeup_1": "dapop make up",
+        "dapopmakeup_2": "dapop make up",
+        "dapopmakeup": "dapop make up",
         "belcorp_1": "belcorp",
         "almanativa": "alma nativa",
         "violetta": "violetta cosmeticos",
         "abarka": "abarka",
-        "geat": "geat"
+        "geat": "geat",
+        "disuiza": "disuiza colombia",
+        "newsanchile": "newsan chile ml",
+        "goavance": "go advance",
+        "go avance": "go advance",
+        "jansport": "jansport argentina",
+        "jansport & herschel": "jansport argentina",
+        "grupoaxo": "grupo axo - th ml",
+        "grupo axo": "grupo axo - th ml",
+        "forbasse": "forbasse",
+        "naturamexico": "natura mexico"
     }
     
     # Expandir el mapa con los alias
@@ -65,7 +78,8 @@ def extract_period(headers):
         match = re.search(r'Botmaker platform fee (.*) billed', h, re.IGNORECASE)
         if match and "count" not in h.lower():
             date_str = match.group(1).strip()
-            # Botmaker usa formato en inglés ej: "Jul 2026", "Aug 2026"
+            # Botmaker usa formato en inglés ej: "Jul 2026", "Aug 2026", "Sep 2026", "Sept 2026"
+            date_str = re.sub(r'sept\b', 'Sep', date_str, flags=re.IGNORECASE)
             try:
                 dt = datetime.strptime(date_str, "%b %Y")
                 return dt.strftime("%Y-%m-%d")
@@ -97,7 +111,8 @@ def process_file(filepath, sellers_map):
                 continue # Fila principal o vacía
                 
             norm_name = normalize_name(child_name)
-            seller_id = sellers_map.get(norm_name)
+            norm_proj = normalize_name(child_project_id)
+            seller_id = sellers_map.get(norm_name) or sellers_map.get(norm_proj)
             
             # Sumar SOLO el Botmaker platform fee + 20%
             total_billed = 0.0
