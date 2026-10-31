@@ -75,7 +75,7 @@ def step1_update_dim_sellers():
 
     # Asegurar cuentas Argentina
     ar_sellers = [
-        (ID_NEWSAN_ML, "Newsan (Mercado Libre)", "MELI", "TRIMESTRAL"),
+        (ID_NEWSAN_ML, "Newsan (Mercado Libre - Propio)", "MELI", "TRIMESTRAL"),
         (ID_NEWSAN_MOTO, "Newsan Motorola", "MELI", "TRIMESTRAL"),
         (ID_PILISAR, "Pilisar", "MELI", "TRIMESTRAL"),
         (ID_NEWSAN_WEB, "Newsan (Tienda Web)", "WEB", "SEMESTRAL")
@@ -312,12 +312,17 @@ def step4_project_facturacion():
     # Armar payload Argentina
     prev_moto = 1439146107.0
     prev_pili = 3811253698.0
-    prev_tot = 10330429822.0
+    prev_propio = 5080030017.0
 
     for p_str, v_moto, v_pili, v_tot in proyecciones_ar:
+        if p_str == "2026-10-01":
+            v_propio = 3236378770.0
+        else:
+            v_propio = v_tot - v_moto - v_pili
+
         var_moto = round((v_moto - prev_moto) / prev_moto, 4)
         var_pili = round((v_pili - prev_pili) / prev_pili, 4)
-        var_tot = round((v_tot - prev_tot) / prev_tot, 4)
+        var_propio = round((v_propio - prev_propio) / prev_propio, 4)
 
         all_fact_payload.append({
             "seller_id": ID_NEWSAN_MOTO, "periodo": p_str,
@@ -329,14 +334,14 @@ def step4_project_facturacion():
         })
         all_fact_payload.append({
             "seller_id": ID_NEWSAN_ML, "periodo": p_str,
-            "valor_facturado": v_tot, "variacion_mensual": var_tot, "estado": "PROYECTADO"
+            "valor_facturado": v_propio, "variacion_mensual": var_propio, "estado": "PROYECTADO"
         })
         all_fact_payload.append({
             "seller_id": ID_NEWSAN_WEB, "periodo": p_str,
             "valor_facturado": 0.0, "variacion_mensual": 0.0, "estado": "PROYECTADO"
         })
 
-        prev_moto, prev_pili, prev_tot = v_moto, v_pili, v_tot
+        prev_moto, prev_pili, prev_propio = v_moto, v_pili, v_propio
 
     # 4.B NEWSAN CHILE (CLP)
     # Valores proyectados mensuales por canal en CLP

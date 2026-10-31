@@ -177,13 +177,14 @@ function MetasFacturacionContent() {
   const [newsanSubAccounts, setNewsanSubAccounts] = useState<Record<string, Record<string, number>>>({});
   const [newsanMetricas, setNewsanMetricas] = useState<Record<string, { sesiones: number; horas: number }>>({});
   const [newsanChileExpanded, setNewsanChileExpanded] = useState<boolean>(true);
+  const [newsanEscalas, setNewsanEscalas] = useState<any[]>([]);
 
   // 1. Cargar datos de Supabase
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
 
-      const [liqsRes, sellersRes, metricasRes, facturacionSubRes] = await Promise.all([
+      const [liqsRes, sellersRes, metricasRes, facturacionSubRes, escalasNewsanRes] = await Promise.all([
         supabase
           .from('liquidaciones')
           .select('*')
@@ -199,8 +200,17 @@ function MetasFacturacionContent() {
         supabase
           .from('facturacion')
           .select('*')
-          .in('seller_id', [308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429])
+          .in('seller_id', [256189964, 308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429]),
+        supabase
+          .from('dim_escalas')
+          .select('*')
+          .eq('seller_id', 256189964)
+          .order('monto_objetivo', { ascending: false })
       ]);
+
+      if (escalasNewsanRes?.data) {
+        setNewsanEscalas(escalasNewsanRes.data);
+      }
 
       if (liqsRes.error) {
         console.error('Error fetching liquidaciones:', liqsRes.error);
@@ -650,6 +660,35 @@ function MetasFacturacionContent() {
         feeVal = alicuotaVal;
       }
 
+      // Soporte para Newsan Mercado Libre Consolidado (seller_id 256189964)
+      // Facturación Consolidada ML = Newsan Propio + Newsan Motorola + Pilisar
+      // La escala comercial y alícuota se evalúan sobre la suma consolidada de las 3 cuentas
+      if (sId === '256189964') {
+        const propio = newsanSubAccounts['256189964']?.[mKey] ?? factVal;
+        const moto = newsanSubAccounts['308973138']?.[mKey] || 0;
+        const pili = newsanSubAccounts['256324891']?.[mKey] || 0;
+        const totML = propio + moto + pili;
+        factVal = totML;
+
+        // Evaluar en escalas de Newsan ML
+        const periodStr = `${mKey}-01`;
+        const tramos = newsanEscalas.filter((e: any) => e.periodo === periodStr);
+        let bestAlic = 0.0031;
+
+        for (const t of tramos) {
+          if (t.tipo_cargo === 'PORCENTUAL' && totML >= Number(t.monto_objetivo)) {
+            bestAlic = Number(t.alicuota);
+            break;
+          }
+        }
+
+        montoServicio = Math.round(totML * bestAlic);
+        subtotalVal = montoServicio + (Number(row.botmaker) || 0);
+        ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+        totalVal = subtotalVal + ivaVal;
+        feeVal = bestAlic;
+      }
+
       // Soporte para Evacol Colombia ADDI (seller_id 928424062)
       // Flat fee: 1.000 USD fijos todos los meses independientemente de su facturación
       if (sId === '928424062') {
@@ -876,7 +915,7 @@ function MetasFacturacionContent() {
     };
 
     return countriesMap;
-  }, [rawLiquidaciones, sellersMap, currencyView]);
+  }, [rawLiquidaciones, sellersMap, currencyView, newsanSubAccounts, newsanEscalas]);
 
   // Obtener el cliente seleccionado si existe
   const selectedSellerObj = useMemo(() => {
@@ -2635,11 +2674,7 @@ function MetasFacturacionContent() {
                               Newsan
                             </td>
                             {filteredMonths.map(m => {
-                              const mDataML = mlSeller?.months[m.key];
-                              const totalML = mDataML?.facturacion || 0;
-                              const motoML = newsanSubAccounts['308973138']?.[m.key] || 0;
-                              const piliML = newsanSubAccounts['256324891']?.[m.key] || 0;
-                              const newsanPropio = Math.max(0, totalML - motoML - piliML);
+                              const newsanPropio = newsanSubAccounts['256189964']?.[m.key] || 0;
                               return (
                                 <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-800">
                                   {newsanPropio > 0 ? formatCurrency(newsanPropio, executiveKPIs?.currency) : '-'}
@@ -2684,7 +2719,10 @@ function MetasFacturacionContent() {
                               Facturación total (Mercado Libre)
                             </td>
                             {filteredMonths.map(m => {
-                              const totalML = mlSeller?.months[m.key]?.facturacion || 0;
+                              const newsanPropio = newsanSubAccounts['256189964']?.[m.key] || 0;
+                              const motoML = newsanSubAccounts['308973138']?.[m.key] || 0;
+                              const piliML = newsanSubAccounts['256324891']?.[m.key] || 0;
+                              const totalML = mlSeller?.months[m.key]?.facturacion || (newsanPropio + motoML + piliML);
                               return (
                                 <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-slate-100 font-bold text-slate-900">
                                   {totalML > 0 ? formatCurrency(totalML, executiveKPIs?.currency) : '-'}
