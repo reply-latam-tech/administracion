@@ -62,8 +62,20 @@ export default function EscalasPage() {
       }
       const dbData = allEscalas;
 
-      // Fetch liquidaciones to highlight applied tiers
-      const { data: liqData } = await supabase.from('liquidaciones').select('*');
+      // Fetch liquidaciones to highlight applied tiers y facturación consolidada de Newsan ML
+      const [{ data: liqData }, { data: factNewsanData }] = await Promise.all([
+        supabase.from('liquidaciones').select('*'),
+        supabase.from('facturacion').select('seller_id, periodo, valor_facturado').in('seller_id', [256189964, 308973138, 256324891])
+      ]);
+
+      const newsanTotalMap: Record<string, number> = {};
+      if (factNewsanData) {
+        factNewsanData.forEach((f: any) => {
+          const p = f.periodo;
+          newsanTotalMap[p] = (newsanTotalMap[p] || 0) + (Number(f.valor_facturado) || 0);
+        });
+      }
+
       const liqMap: Record<string, any> = {};
       if (liqData) {
         liqData.forEach((row: any) => {
@@ -76,6 +88,28 @@ export default function EscalasPage() {
           let tipo_cargo = row.tipo_cargo_aplicado;
           let alicuota = row.alicuota_aplicada;
           let subtotal_mercado_libre = row.subtotal_mercado_libre;
+
+          // Soporte para Newsan Mercado Libre Consolidado (seller_id 256189964)
+          // La escala aplica sobre la suma consolidada de las 3 cuentas (Propio + Motorola + Pilisar)
+          if (String(row.seller_id) === '256189964') {
+            const totML = newsanTotalMap[row.periodo] || Number(row.valor_facturado) || 0;
+            const periodEscalas = allEscalas
+              .filter((e: any) => String(e.seller_id) === '256189964' && e.periodo === row.periodo)
+              .sort((a: any, b: any) => Number(b.monto_objetivo) - Number(a.monto_objetivo));
+
+            let bestAlic = 0;
+            let appliedCargo = 'MINIMO';
+            for (const esc of periodEscalas) {
+              if (esc.tipo_cargo === 'PORCENTUAL' && totML >= Number(esc.monto_objetivo)) {
+                bestAlic = Number(esc.alicuota);
+                appliedCargo = 'PORCENTUAL';
+                break;
+              }
+            }
+            tipo_cargo = appliedCargo;
+            alicuota = bestAlic;
+            subtotal_mercado_libre = Math.round(totML * (bestAlic || 0.0031));
+          }
 
           // Soporte para cálculo exacto en USD de Natura Colombia (seller_id 941943480)
           if (String(row.seller_id) === '941943480') {

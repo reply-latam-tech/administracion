@@ -153,7 +153,8 @@ async function main() {
         const SELLER_ID = seller.id_seller;
         // Mapeo si el ID en Supabase difiere del seller ID real en Mercado Libre
         const SELLER_MELI_MAP = {
-            942368053: "1529028605" // Newsan Chile ML -> INTSAN_CHILE en Mercado Libre Chile
+            942368053: "1529028605", // Newsan Chile ML -> INTSAN_CHILE en Mercado Libre Chile
+            308973138: "2587221833"  // Newsan Motorola -> TIENDAMOTOROLAOFICIAL en Mercado Libre Argentina
         };
         const meliSellerId = SELLER_MELI_MAP[SELLER_ID] || SELLER_ID;
 
