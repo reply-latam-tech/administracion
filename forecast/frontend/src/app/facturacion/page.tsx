@@ -163,6 +163,10 @@ export default function FacturacionPage() {
   const processedData = useMemo(() => {
     const sellersMap: Record<string, any> = {};
     rawSellers.forEach((s: any) => {
+      // Newsan Tienda Web (989595440) se liquida exclusivamente por sesiones y horas extra, no tiene facturación bruta de marketplace
+      if (String(s.id_seller) === '989595440' || s.nombre_seller?.toLowerCase().includes('tienda web')) {
+        return;
+      }
       const cCode = getCountryCode(s);
       const moneda = s.moneda || getDefaultCurrencyForCountry(cCode);
       const sid = String(s.id_seller);

@@ -415,7 +415,7 @@ export default function EscalasPage() {
         if (!sellersGroups[sId]) {
           sellersGroups[sId] = {
             sellerId: sId,
-            sellerName: sellersMap[sId] || `Seller ${sId}`,
+            sellerName: String(sId) === '256189964' ? 'Newsan (Mercado Libre - Consolidado Total)' : (sellersMap[sId] || `Seller ${sId}`),
             pais: row.pais,
             moneda: row.moneda,
             tiersByMonth: {}
