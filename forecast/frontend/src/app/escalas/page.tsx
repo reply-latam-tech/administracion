@@ -88,11 +88,13 @@ export default function EscalasPage() {
           let tipo_cargo = row.tipo_cargo_aplicado;
           let alicuota = row.alicuota_aplicada;
           let subtotal_mercado_libre = row.subtotal_mercado_libre;
+          let valor_facturado = Number(row.valor_facturado) || 0;
 
           // Soporte para Newsan Mercado Libre Consolidado (seller_id 256189964)
           // La escala aplica sobre la suma consolidada de las 3 cuentas (Propio + Motorola + Pilisar)
           if (String(row.seller_id) === '256189964') {
             const totML = newsanTotalMap[row.periodo] || Number(row.valor_facturado) || 0;
+            valor_facturado = totML;
             const periodEscalas = allEscalas
               .filter((e: any) => String(e.seller_id) === '256189964' && e.periodo === row.periodo)
               .sort((a: any, b: any) => Number(b.monto_objetivo) - Number(a.monto_objetivo));
@@ -393,7 +395,7 @@ export default function EscalasPage() {
           liqMap[row.seller_id][mStr] = {
             tipo_cargo,
             alicuota,
-            valor_facturado: row.valor_facturado,
+            valor_facturado,
             subtotal_mercado_libre,
             estado: row.estado
           };
@@ -728,7 +730,7 @@ export default function EscalasPage() {
                         if (liq.tipo_cargo === 'MINIMO' && cellData.tipoCargo === 'MINIMO') {
                           isApplied = true;
                         } else if (liq.tipo_cargo === 'PORCENTUAL' && cellData.tipoCargo === 'PORCENTUAL') {
-                          if (Math.abs(liq.alicuota - cellData.alicuota) < 0.0001) {
+                          if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.00001) {
                             isApplied = true;
                           }
                         }
@@ -792,16 +794,20 @@ export default function EscalasPage() {
                             )}
                           </div>
 
-                          {isApplied && !isScaleProjected && !isLiqProjected && (
-                            <div className="absolute hidden group-hover/cell:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl z-50 pointer-events-none">
+                          {isApplied && (
+                            <div className="absolute hidden group-hover/cell:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl z-50 pointer-events-none">
                               <div className="font-semibold mb-1.5 text-gray-200">{row.sellerName} <span className="text-gray-400 font-normal">| {m}</span></div>
                               <div className="flex justify-between mt-2">
-                                <span className="text-gray-400">Facturación:</span>
+                                <span className="text-gray-400">
+                                  {String(row.sellerId) === '256189964' ? 'Facturación Consolidada:' : 'Facturación:'}
+                                </span>
                                 <span className="font-medium">{formatCurrency(liq.valor_facturado, row.sellerName.includes('Colombia') ? 'COP' : row.moneda)}</span>
                               </div>
                               <div className="flex justify-between mt-1">
                                 <span className="text-gray-400" title="Subtotal antes de Botmaker e IVA">Subtotal ML ({alicuotaLabel}):</span>
-                                <span className="font-bold text-blue-300">{formatCurrency(liq.subtotal_mercado_libre, row.sellerName.includes('Colombia') || row.moneda === 'USD' ? 'USD' : row.moneda)}</span>
+                                <span className={`font-bold ${isLiqProjected ? 'text-orange-300' : 'text-blue-300'}`}>
+                                  {formatCurrency(liq.subtotal_mercado_libre, row.sellerName.includes('Colombia') || row.moneda === 'USD' ? 'USD' : row.moneda)}
+                                </span>
                               </div>
                               <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                             </div>
