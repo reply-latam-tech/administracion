@@ -1,0 +1,27 @@
+dim_sellers
+
+id_seller: 1980619742	
+nombre_seller: Zaz
+pais: AR
+moneda: ARS
+estado: TRUE
+cobrar_botmaker: TRUE
+frecuencia_actualizacion: MENSUAL
+
+facturacion
+es nueva
+
+--
+
+escalas (se actualiza mensualmente por inflacion)
+esta entra desde octubre/2026
+
+Hasta $ 45.000.000	$ 2.475.000
+ Desde $ 45.000.000	5,50%
+ $  80.000.000 	4,50%
+ $  120.000.000 	4,25%
+ $  165.000.000 	3,75%
+ $  250.000.000 	3,50%
+ $  350.000.000 	3,00%
+ $  500.000.000 	2,50%
+ $  700.000.000 	2,00%
