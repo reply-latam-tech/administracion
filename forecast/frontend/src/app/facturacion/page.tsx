@@ -354,25 +354,39 @@ export default function FacturacionPage() {
       prevGlobalTotal = mTotal;
     });
 
-    // Construir dataset para el gráfico apilado
-    // Si hay un país seleccionado en el filtro rápido, graficamos los sellers de ese país; sino todos
-    const chartSellersList = Object.values(sellersGroups).filter(s => {
-      if (selectedCountryFilter !== 'ALL' && s.countryCode !== selectedCountryFilter) return false;
-      if (searchTerm.trim() && !s.sellerName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-      return true;
-    });
+    // Construir dataset para el gráfico apilado o individual
+    const isSingleSeller = Boolean(selectedSeller);
+    let chartSellerNames: string[] = [];
+    let topSellers: any[] = [];
+    let otherSellers: any[] = [];
+    let needsGrouping = false;
 
-    // Ordenar sellers por volumen acumulado total ($) descendente
-    const sortedSellersByVolume = [...chartSellersList].sort((a, b) => (b.totalPeriodos || 0) - (a.totalPeriodos || 0));
+    if (isSingleSeller) {
+      const found = Object.values(sellersGroups).find(s => s.sellerName === selectedSeller);
+      if (found) {
+        topSellers = [found];
+        chartSellerNames = [selectedSeller!];
+      }
+    } else {
+      // Si hay un país seleccionado en el filtro rápido, graficamos los sellers de ese país; sino todos
+      const chartSellersList = Object.values(sellersGroups).filter(s => {
+        if (selectedCountryFilter !== 'ALL' && s.countryCode !== selectedCountryFilter) return false;
+        if (searchTerm.trim() && !s.sellerName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        return true;
+      });
 
-    // Regla de negocio solicitada: Top 9 cuentas con mayor volumen $ y la 10ma agrupa a "Otros"
-    const needsGrouping = sortedSellersByVolume.length > 10;
-    const topSellers = needsGrouping ? sortedSellersByVolume.slice(0, 9) : sortedSellersByVolume;
-    const otherSellers = needsGrouping ? sortedSellersByVolume.slice(9) : [];
+      // Ordenar sellers por volumen acumulado total ($) descendente
+      const sortedSellersByVolume = [...chartSellersList].sort((a, b) => (b.totalPeriodos || 0) - (a.totalPeriodos || 0));
 
-    const chartSellerNames: string[] = topSellers.map(s => s.sellerName);
-    if (needsGrouping) {
-      chartSellerNames.push('Otros');
+      // Regla de negocio solicitada: Top 9 cuentas con mayor volumen $ y la 10ma agrupa a "Otros"
+      needsGrouping = sortedSellersByVolume.length > 10;
+      topSellers = needsGrouping ? sortedSellersByVolume.slice(0, 9) : sortedSellersByVolume;
+      otherSellers = needsGrouping ? sortedSellersByVolume.slice(9) : [];
+
+      chartSellerNames = topSellers.map(s => s.sellerName);
+      if (needsGrouping) {
+        chartSellerNames.push('Otros');
+      }
     }
 
     const chartDataset: any[] = [];
@@ -382,7 +396,7 @@ export default function FacturacionPage() {
       const mStr = formatMonthStr(p);
       const rowItem: any = { name: mStr, periodo: p, total: 0 };
 
-      // 1. Asignar los top sellers individuales
+      // 1. Asignar los top sellers individuales (o el seller único si está seleccionado)
       topSellers.forEach(s => {
         const cell = s.months[p];
         const val = cell ? cell.valor : 0;
@@ -394,8 +408,8 @@ export default function FacturacionPage() {
         rowItem[`${s.sellerName}_moneda`] = s.monedaDisplay;
       });
 
-      // 2. Agrupar el resto de cuentas en "Otros"
-      if (needsGrouping) {
+      // 2. Agrupar el resto de cuentas en "Otros" si no hay un seller individual seleccionado
+      if (!isSingleSeller && needsGrouping) {
         let othersVal = 0;
         let isOthersProjected = true;
         let othersCountActive = 0;
@@ -449,7 +463,7 @@ export default function FacturacionPage() {
       chartDataset,
       chartSellerNames: Array.from(chartSellerNames)
     };
-  }, [rawSellers, rawFacturacion, currencyView, selectedCountryFilter, searchTerm]);
+  }, [rawSellers, rawFacturacion, currencyView, selectedCountryFilter, searchTerm, selectedSeller]);
 
   // Alternar colapsado de país
   const toggleCountryCollapse = (countryCode: string) => {
