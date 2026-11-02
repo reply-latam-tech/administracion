@@ -53,9 +53,9 @@ export const EXCHANGE_RATES: ExchangeRateRow[] = [
   { periodo: '2026-07', ars: 1525.0, cop: 3205.80,clp: 941.93, mxn: 17.46, pen: 3.41, usd: 1.0 },
   { periodo: '2026-08', ars: 1530.0, cop: 3213.97,clp: 929.18, mxn: 16.97, pen: 3.40, usd: 1.0 },
   { periodo: '2026-09', ars: 1565.0, cop: 3312.84,clp: 972.60, mxn: 18.07, pen: 3.36, usd: 1.0 },
+  { periodo: '2026-10', ars: 1550.0, cop: 3182.99,clp: 981.58, mxn: 18.81, pen: 3.43, usd: 1.0 },
 
   // 2026 - 2027 Proyectados
-  { periodo: '2026-10', ars: 1590.0, cop: 3325.0, clp: 975.00, mxn: 18.12, pen: 3.36, usd: 1.0 },
   { periodo: '2026-11', ars: 1615.0, cop: 3340.0, clp: 978.00, mxn: 18.18, pen: 3.37, usd: 1.0 },
   { periodo: '2026-12', ars: 1645.0, cop: 3360.0, clp: 982.00, mxn: 18.25, pen: 3.37, usd: 1.0 },
   { periodo: '2027-01', ars: 1670.0, cop: 3375.0, clp: 985.00, mxn: 18.32, pen: 3.38, usd: 1.0 },

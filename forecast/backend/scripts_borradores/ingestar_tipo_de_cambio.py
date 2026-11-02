@@ -53,7 +53,7 @@ def load_data():
         cop = parse_num(parts[5])
 
         if any(v is not None for v in [ars, mxn, pen, clp, cop]):
-            estado = "REAL" if periodo <= "2026-09" else "PROYECTADO"
+            estado = "REAL" if periodo <= "2026-10" else "PROYECTADO"
             records.append({
                 "periodo": f"{periodo}-01",
                 "ars": ars,

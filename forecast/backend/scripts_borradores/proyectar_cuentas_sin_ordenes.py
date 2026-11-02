@@ -42,13 +42,13 @@ PROYECCIONES = [
         "periodo": "2026-10-01",
         "mes_nombre": "Octubre 2026",
         "estacionalidad": 1.02,
-        "tc_proyectado": 3325.00,
-        "facturacion_cop": 237415200.0,
-        "usd": 71403.07,
-        "tier": "70k",
-        "alicuota": 0.0244,
+        "tc_proyectado": 3182.99,
+        "facturacion_cop": 336003772.0,
+        "usd": 105562.31,
+        "tier": "90k",
+        "alicuota": 0.0228,
         "tipo_cargo": "PORCENTUAL",
-        "fee_usd": 1742.23
+        "fee_usd": 2406.82
     },
     {
         "periodo": "2026-11-01",

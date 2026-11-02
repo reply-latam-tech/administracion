@@ -68,8 +68,8 @@ const DEFAULT_DATA: TipoCambioRow[] = [
   { periodo: '2026-07-01', ars: 1525.0, mxn: 17.46, pen: 3.41, clp: 941.93, cop: 3205.80, moneda_base: 'USD', estado: 'REAL' },
   { periodo: '2026-08-01', ars: 1530.0, mxn: 16.97, pen: 3.40, clp: 929.18, cop: 3213.97, moneda_base: 'USD', estado: 'REAL' },
   { periodo: '2026-09-01', ars: 1565.0, mxn: 18.07, pen: 3.36, clp: 972.60, cop: 3312.84, moneda_base: 'USD', estado: 'REAL' },
-  // 12 Meses Proyectados para proyecciones futuras (2026-10 a 2027-09)
-  { periodo: '2026-10-01', ars: 1590.0, mxn: 18.12, pen: 3.36, clp: 975.00, cop: 3325.00, moneda_base: 'USD', estado: 'PROYECTADO' },
+  { periodo: '2026-10-01', ars: 1550.0, mxn: 18.81, pen: 3.43, clp: 981.58, cop: 3182.99, moneda_base: 'USD', estado: 'REAL' },
+  // 11 Meses Proyectados para proyecciones futuras (2026-11 a 2027-09)
   { periodo: '2026-11-01', ars: 1615.0, mxn: 18.18, pen: 3.37, clp: 978.00, cop: 3340.00, moneda_base: 'USD', estado: 'PROYECTADO' },
   { periodo: '2026-12-01', ars: 1645.0, mxn: 18.25, pen: 3.37, clp: 982.00, cop: 3360.00, moneda_base: 'USD', estado: 'PROYECTADO' },
   { periodo: '2027-01-01', ars: 1670.0, mxn: 18.32, pen: 3.38, clp: 985.00, cop: 3375.00, moneda_base: 'USD', estado: 'PROYECTADO' },
@@ -154,7 +154,7 @@ export default function TipoDeCambioPage() {
         if (!p.startsWith(selectedYear)) return false;
       }
       if (selectedStatus !== 'ALL') {
-        const isProj = row.estado === 'PROYECTADO' || p >= '2026-10-01';
+        const isProj = row.estado === 'PROYECTADO' || (row.estado !== 'REAL' && p >= '2026-11-01');
         if (selectedStatus === 'REAL' && isProj) return false;
         if (selectedStatus === 'PROYECTADO' && !isProj) return false;
       }
