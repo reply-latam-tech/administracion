@@ -176,6 +176,7 @@ function MetasFacturacionContent() {
   const [monthsList, setMonthsList] = useState<MonthMeta[]>([]);
   const [newsanSubAccounts, setNewsanSubAccounts] = useState<Record<string, Record<string, number>>>({});
   const [newsanMetricas, setNewsanMetricas] = useState<Record<string, { sesiones: number; horas: number }>>({});
+  const [axoCredits, setAxoCredits] = useState<Record<string, number>>({});
   const [newsanChileExpanded, setNewsanChileExpanded] = useState<boolean>(true);
   const [newsanEscalas, setNewsanEscalas] = useState<any[]>([]);
 
@@ -184,7 +185,7 @@ function MetasFacturacionContent() {
     async function fetchData() {
       setLoading(true);
 
-      const [liqsRes, sellersRes, metricasRes, facturacionSubRes, escalasNewsanRes] = await Promise.all([
+      const [liqsRes, sellersRes, metricasRes, facturacionSubRes, escalasNewsanRes, metricasAxoRes] = await Promise.all([
         supabase
           .from('liquidaciones')
           .select('*')
@@ -200,12 +201,17 @@ function MetasFacturacionContent() {
         supabase
           .from('facturacion')
           .select('*')
-          .in('seller_id', [256189964, 308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429]),
+          .in('seller_id', [256189964, 308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429, 765606810, 938333830, 550082876, 998163061]),
         supabase
           .from('dim_escalas')
           .select('*')
           .eq('seller_id', 256189964)
-          .order('monto_objetivo', { ascending: false })
+          .order('monto_objetivo', { ascending: false }),
+        supabase
+          .from('fact_metricas_operativas')
+          .select('*')
+          .eq('id_cliente', 18)
+          .eq('tipo_metrica', 'CREDITOS')
       ]);
 
       if (escalasNewsanRes?.data) {
@@ -233,7 +239,19 @@ function MetasFacturacionContent() {
       }
       setNewsanMetricas(metMap);
 
-      // Parsear facturación individual de subcuentas ML (Motorola y Pilisar)
+      // Parsear métricas de Grupo Axo (Créditos mensuales)
+      const axoCredMap: Record<string, number> = {};
+      if (metricasAxoRes.data) {
+        metricasAxoRes.data.forEach((m: any) => {
+          const d = new Date(m.periodo + 'T12:00:00');
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          axoCredMap[`${yyyy}-${mm}`] = Number(m.cantidad) || 0;
+        });
+      }
+      setAxoCredits(axoCredMap);
+
+      // Parsear facturación individual de subcuentas ML y México Axo
       const subMap: Record<string, Record<string, number>> = {};
       if (facturacionSubRes.data) {
         facturacionSubRes.data.forEach((f: any) => {
@@ -882,6 +900,134 @@ function MetasFacturacionContent() {
       countriesMap[cCode].grandTotal += displaySubtotal;
     });
 
+    // Inyección de Grupo Axo Consolidado México (Calvin Klein & Tommy Hilfiger)
+    if (!countriesMap['MX']) {
+      countriesMap['MX'] = {
+        country: { code: 'MX', name: 'México', flag: '🇲🇽', currency: 'USD', symbol: 'US$' },
+        sellersMap: {},
+        monthlyTotals: {},
+        grandTotal: 0
+      };
+    }
+
+    // Remover vendedores individuales de Axo si existen en sellersMap para evitar duplicados
+    ['765606810', '938333830', '550082876', '998163061'].forEach(id => {
+      delete countriesMap['MX'].sellersMap[id];
+    });
+
+    const axoCK = {
+      id: 'axo_ck',
+      name: 'Grupo Axo - Calvin Klein',
+      pais: 'MX',
+      moneda: 'USD',
+      totalRow: 0,
+      months: {} as Record<string, any>
+    };
+
+    const axoTH = {
+      id: 'axo_th',
+      name: 'Grupo Axo - Tommy Hilfiger',
+      pais: 'MX',
+      moneda: 'USD',
+      totalRow: 0,
+      months: {} as Record<string, any>
+    };
+
+    monthsList.forEach(m => {
+      const mKey = m.key;
+      const ckML = newsanSubAccounts['765606810']?.[mKey] || 0;
+      const ckLVP = newsanSubAccounts['938333830']?.[mKey] || 0;
+      const thML = newsanSubAccounts['550082876']?.[mKey] || 0;
+      const thLVP = newsanSubAccounts['998163061']?.[mKey] || 0;
+      const totMXN = ckML + ckLVP + thML + thLVP;
+
+      const credits = axoCredits[mKey] ?? (mKey >= '2026-10' ? 1306 : 1156);
+      const isHasta1650 = credits <= 1650;
+      const minFee = isHasta1650 ? 120000 : 140000;
+
+      let bestAlic = 0;
+      if (totMXN >= 20000000) bestAlic = 0.0080;
+      else if (totMXN >= 17000000) bestAlic = 0.0090;
+      else if (totMXN >= 15000000) bestAlic = 0.0100;
+      else if (totMXN >= 13500000) bestAlic = 0.0110;
+      else if (totMXN >= 12000000) bestAlic = 0.0120;
+      else if (totMXN >= 11000000) bestAlic = 0.0130;
+      else if (totMXN >= 9500000) bestAlic = 0.0150;
+      else if (totMXN >= 8000000) bestAlic = 0.0175;
+
+      let feeMXN = minFee;
+      let feeAppliedDesc: any = 'MÍNIMO';
+      if (bestAlic > 0 && totMXN * bestAlic > minFee) {
+        feeMXN = Math.round(totMXN * bestAlic * 100) / 100;
+        feeAppliedDesc = bestAlic;
+      }
+
+      const tc = getRateToUSD('MXN', mKey) || 18.0;
+      const feeMXN_CK = feeMXN * 0.50;
+      const feeMXN_TH = feeMXN * 0.50;
+
+      const feeUSD_CK = tc > 0 ? (feeMXN_CK / tc) : 0;
+      const feeUSD_TH = tc > 0 ? (feeMXN_TH / tc) : 0;
+      const botmakerUSD = 170.0;
+
+      const totalUSD_CK = Math.round((feeUSD_CK + botmakerUSD) * 100) / 100;
+      const totalUSD_TH = Math.round((feeUSD_TH + botmakerUSD) * 100) / 100;
+      const totalUSD_Axo = Math.round((totalUSD_CK + totalUSD_TH) * 100) / 100;
+
+      const isProj = m.isProjected;
+
+      let dispCK = totalUSD_CK;
+      let dispTH = totalUSD_TH;
+      let dispCur = 'USD';
+      if (currencyView === 'ARS') {
+        dispCK = convertCurrency(totalUSD_CK, 'USD', 'ARS', mKey);
+        dispTH = convertCurrency(totalUSD_TH, 'USD', 'ARS', mKey);
+        dispCur = 'ARS';
+      }
+
+      axoCK.months[mKey] = {
+        subtotal: dispCK,
+        originalSubtotal: totalUSD_CK,
+        isProjected: isProj,
+        estado: isProj ? 'PROYECTADO' : 'REAL',
+        moneda: dispCur,
+        originalMoneda: 'USD',
+        facturacion: ckML + ckLVP,
+        fee: feeAppliedDesc,
+        botmaker: 170,
+        montoServicio: Math.round(feeUSD_CK * 100) / 100,
+        iva: 0,
+        total: totalUSD_CK
+      };
+      axoCK.totalRow += dispCK;
+
+      axoTH.months[mKey] = {
+        subtotal: dispTH,
+        originalSubtotal: totalUSD_TH,
+        isProjected: isProj,
+        estado: isProj ? 'PROYECTADO' : 'REAL',
+        moneda: dispCur,
+        originalMoneda: 'USD',
+        facturacion: thML + thLVP,
+        fee: feeAppliedDesc,
+        botmaker: 170,
+        montoServicio: Math.round(feeUSD_TH * 100) / 100,
+        iva: 0,
+        total: totalUSD_TH
+      };
+      axoTH.totalRow += dispTH;
+
+      let dispTotalAxo = totalUSD_Axo;
+      if (currencyView === 'ARS') {
+        dispTotalAxo = convertCurrency(totalUSD_Axo, 'USD', 'ARS', mKey);
+      }
+      countriesMap['MX'].monthlyTotals[mKey] = (countriesMap['MX'].monthlyTotals[mKey] || 0) + dispTotalAxo;
+      countriesMap['MX'].grandTotal += dispTotalAxo;
+    });
+
+    countriesMap['MX'].sellersMap['axo_ck'] = axoCK;
+    countriesMap['MX'].sellersMap['axo_th'] = axoTH;
+
     // Construcción de la entrada consolidada 'ALL' (Todos los mercados / Latam)
     const allMonthlyTotals: Record<string, number> = {};
     let allGrandTotal = 0;
@@ -915,7 +1061,7 @@ function MetasFacturacionContent() {
     };
 
     return countriesMap;
-  }, [rawLiquidaciones, sellersMap, currencyView, newsanSubAccounts, newsanEscalas]);
+  }, [rawLiquidaciones, sellersMap, currencyView, newsanSubAccounts, newsanEscalas, monthsList, axoCredits]);
 
   // Obtener el cliente seleccionado si existe
   const selectedSellerObj = useMemo(() => {
@@ -2326,6 +2472,7 @@ function MetasFacturacionContent() {
                 {(() => {
                   let hasRenderedNewsan = false;
                   let hasRenderedNewsanChile = false;
+                  let hasRenderedAxo = false;
                   const allSellers = Object.values(groupedData[selectedCountry]?.sellersMap || {})
                     .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
                     .sort((a, b) => a.name.localeCompare(b.name));
@@ -2334,6 +2481,7 @@ function MetasFacturacionContent() {
                     const isNewsan = seller.name.toLowerCase().includes('newsan');
                     const isNewsanAR = isNewsan && (selectedCountry === 'AR' || seller.name.toLowerCase().includes('argentina') || seller.id === '256189964' || seller.id === '989595440');
                     const isNewsanCL = isNewsan && (selectedCountry === 'CL' || seller.name.toLowerCase().includes('chile'));
+                    const isAxo = seller.name.toLowerCase().includes('axo') || seller.id === 'axo_ck' || seller.id === 'axo_th' || seller.id === '550082876' || seller.id === '765606810' || seller.id === '938333830' || seller.id === '998163061';
 
                     // =====================================================================
                     // A. BLOQUE MULTICANAL CONSOLIDADO NEWSAN CHILE (6 CUENTAS)
@@ -3006,6 +3154,491 @@ function MetasFacturacionContent() {
                               return (
                                 <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-200 font-black text-emerald-950 text-xs">
                                   {formatCurrency(totalConIVA, executiveKPIs?.currency)}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+                      );
+                    }
+
+                    // =====================================================================
+                    // C. BLOQUE MULTICANAL CONSOLIDADO GRUPO AXO MÉXICO (4 CUENTAS)
+                    // =====================================================================
+                    if (isAxo) {
+                      if (hasRenderedAxo) return null;
+                      hasRenderedAxo = true;
+
+                      const AXO_CHANNELS = [
+                        { id: '765606810', name: 'Calvin Klein Mercado Libre', brand: 'Calvin Klein', platform: 'Mercado Libre', color: 'bg-indigo-500' },
+                        { id: '938333830', name: 'Calvin Klein Liverpool', brand: 'Calvin Klein', platform: 'Liverpool', color: 'bg-pink-500' },
+                        { id: '550082876', name: 'Tommy Hilfiger Mercado Libre', brand: 'Tommy Hilfiger', platform: 'Mercado Libre', color: 'bg-blue-600' },
+                        { id: '998163061', name: 'Tommy Hilfiger Liverpool', brand: 'Tommy Hilfiger', platform: 'Liverpool', color: 'bg-red-500' },
+                      ];
+
+                      return (
+                        <tbody key="grupo_axo_mexico_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
+                          {/* 1. CABECERA GENERAL DE GRUPO AXO */}
+                          <tr className="bg-purple-100/80 border-b border-purple-200">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-purple-100/95 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-purple-950 border-r border-purple-200">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                                  <span className="text-xs uppercase tracking-wide font-black">Grupo Axo (México)</span>
+                                </div>
+                                <span className="text-[10px] bg-purple-800 text-white font-bold px-2 py-0.5 rounded shadow-xs">
+                                  Consolidado Oficial • CK & TH (ML & LVP)
+                                </span>
+                              </div>
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-purple-950 border-l border-purple-200/80 bg-purple-100/60">
+                                Grupo Axo Total
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* 2. SECCIÓN FACTURACIÓN BRUTA (GMV) POR CUENTA EN MXN */}
+                          <tr className="bg-slate-100/90 border-b border-slate-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100/95 z-10">
+                              <div className="flex items-center justify-between">
+                                <span>Facturación Bruta (GMV) por Cuenta — Pesos Mexicanos (MXN)</span>
+                                <span className="text-[9px] font-medium text-slate-500 lowercase">ventas brutas extraídas de cuentas ML y Liverpool</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {AXO_CHANNELS.map(ch => (
+                            <tr key={ch.id} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${ch.color}`}></span>
+                                  <span>{ch.name}</span>
+                                </div>
+                              </td>
+                              {filteredMonths.map(m => {
+                                const valMXN = newsanSubAccounts[ch.id]?.[m.key] || 0;
+                                return (
+                                  <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-800 font-mono text-[11px]">
+                                    {valMXN > 0 ? `$ ${Math.round(valMXN).toLocaleString('es-MX')} MXN` : '-'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+
+                          {/* Total Facturación Consolidada en MXN */}
+                          <tr className="bg-purple-50/40 hover:bg-purple-50/60 transition-colors border-b-2 border-purple-300 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold">
+                              Facturación Total Consolidada (MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-purple-200 font-black text-purple-950 font-mono text-[11px]">
+                                  {tot > 0 ? `$ ${Math.round(tot).toLocaleString('es-MX')} MXN` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 3. SECCIÓN MÉTRICAS OPERATIVAS & ESCALA COMERCIAL */}
+                          <tr className="bg-indigo-50/80 border-b border-indigo-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-indigo-950 sticky left-0 bg-indigo-50/95 z-10">
+                              <div className="flex items-center justify-between">
+                                <span>Métricas Operativas & Escala Comercial Biescala</span>
+                                <span className="text-[9px] font-medium text-indigo-700 lowercase">escala activa s/ créditos del mes (hasta 1.650 vs hasta 2.200)</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Créditos Operativos */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Créditos del mes (Unidades Operativas)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-800 font-mono text-[11px] font-bold">
+                                  {cr ? `${cr.toLocaleString('es-MX')} cr` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Escala Activa */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Escala Activa Aplicada
+                            </td>
+                            {filteredMonths.map(m => {
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const isH1650 = cr <= 1650;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-xs">
+                                  <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${isH1650 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                    {isH1650 ? '≤ 1.650 créditos' : '≤ 2.200 créditos'}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Alícuota / Fee Aplicado */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Fee Aplicado (Alícuota o Mínimo)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const isPct = bestAlic > 0 && tot * bestAlic > minFee;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-semibold text-blue-700 text-[11px]">
+                                  {isPct ? `${(bestAlic * 100).toFixed(2)}%` : `Mínimo ($${Math.round(minFee).toLocaleString('es-MX')})`}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Subtotal Honorarios Reply (MXN) */}
+                          <tr className="bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200 font-semibold">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-800 font-semibold pl-9">
+                              Subtotal Honorarios Reply (MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-200 text-slate-900 font-mono text-[11px] font-bold">
+                                  {feeMXN > 0 ? `$ ${Math.round(feeMXN).toLocaleString('es-MX')} MXN` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 4. SECCIÓN PRORRATEO 50/50 & LIQUIDACIÓN EN DÓLARES (USD) */}
+                          <tr className="bg-emerald-50/80 border-b border-emerald-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-emerald-950 sticky left-0 bg-emerald-50/95 z-10">
+                              <div className="flex items-center justify-between">
+                                <span>Prorrateo 50% Calvin Klein / 50% Tommy Hilfiger & Conversión a USD</span>
+                                <span className="text-[9px] font-medium text-emerald-700 lowercase">tipo de cambio oficial + USD 170 botmaker fijo a cada cuenta</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Tipo de Cambio Oficial */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Tipo de Cambio Oficial (MXN/USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-700 font-mono text-[11px]">
+                                  $ {tc.toFixed(2)}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Calvin Klein 50% MXN */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Calvin Klein (50% Fee MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const feeCK = feeMXN * 0.5;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-700 font-mono text-[11px]">
+                                  $ {Math.round(feeCK).toLocaleString('es-MX')} MXN
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Calvin Klein Fee USD */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Calvin Klein (Subtotal Fee USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const feeUSD_CK = tc > 0 ? (feeMXN * 0.5 / tc) : 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-800">
+                                  US$ {Math.round(feeUSD_CK).toLocaleString('en-US')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Calvin Klein Botmaker USD */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                              Calvin Klein (Botmaker Fijo USD)
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-600">
+                                US$ 170
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* Calvin Klein Total USD */}
+                          <tr className="bg-indigo-50/30 hover:bg-indigo-50/50 transition-colors border-b border-indigo-200 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-indigo-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-950 font-bold pl-9">
+                              Total Calvin Klein (Fee + Botmaker USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const feeUSD_CK = tc > 0 ? (feeMXN * 0.5 / tc) : 0;
+                              const totCK = feeUSD_CK + 170;
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-indigo-200 font-black text-indigo-950 font-mono text-[11px]">
+                                  US$ {Math.round(totCK).toLocaleString('en-US')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Tommy Hilfiger 50% MXN */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Tommy Hilfiger (50% Fee MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const feeTH = feeMXN * 0.5;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-700 font-mono text-[11px]">
+                                  $ {Math.round(feeTH).toLocaleString('es-MX')} MXN
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Tommy Hilfiger Fee USD */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Tommy Hilfiger (Subtotal Fee USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const feeUSD_TH = tc > 0 ? (feeMXN * 0.5 / tc) : 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-800">
+                                  US$ {Math.round(feeUSD_TH).toLocaleString('en-US')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Tommy Hilfiger Botmaker USD */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                              Tommy Hilfiger (Botmaker Fijo USD)
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-600">
+                                US$ 170
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* Tommy Hilfiger Total USD */}
+                          <tr className="bg-blue-50/40 hover:bg-blue-50/60 transition-colors border-b-2 border-blue-300 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold pl-9">
+                              Total Tommy Hilfiger (Fee + Botmaker USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const feeUSD_TH = tc > 0 ? (feeMXN * 0.5 / tc) : 0;
+                              const totTH = feeUSD_TH + 170;
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 font-mono text-[11px]">
+                                  US$ {Math.round(totTH).toLocaleString('en-US')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 5. SECCIÓN CONSOLIDADO FINAL GRUPO AXO */}
+                          {/* Subtotal Fee Reply USD */}
+                          <tr className="bg-purple-50/50 hover:bg-purple-50/70 transition-colors border-b border-purple-200 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold">
+                              Subtotal Total Fee Reply (USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const feeUSD = tc > 0 ? (feeMXN / tc) : 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-purple-200 font-bold text-purple-900 font-mono text-[11px]">
+                                  US$ {Math.round(feeUSD).toLocaleString('en-US')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Total Botmaker Consolidado */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              Botmaker Total Consolidado (USD 170 CK + USD 170 TH)
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-700 font-bold">
+                                US$ 340
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* Total Liquidación Grupo Axo USD */}
+                          <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors border-b-2 border-emerald-300 font-black">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs">
+                              Total Factura Grupo Axo (USD) — 0% IVA
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[m.key] || 0), 0);
+                              const cr = axoCredits[m.key] ?? (m.key >= '2026-10' ? 1306 : 1156);
+                              const minFee = cr <= 1650 ? 120000 : 140000;
+                              let bestAlic = 0;
+                              if (tot >= 20000000) bestAlic = 0.0080;
+                              else if (tot >= 17000000) bestAlic = 0.0090;
+                              else if (tot >= 15000000) bestAlic = 0.0100;
+                              else if (tot >= 13500000) bestAlic = 0.0110;
+                              else if (tot >= 12000000) bestAlic = 0.0120;
+                              else if (tot >= 11000000) bestAlic = 0.0130;
+                              else if (tot >= 9500000) bestAlic = 0.0150;
+                              else if (tot >= 8000000) bestAlic = 0.0175;
+
+                              const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const feeUSD = tc > 0 ? (feeMXN / tc) : 0;
+                              const totalAxo = feeUSD + 340;
+                              return (
+                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-300 font-black text-emerald-950 text-xs font-mono">
+                                  US$ {Math.round(totalAxo).toLocaleString('en-US')}
                                 </td>
                               );
                             })}

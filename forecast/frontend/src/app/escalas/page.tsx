@@ -62,17 +62,33 @@ export default function EscalasPage() {
       }
       const dbData = allEscalas;
 
-      // Fetch liquidaciones to highlight applied tiers y facturación consolidada de Newsan ML
-      const [{ data: liqData }, { data: factNewsanData }] = await Promise.all([
+      // Fetch liquidaciones to highlight applied tiers y facturación consolidada de Newsan ML y Grupo Axo
+      const [{ data: liqData }, { data: factNewsanData }, { data: metricasAxoData }] = await Promise.all([
         supabase.from('liquidaciones').select('*'),
-        supabase.from('facturacion').select('seller_id, periodo, valor_facturado').in('seller_id', [256189964, 308973138, 256324891])
+        supabase.from('facturacion').select('seller_id, periodo, valor_facturado').in('seller_id', [256189964, 308973138, 256324891, 765606810, 938333830, 550082876, 998163061]),
+        supabase.from('fact_metricas_operativas').select('*').eq('id_cliente', 18).eq('tipo_metrica', 'CREDITOS')
       ]);
 
       const newsanTotalMap: Record<string, number> = {};
+      const axoTotalMap: Record<string, number> = {};
+      const axoIds = ['765606810', '938333830', '550082876', '998163061'];
       if (factNewsanData) {
         factNewsanData.forEach((f: any) => {
           const p = f.periodo;
-          newsanTotalMap[p] = (newsanTotalMap[p] || 0) + (Number(f.valor_facturado) || 0);
+          const sId = String(f.seller_id);
+          if (['256189964', '308973138', '256324891'].includes(sId)) {
+            newsanTotalMap[p] = (newsanTotalMap[p] || 0) + (Number(f.valor_facturado) || 0);
+          }
+          if (axoIds.includes(sId)) {
+            axoTotalMap[p] = (axoTotalMap[p] || 0) + (Number(f.valor_facturado) || 0);
+          }
+        });
+      }
+
+      const axoCreditsMap: Record<string, number> = {};
+      if (metricasAxoData) {
+        metricasAxoData.forEach((m: any) => {
+          axoCreditsMap[m.periodo] = Number(m.cantidad) || 0;
         });
       }
 
@@ -402,6 +418,54 @@ export default function EscalasPage() {
         });
       }
 
+      // Soporte para Grupo Axo Consolidado México (seller_id 550082876)
+      if (!liqMap['550082876']) liqMap['550082876'] = {};
+      const axoPeriods = allEscalas
+        .filter((e: any) => String(e.seller_id) === '550082876')
+        .map((e: any) => e.periodo);
+      const uniqueAxoPeriods = Array.from(new Set(axoPeriods));
+
+      uniqueAxoPeriods.forEach((period: any) => {
+        const date = new Date(period + "T12:00:00");
+        let mStr = date.toLocaleDateString("es-AR", { month: "short", year: "numeric" });
+        mStr = mStr.charAt(0).toUpperCase() + mStr.slice(1);
+
+        const totMXN = axoTotalMap[period] || 0;
+        const credits = axoCreditsMap[period] ?? (period >= '2026-10-01' ? 1306 : 1156);
+        const isHasta1650 = credits <= 1650;
+        const targetPrefix = isHasta1650 ? 'HASTA_1650' : 'HASTA_2200';
+        const minFee = isHasta1650 ? 120000 : 140000;
+
+        let bestAlic = 0;
+        if (totMXN >= 20000000) bestAlic = 0.0080;
+        else if (totMXN >= 17000000) bestAlic = 0.0090;
+        else if (totMXN >= 15000000) bestAlic = 0.0100;
+        else if (totMXN >= 13500000) bestAlic = 0.0110;
+        else if (totMXN >= 12000000) bestAlic = 0.0120;
+        else if (totMXN >= 11000000) bestAlic = 0.0130;
+        else if (totMXN >= 9500000) bestAlic = 0.0150;
+        else if (totMXN >= 8000000) bestAlic = 0.0175;
+
+        let appliedCargo = `MINIMO_${targetPrefix}`;
+        let appliedAlic = 0;
+        let subtotalMXN = minFee;
+
+        if (bestAlic > 0 && totMXN * bestAlic > minFee) {
+          appliedCargo = `PORCENTUAL_${targetPrefix}`;
+          appliedAlic = bestAlic;
+          subtotalMXN = Math.round(totMXN * bestAlic);
+        }
+
+        liqMap['550082876'][mStr] = {
+          tipo_cargo: appliedCargo,
+          alicuota: appliedAlic,
+          valor_facturado: totMXN,
+          subtotal_mercado_libre: subtotalMXN,
+          credits: credits,
+          estado: period <= '2026-09-01' ? 'REAL' : 'PROYECTADO'
+        };
+      });
+
       const sellersGroups: Record<string, any> = {};
       const globalMonthsSet = new Set<string>();
 
@@ -415,7 +479,11 @@ export default function EscalasPage() {
         if (!sellersGroups[sId]) {
           sellersGroups[sId] = {
             sellerId: sId,
-            sellerName: String(sId) === '256189964' ? 'Newsan (Mercado Libre - Consolidado Total)' : (sellersMap[sId] || `Seller ${sId}`),
+            sellerName: String(sId) === '256189964' 
+              ? 'Newsan (Mercado Libre - Consolidado Total)' 
+              : String(sId) === '550082876'
+              ? 'Grupo Axo (Consolidado México - CK y TH)'
+              : (sellersMap[sId] || `Seller ${sId}`),
             pais: row.pais,
             moneda: row.moneda,
             tiersByMonth: {}
@@ -530,10 +598,18 @@ export default function EscalasPage() {
       monthsStr.forEach((m) => {
         if (seller.tiersByMonth[m]) {
           seller.tiersByMonth[m].sort((a: any, b: any) => {
-            if (a.tipoCargo === 'MINIMO' && b.tipoCargo !== 'MINIMO') return -1;
-            if (b.tipoCargo === 'MINIMO' && a.tipoCargo !== 'MINIMO') return 1;
+            const isAMin = a.tipoCargo.startsWith('MINIMO');
+            const isBMin = b.tipoCargo.startsWith('MINIMO');
+            if (isAMin && !isBMin) return -1;
+            if (isBMin && !isAMin) return 1;
+            if (isAMin && isBMin) {
+              return a.monto - b.monto;
+            }
             if (a.tipoCargo === 'SESIONES' && b.tipoCargo === 'SESIONES') {
               return a.alicuota - b.alicuota;
+            }
+            if (a.tipoCargo !== b.tipoCargo) {
+              return a.tipoCargo.localeCompare(b.tipoCargo);
             }
             return b.alicuota - a.alicuota;
           });
@@ -718,16 +794,26 @@ export default function EscalasPage() {
                       const alicuotaLabel = 
                         cellData.tipoCargo === 'MINIMO' 
                           ? 'MÍN' 
+                          : cellData.tipoCargo === 'MINIMO_HASTA_1650'
+                          ? 'MÍN (≤1.650)'
+                          : cellData.tipoCargo === 'MINIMO_HASTA_2200'
+                          ? 'MÍN (≤2.200)'
                           : cellData.tipoCargo === 'SESIONES'
                           ? `${Math.round(cellData.alicuota).toLocaleString('es-AR')} ses`
-                          : formatPercent(cellData.alicuota);
+                          : formatPercent(cellData.alicuota) + (cellData.tipoCargo.includes('1650') ? ' (≤1.650)' : cellData.tipoCargo.includes('2200') ? ' (≤2.200)' : '');
 
                       const isScaleProjected = cellData.estado === 'PROYECTADO';
                       const liq = row.liquidaciones[m];
                       let isApplied = false;
                       let isLiqProjected = false;
                       if (liq) {
-                        if (liq.tipo_cargo === 'MINIMO' && cellData.tipoCargo === 'MINIMO') {
+                        if (liq.tipo_cargo === cellData.tipoCargo) {
+                          if (cellData.tipoCargo.startsWith('MINIMO')) {
+                            isApplied = true;
+                          } else if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.00001) {
+                            isApplied = true;
+                          }
+                        } else if (liq.tipo_cargo === 'MINIMO' && cellData.tipoCargo === 'MINIMO') {
                           isApplied = true;
                         } else if (liq.tipo_cargo === 'PORCENTUAL' && cellData.tipoCargo === 'PORCENTUAL') {
                           if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.00001) {
@@ -795,16 +881,22 @@ export default function EscalasPage() {
                           </div>
 
                           {isApplied && (
-                            <div className="absolute hidden group-hover/cell:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl z-50 pointer-events-none">
+                            <div className="absolute hidden group-hover/cell:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl z-50 pointer-events-none">
                               <div className="font-semibold mb-1.5 text-gray-200">{row.sellerName} <span className="text-gray-400 font-normal">| {m}</span></div>
                               <div className="flex justify-between mt-2">
                                 <span className="text-gray-400">
-                                  {String(row.sellerId) === '256189964' ? 'Facturación Consolidada:' : 'Facturación:'}
+                                  {String(row.sellerId) === '256189964' || String(row.sellerId) === '550082876' ? 'Facturación Consolidada:' : 'Facturación:'}
                                 </span>
                                 <span className="font-medium">{formatCurrency(liq.valor_facturado, row.sellerName.includes('Colombia') ? 'COP' : row.moneda)}</span>
                               </div>
+                              {liq.credits && (
+                                <div className="flex justify-between mt-1 text-[11px] text-amber-300">
+                                  <span>Créditos del mes:</span>
+                                  <span className="font-semibold">{liq.credits} unidades</span>
+                                </div>
+                              )}
                               <div className="flex justify-between mt-1">
-                                <span className="text-gray-400" title="Subtotal antes de Botmaker e IVA">Subtotal ML ({alicuotaLabel}):</span>
+                                <span className="text-gray-400" title="Subtotal antes de Botmaker e IVA">Subtotal ({alicuotaLabel}):</span>
                                 <span className={`font-bold ${isLiqProjected ? 'text-orange-300' : 'text-blue-300'}`}>
                                   {formatCurrency(liq.subtotal_mercado_libre, row.sellerName.includes('Colombia') || row.moneda === 'USD' ? 'USD' : row.moneda)}
                                 </span>

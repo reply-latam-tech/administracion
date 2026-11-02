@@ -138,6 +138,11 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'USD';
     reglaLiquidacion = 'Las 6 cuentas de Newsan Chile (Mercado Libre, Falabella, Ripley, Walmart, Paris y Kitchen Center) registran su facturación bruta (GMV) en Pesos Chilenos (CLP) y se convierten mensualmente a USD según el Tipo de Cambio oficial. La suma total consolidada se cruza con la escala comercial: si el 1% es menor a $4.000 USD se cobra el cargo mínimo garantizado de $4.000 USD; si supera esa cifra, se cobra el 1% de la facturación consolidada en USD. Se factura y cobra en USD sin IVA (exportación de servicios a Chile).';
     metodoActualizacion = 'Escala fija consolidada en USD con piso mínimo de $4.000 USD o 1% s/ GMV en USD.';
+  } else if (['765606810', '938333830', '550082876', '998163061'].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('axo'))) {
+    // Grupo Axo México (Calvin Klein ML/LVP y Tommy Hilfiger ML/LVP)
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'La base de cálculo es la facturación consolidada en MXN de 4 cuentas (Calvin Klein ML y Liverpool + Tommy Hilfiger ML y Liverpool). Según la cantidad de créditos operativos del mes (≤1.650 o ≤2.200) se cruza con la escala comercial correspondiente en MXN (mínimo de MXN $120.000 o MXN $140.000, o alícuota del 1,75% al 0,80%). El fee total en MXN se prorratea 50% para CK y 50% para TH, se convierte a USD según el Tipo de Cambio oficial del mes y se suma el fee fijo de Botmaker ($170 USD para cada cuenta = $340 USD total). Facturación final 100% en USD sin IVA (0% IVA).';
+    metodoActualizacion = 'Escala dinámica por tramos de créditos en MXN, prorrateo 50/50 y cobro en USD + Botmaker USD 170 c/u.';
   } else if (p === 'CL') {
     monedaCobro = 'CLP';
     reglaLiquidacion = 'Facturación en Pesos Chilenos (CLP) cruzada con la escala pactada por canal (Falabella, ML, Paris, etc.). Cobro en CLP.';
@@ -151,7 +156,7 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
 
   // 2. Moneda de la escala comercial
   const newsanChileIds = ['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'];
-  let monedaEscala = escalaMoneda || (['941943480', '964690754', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('newsan') && p === 'CL') ? 'USD' : (p === 'CL' ? 'CLP' : 'ARS'));
+  let monedaEscala = escalaMoneda || (['941943480', '964690754', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('newsan') && p === 'CL') ? 'USD' : (['765606810', '938333830', '550082876', '998163061'].includes(sid) || p === 'MX' ? 'MXN' : (p === 'CL' ? 'CLP' : 'ARS')));
 
   return {
     monedaCobro,
