@@ -31,7 +31,8 @@ const OCTUBRE_REAL = [
   { id: 514936764, name: 'Jansport Argentina', val: 47401567 },
   { id: 936476007, name: 'Salvita', val: 0 },
   { id: 3693335392, name: 'Forbasse', val: 3055607 },
-  { id: 1980619742, name: 'Zaz', val: 40714427 }
+  { id: 1980619742, name: 'Zaz', val: 40714427 },
+  { id: 26458937, name: 'GEAT', val: 1122084 }
 ];
 
 async function main() {
