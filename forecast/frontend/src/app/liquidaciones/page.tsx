@@ -421,7 +421,8 @@ function MetasFacturacionContent() {
         return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
       }
       if (currency === 'USD') {
-        return `US$ ${Math.round(val).toLocaleString('en-US')}`;
+        const hasDecimals = val % 1 !== 0;
+        return `US$ ${val.toLocaleString('en-US', { minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 })}`;
       }
       if (currency === 'COP') {
         return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
@@ -898,12 +899,13 @@ function MetasFacturacionContent() {
         feeVal = alicuotaVal;
       }
 
-      // Reglas comerciales Botmaker y Café Martínez
+      // Reglas comerciales Botmaker, Cuentas del Exterior y Café Martínez
       let botmakerVal = Number(row.botmaker) || 0;
       let descuentoVal = 0;
       const isCafeMartinez = sId === '1088146491' || sName.toLowerCase().includes('cafe martinez');
+      const isExterior = cCode !== 'AR' || rowCurrency === 'USD';
 
-      // 1. Ajuste de Markup Botmaker al 25% para periodos a partir de 2026-10
+      // 1. Ajuste de Markup Botmaker al 25% para periodos a partir de 2026-10 (en ARS)
       // Reply factura $206.250 (165k base * 1.25) y $410.000 (Soda Stream 328k base * 1.25)
       if (mKey >= '2026-10') {
         if (isCafeMartinez) {
@@ -917,16 +919,37 @@ function MetasFacturacionContent() {
             botmakerVal = Math.round((botmakerVal / 1.20) * 1.25 * 100) / 100;
           }
         }
+      }
 
-        // Si es cuenta AR estándar con Botmaker (no Newsan ni cuentas en USD ni Café Martínez), recalcular subtotal, IVA y total
-        if (cCode === 'AR' && rowCurrency === 'ARS' && !sName.toLowerCase().includes('newsan') && !isCafeMartinez) {
-          subtotalVal = montoServicio + botmakerVal;
-          ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
-          totalVal = subtotalVal + ivaVal;
+      // 2. Cuentas del exterior (CO, MX, CL, US o facturadas en USD):
+      // El fee de Botmaker viene en Pesos Argentinos (ARS) y se debe convertir a Dólares (USD)
+      // según el Tipo de Cambio oficial mensual de ARS.
+      // Se le suma al Subtotal en USD y queda el Total Factura en USD (sin IVA).
+      if (isExterior) {
+        if (botmakerVal > 0) {
+          const tcArs = getRateToUSD('ARS', mKey) || 1550.0;
+          const botmakerUSD = tcArs > 0 ? Math.round((botmakerVal / tcArs) * 100) / 100 : 0;
+          botmakerVal = botmakerUSD;
+          subtotalVal = Math.round((montoServicio + botmakerUSD) * 100) / 100;
+          ivaVal = 0; // Cuentas del exterior no pagan IVA argentino
+          totalVal = subtotalVal;
+        } else {
+          subtotalVal = montoServicio;
+          ivaVal = 0;
+          totalVal = subtotalVal;
+        }
+      } else {
+        // Cuentas locales de Argentina (ARS):
+        if (mKey >= '2026-10' && !sName.toLowerCase().includes('newsan') && !isCafeMartinez) {
+          if (botmakerVal > 0) {
+            subtotalVal = montoServicio + botmakerVal;
+            ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+            totalVal = subtotalVal + ivaVal;
+          }
         }
       }
 
-      // 2. Reglas comerciales oficiales para Café Martínez:
+      // 3. Reglas comerciales oficiales para Café Martínez:
       // - "No se le cobra Botmaker" (botmakerVal = 0 bajo toda circunstancia)
       // - "Se le debe realizar un descuento del 20% todos los meses" sobre el subtotal
       if (isCafeMartinez) {
@@ -1345,6 +1368,15 @@ function MetasFacturacionContent() {
         montoServicio += feeConsolidado;
         subtotal += feeConsolidado;
         total += feeConsolidado;
+
+        // Si Newsan Chile ML tiene Botmaker (en USD), sumarlo al subtotal y total de Chile
+        const newsanML = sellers.find(x => x.name.toLowerCase().includes('newsan chile ml') || x.id === '942368053');
+        const bmNewsanChile = newsanML?.months[m.key]?.botmaker || 0;
+        if (bmNewsanChile > 0) {
+          botmaker += bmNewsanChile;
+          subtotal += bmNewsanChile;
+          total += bmNewsanChile;
+        }
 
         sellers.forEach(s => {
           if (!s.name.toLowerCase().includes('newsan')) {
