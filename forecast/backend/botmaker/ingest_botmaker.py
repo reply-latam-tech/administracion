@@ -87,6 +87,13 @@ def extract_period(headers):
                 pass
     return None
 
+def get_next_month(period_str):
+    # La factura de Botmaker del mes N se cobra en la liquidación del mes N+1 (mes vencido)
+    dt = datetime.strptime(period_str, "%Y-%m-%d")
+    year = dt.year + (1 if dt.month == 12 else 0)
+    month = 1 if dt.month == 12 else dt.month + 1
+    return f"{year:04d}-{month:02d}-01"
+
 def process_file(filepath, sellers_map):
     print(f"Procesando {filepath}...")
     
@@ -94,12 +101,13 @@ def process_file(filepath, sellers_map):
         reader = csv.DictReader(f, delimiter=';')
         headers = reader.fieldnames
         
-        periodo = extract_period(headers)
-        if not periodo:
+        periodo_consumo = extract_period(headers)
+        if not periodo_consumo:
             print("ERROR: No se pudo detectar el periodo (mes y año) en las columnas de Botmaker.")
             return False
             
-        print(f"Período detectado: {periodo}")
+        periodo_liquidacion = get_next_month(periodo_consumo)
+        print(f"Período de consumo: {periodo_consumo} -> Liquidación a facturar: {periodo_liquidacion}")
         
         rows_to_upsert = []
         
@@ -114,7 +122,7 @@ def process_file(filepath, sellers_map):
             norm_proj = normalize_name(child_project_id)
             seller_id = sellers_map.get(norm_name) or sellers_map.get(norm_proj)
             
-            # Sumar SOLO el Botmaker platform fee + 20%
+            # Sumar SOLO el Botmaker platform fee (la vista de liquidaciones añade el 20% de markup)
             total_billed = 0.0
             raw_data = {}
             
@@ -130,21 +138,23 @@ def process_file(filepath, sellers_map):
                     except:
                         pass
                         
-            rows_to_upsert.append({
-                "periodo": periodo,
+            # Insertar registro tanto para el mes de consumo como para el mes de liquidación
+            base_row = {
                 "seller_id": seller_id,
                 "child_project_id": child_project_id,
                 "child_project_name": row.get("Child Project Name", ""),
                 "total_billed": round(total_billed, 2),
                 "raw_data": raw_data
-            })
+            }
+            rows_to_upsert.append({ **base_row, "periodo": periodo_consumo })
+            rows_to_upsert.append({ **base_row, "periodo": periodo_liquidacion })
             
         if rows_to_upsert:
             response = supabase.table("botmaker_consumos").upsert(
                 rows_to_upsert, 
                 on_conflict="periodo,child_project_id"
             ).execute()
-            print(f"OK: Se guardaron/actualizaron {len(rows_to_upsert)} registros en Supabase.")
+            print(f"OK: Se guardaron/actualizaron {len(rows_to_upsert)} registros en Supabase (consumo + liquidación).")
             return True
         else:
             print("WARN: No se encontraron filas de Child Accounts para procesar.")
