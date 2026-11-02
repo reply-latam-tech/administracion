@@ -12,8 +12,34 @@ const MELI_CONFIG = {
   CLIENT_SECRET: "lXepK3wntoXfaoBUiTYi9ASqpF2lgeBB",
 };
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://hnowniqxrtxrrujgnhqj.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let SUPABASE_URL = process.env.SUPABASE_URL || 'https://hnowniqxrtxrrujgnhqj.supabase.co';
+let SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_KEY) {
+  try {
+    const fsSync = require('fs');
+    const path = require('path');
+    const envPaths = [
+      path.resolve(__dirname, '../frontend/.env.local'),
+      path.resolve(__dirname, '../../frontend/.env.local'),
+      path.resolve(__dirname, '../.env')
+    ];
+    for (const p of envPaths) {
+      if (fsSync.existsSync(p)) {
+        const lines = fsSync.readFileSync(p, 'utf8').split('\n');
+        for (const line of lines) {
+          const [k, ...v] = line.split('=');
+          if (k && v.length) {
+            const key = k.trim();
+            const val = v.join('=').trim().replace(/^["']|["']$/g, '');
+            if (key === 'SUPABASE_SERVICE_ROLE_KEY' && !SUPABASE_KEY) SUPABASE_KEY = val;
+            if (key === 'NEXT_PUBLIC_SUPABASE_URL' && (!SUPABASE_URL || SUPABASE_URL.includes('hnowniqxrtxrrujgnhqj'))) SUPABASE_URL = val;
+          }
+        }
+      }
+    }
+  } catch (e) {}
+}
 
 function base64url(str) {
   return Buffer.from(str).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -138,8 +164,10 @@ async function main() {
     const firestoreToken = await getFirestoreToken();
     
     console.log("2. Fetching active sellers from Supabase...");
-    const sellers = await getActiveSellers();
-    console.log(`Found ${sellers.length} sellers.`);
+    const allSellers = await getActiveSellers();
+    const targetSellerArg = process.argv.slice(2).find(arg => /^\d+$/.test(arg));
+    const sellers = targetSellerArg ? allSellers.filter(s => String(s.id_seller) === targetSellerArg) : allSellers;
+    console.log(`Found ${allSellers.length} total sellers. Processing ${sellers.length} seller(s)${targetSellerArg ? ' (filtered by ID ' + targetSellerArg + ')' : ''}.`);
     
     // Configurar rango de fechas (últimos 7 días hasta hoy)
     const toDate = new Date();
@@ -237,40 +265,42 @@ async function main() {
         console.log(`--> ✅ Completado! Órdenes upserted: ${totalInserted}`);
     }
     
-    // 3. Sincronizar automáticamente la proyección fin de mes con public.facturacion
-    await syncFacturacionProyectada();
+    // 3. Sincronizar automáticamente la proyección fin de mes con public.facturacion (si aplica)
+    await syncFacturacionProyectada(targetSellerArg);
     
   } catch (err) {
     console.error("Error global:", err);
   }
 }
 
-async function syncFacturacionProyectada() {
+async function syncFacturacionProyectada(targetSellerId = null) {
     console.log(`\n===========================================`);
-    console.log("3. Sincronizando proyecciones con public.facturacion (Camino 2)...");
+    console.log(`3. Sincronizando proyecciones con public.facturacion (Camino 2)${targetSellerId ? ' para seller ' + targetSellerId : ''}...`);
 
-    // 1. Intentar llamar a la RPC en Supabase (si fue creada en Postgres)
-    try {
-        const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/sincronizar_facturacion_proyectada`, {
-            method: 'POST',
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({})
-        });
+    // 1. Intentar llamar a la RPC en Supabase (si fue creada en Postgres y no es seller individual)
+    if (!targetSellerId) {
+        try {
+            const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/sincronizar_facturacion_proyectada`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
 
-        if (rpcRes.ok) {
-            const rpcData = await rpcRes.json();
-            console.log("--> ✅ Sincronización exitosa vía RPC Postgres:", rpcData);
-            return;
-        } else {
-            const errTxt = await rpcRes.text();
-            console.log(`--> ℹ️ RPC Postgres no disponible (${rpcRes.status}): ${errTxt.slice(0, 80)}. Ejecutando sincronización directa vía API REST...`);
+            if (rpcRes.ok) {
+                const rpcData = await rpcRes.json();
+                console.log("--> ✅ Sincronización exitosa vía RPC Postgres:", rpcData);
+                return;
+            } else {
+                const errTxt = await rpcRes.text();
+                console.log(`--> ℹ️ RPC Postgres no disponible (${rpcRes.status}): ${errTxt.slice(0, 80)}. Ejecutando sincronización directa vía API REST...`);
+            }
+        } catch (e) {
+            console.log(`--> ⚠️ Error al invocar RPC: ${e.message}. Ejecutando sincronización directa vía API REST...`);
         }
-    } catch (e) {
-        console.log(`--> ⚠️ Error al invocar RPC: ${e.message}. Ejecutando sincronización directa vía API REST...`);
     }
 
     // 2. Fallback nativo vía REST (garantiza funcionamiento sin depender de migración manual)
@@ -325,7 +355,8 @@ async function syncFacturacionProyectada() {
             }
         );
         if (!factRes.ok) throw new Error("Error consultando facturacion: " + await factRes.text());
-        const facts = await factRes.json();
+        const rawFacts = await factRes.json();
+        const facts = targetSellerId ? rawFacts.filter(f => String(f.seller_id) === String(targetSellerId)) : rawFacts;
 
         let updatedCount = 0;
         for (const f of facts) {

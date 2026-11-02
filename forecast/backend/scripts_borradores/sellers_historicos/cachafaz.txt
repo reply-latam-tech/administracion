@@ -1,0 +1,17 @@
+dim_sellers
+
+id_seller: 685551699	
+nombre_seller: Cachafaz
+pais: AR
+moneda: ARS
+estado: TRUE
+cobrar_botmaker: TRUE
+frecuencia_actualizacion: MENSUAL
+
+facturacion
+
+10/2026
+3.686.440
+
+--
+
