@@ -39,6 +39,12 @@ const KNOWN_LIFECYCLE_DATES: Record<string, { fecha_ingreso?: string; fecha_egre
     fecha_egreso: '2026-09-30',
     estado: false,
     motivo: 'Baja operativa acordada con Trademedical Chile SPA al 30 de septiembre de 2026'
+  },
+  '173637868': {
+    fecha_ingreso: '2026-07-01',
+    fecha_egreso: '2026-09-30',
+    estado: false,
+    motivo: 'Baja del cliente al 30 de septiembre de 2026 (último día activo)'
   }
 };
 

@@ -171,9 +171,10 @@ export default function FacturacionPage() {
       const moneda = s.moneda || getDefaultCurrencyForCountry(cCode);
       const sid = String(s.id_seller);
       const isTrademedical = sid === '983474076' || s.nombre_seller?.toLowerCase().includes('trademedical');
-      const fechaIngreso = s.fecha_ingreso || (isTrademedical ? '2026-08-01' : null);
-      const fechaEgreso = s.fecha_egreso || (isTrademedical ? '2026-09-30' : null);
-      const isBaja = s.estado === false || isTrademedical || (!!fechaEgreso && new Date(fechaEgreso + 'T23:59:59') <= new Date());
+      const isAbarka = sid === '173637868' || s.nombre_seller?.toLowerCase().includes('abarka');
+      const fechaIngreso = s.fecha_ingreso || (isTrademedical ? '2026-08-01' : isAbarka ? '2026-07-01' : null);
+      const fechaEgreso = s.fecha_egreso || (isTrademedical || isAbarka ? '2026-09-30' : null);
+      const isBaja = s.estado === false || isTrademedical || isAbarka || (!!fechaEgreso && new Date(fechaEgreso + 'T23:59:59') <= new Date());
 
       sellersMap[s.id_seller] = {
         id: s.id_seller,

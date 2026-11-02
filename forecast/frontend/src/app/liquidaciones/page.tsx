@@ -335,7 +335,8 @@ function MetasFacturacionContent() {
           }
 
           const isTrademedical = String(s.id_seller) === '983474076' || s.nombre_seller?.toLowerCase().includes('trademedical');
-          const isBaja = s.estado === false || isTrademedical;
+          const isAbarka = String(s.id_seller) === '173637868' || s.nombre_seller?.toLowerCase().includes('abarka');
+          const isBaja = s.estado === false || isTrademedical || isAbarka;
 
           sellersMeta[s.id_seller] = {
             code: countryCode,

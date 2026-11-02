@@ -28,9 +28,10 @@ export default function EscalasPage() {
         sellersData.forEach((s) => {
           sellersMap[s.id_seller] = s.nombre_seller;
           const isTrademedical = String(s.id_seller) === '983474076' || s.nombre_seller?.toLowerCase().includes('trademedical');
+          const isAbarka = String(s.id_seller) === '173637868' || s.nombre_seller?.toLowerCase().includes('abarka');
           sellersMeta[s.id_seller] = {
-            isBaja: s.estado === false || isTrademedical,
-            fechaEgreso: s.fecha_egreso || (isTrademedical ? '2026-09-30' : null)
+            isBaja: s.estado === false || isTrademedical || isAbarka,
+            fechaEgreso: s.fecha_egreso || (isTrademedical || isAbarka ? '2026-09-30' : null)
           };
         });
       }
