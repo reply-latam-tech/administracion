@@ -2629,7 +2629,7 @@ function MetasFacturacionContent() {
                         <tbody key="newsan_chile_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                           {/* 1. CABECERA GENERAL DE NEWSAN CHILE */}
                           <tr className="bg-blue-100/80 border-b border-blue-200">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100/95 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-blue-950 border-r border-blue-200">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-blue-950 border-r border-blue-200">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
@@ -2649,7 +2649,7 @@ function MetasFacturacionContent() {
 
                           {/* 2. SECCIÓN VENTAS BRUTAS (GMV) POR CANAL EN CLP */}
                           <tr className="bg-slate-100/90 border-b border-slate-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10">
                               <div className="flex items-center justify-between">
                                 <span>Facturación Bruta (GMV) por Canal — Pesos Chilenos (CLP)</span>
                                 <span className="text-[9px] font-medium text-slate-500 lowercase">ventas brutas extraídas de canales</span>
@@ -2659,7 +2659,7 @@ function MetasFacturacionContent() {
 
                           {CHILE_CHANNELS.map(ch => (
                             <tr key={ch.id} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                                 <div className="flex items-center gap-2">
                                   <span className={`w-1.5 h-1.5 rounded-full ${ch.color}`}></span>
                                   <span>{ch.name}</span>
@@ -2678,7 +2678,7 @@ function MetasFacturacionContent() {
 
                           {/* Facturación Total en CLP */}
                           <tr className="bg-slate-50 hover:bg-slate-100/60 transition-colors border-b-2 border-slate-300 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-900 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-900 font-bold border-r border-slate-200">
                               Total Facturación Bruta (CLP)
                             </td>
                             {filteredMonths.map(m => {
@@ -2693,7 +2693,7 @@ function MetasFacturacionContent() {
 
                           {/* 3. SECCIÓN CONVERSIÓN A USD & TIPO DE CAMBIO */}
                           <tr className="bg-indigo-50/70 border-b border-indigo-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-indigo-950 sticky left-0 bg-indigo-50/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-indigo-950 sticky left-0 bg-indigo-50 z-10">
                               <div className="flex items-center justify-between">
                                 <span>Conversión Multimoneda & Tipo de Cambio Oficial (CLP / USD)</span>
                                 <span className="text-[9px] font-medium text-indigo-700 lowercase">cotización oficial mensual pactada</span>
@@ -2703,7 +2703,7 @@ function MetasFacturacionContent() {
 
                           {/* Tipo de Cambio Oficial */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-900 font-semibold pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-900 font-semibold pl-9 border-r border-slate-100">
                               Tipo de Cambio Oficial (CLP / USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -2719,7 +2719,7 @@ function MetasFacturacionContent() {
                           {/* Desglose por canal en USD */}
                           {CHILE_CHANNELS.map(ch => (
                             <tr key={`usd_${ch.id}`} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                                 <span>{ch.name} (USD)</span>
                               </td>
                               {filteredMonths.map(m => {
@@ -2743,7 +2743,7 @@ function MetasFacturacionContent() {
 
                           {/* Facturación Total en USD */}
                           <tr className="bg-indigo-50/40 hover:bg-indigo-50/60 transition-colors border-b-2 border-indigo-300 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-indigo-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-950 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-indigo-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-950 font-bold border-r border-indigo-200">
                               Facturación Total Consolidada (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -2760,7 +2760,7 @@ function MetasFacturacionContent() {
 
                           {/* 4. SECCIÓN ESCALA COMERCIAL & FEE A COBRAR (USD) */}
                           <tr className="bg-emerald-50/80 border-b border-emerald-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-emerald-950 sticky left-0 bg-emerald-50/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-emerald-950 sticky left-0 bg-emerald-50 z-10">
                               <div className="flex items-center justify-between">
                                 <span>Liquidación Comercial & Honorarios Reply (USD)</span>
                                 <span className="text-[9px] font-medium text-emerald-700 lowercase">mínimo contractual US$ 4.000 o 1% s/ GMV en USD</span>
@@ -2770,7 +2770,7 @@ function MetasFacturacionContent() {
 
                           {/* Cálculo 1% s/ GMV USD */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Cálculo Alícuota 1% s/ GMV en USD
                             </td>
                             {filteredMonths.map(m => {
@@ -2788,7 +2788,7 @@ function MetasFacturacionContent() {
 
                           {/* Mínimo Contractual */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Mínimo Comercial Contractual
                             </td>
                             {filteredMonths.map(m => (
@@ -2800,7 +2800,7 @@ function MetasFacturacionContent() {
 
                           {/* Regla / Alícuota Aplicada */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-semibold pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-semibold pl-9 border-r border-slate-100">
                               Alícuota / Concepto Aplicado
                             </td>
                             {filteredMonths.map(m => {
@@ -2821,14 +2821,14 @@ function MetasFacturacionContent() {
 
                           {/* Desglose de Fee Prorrateado por Canal */}
                           <tr className="bg-slate-50/80 border-b border-slate-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[9.5px] uppercase tracking-wider text-slate-600 sticky left-0 bg-slate-50/95 z-10 pl-9">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[9.5px] uppercase tracking-wider text-slate-600 sticky left-0 bg-slate-100 z-10 pl-9">
                               Prorrateo de Fee por Canal (según % de ventas brutas)
                             </td>
                           </tr>
 
                           {CHILE_CHANNELS.map(ch => (
                             <tr key={`fee_${ch.id}`} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                              <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 text-xs pl-12">
+                              <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 text-xs pl-12 border-r border-slate-100">
                                 <span>Fee {ch.name}</span>
                               </td>
                               {filteredMonths.map(m => {
@@ -2850,7 +2850,7 @@ function MetasFacturacionContent() {
 
                           {/* Subtotal Honorarios Reply */}
                           <tr className="bg-blue-100/70 hover:bg-blue-100 transition-colors border-b border-blue-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black border-r border-blue-200">
                               Subtotal Honorarios Reply (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -2868,7 +2868,7 @@ function MetasFacturacionContent() {
 
                           {/* IVA Exportación (0%) */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-500 text-xs">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium border-r border-slate-100">
                               IVA (0% Exento - Exportación de Servicios a Chile)
                             </td>
                             {filteredMonths.map(m => (
@@ -2880,7 +2880,7 @@ function MetasFacturacionContent() {
 
                           {/* Total Factura en USD */}
                           <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors border-b-2 border-emerald-300 font-black">
-                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100/95 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
                               Total Factura a Cobrar (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -2915,7 +2915,7 @@ function MetasFacturacionContent() {
                           {/* 1. CABECERA GENERAL DE NEWSAN ARGENTINA                   */}
                           {/* ========================================================= */}
                           <tr className="bg-emerald-100/70 border-b border-emerald-200">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-100/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-emerald-950 border-r border-emerald-200">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-emerald-950 border-r border-emerald-200">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
@@ -2937,14 +2937,14 @@ function MetasFacturacionContent() {
                           {/* 2. SECCIÓN MERCADO LIBRE                                  */}
                           {/* ========================================================= */}
                           <tr className="bg-slate-100/80 border-b border-slate-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10">
                               Mercado Libre (Facturación por Cuentas)
                             </td>
                           </tr>
 
                           {/* Cuenta Newsan Propia */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Newsan
                             </td>
                             {filteredMonths.map(m => {
@@ -2959,7 +2959,7 @@ function MetasFacturacionContent() {
 
                           {/* Cuenta Newsan Motorola */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Newsan Motorola
                             </td>
                             {filteredMonths.map(m => {
@@ -2974,7 +2974,7 @@ function MetasFacturacionContent() {
 
                           {/* Cuenta Pilisar */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Pilisar
                             </td>
                             {filteredMonths.map(m => {
@@ -2989,7 +2989,7 @@ function MetasFacturacionContent() {
 
                           {/* Facturación Total ML */}
                           <tr className="bg-emerald-50/30 hover:bg-emerald-50/50 transition-colors border-b border-slate-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-emerald-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-900 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-900 font-bold border-r border-emerald-200">
                               Facturación total (Mercado Libre)
                             </td>
                             {filteredMonths.map(m => {
@@ -3007,7 +3007,7 @@ function MetasFacturacionContent() {
 
                           {/* Fee ML Aplicado */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-100">
                               Fee Aplicado ML
                             </td>
                             {filteredMonths.map(m => {
@@ -3022,7 +3022,7 @@ function MetasFacturacionContent() {
 
                           {/* Monto Servicio ML */}
                           <tr className="bg-blue-50/40 hover:bg-blue-50/60 transition-colors border-b border-blue-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50/80 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold border-r border-blue-200">
                               Monto Servicio ML
                             </td>
                             {filteredMonths.map(m => {
@@ -3039,14 +3039,14 @@ function MetasFacturacionContent() {
                           {/* 3. SECCIÓN TIENDA NEWSAN (WEB)                             */}
                           {/* ========================================================= */}
                           <tr className="bg-slate-100/80 border-b border-slate-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10">
                               Tienda Newsan (Soporte Operativo Web)
                             </td>
                           </tr>
 
                           {/* Cantidad Sesiones */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Cantidad Sesiones
                             </td>
                             {filteredMonths.map(m => {
@@ -3061,7 +3061,7 @@ function MetasFacturacionContent() {
 
                           {/* Valor x Sesión */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Valor x Sesión
                             </td>
                             {filteredMonths.map(m => {
@@ -3076,7 +3076,7 @@ function MetasFacturacionContent() {
 
                           {/* Total Sesiones */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Total Sesiones (Cantidad × Tarifa)
                             </td>
                             {filteredMonths.map(m => {
@@ -3093,7 +3093,7 @@ function MetasFacturacionContent() {
 
                           {/* Minimo Garantizado */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-semibold pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-semibold pl-9 border-r border-slate-100">
                               Mínimo Garantizado Mensual
                             </td>
                             {filteredMonths.map(m => {
@@ -3110,14 +3110,14 @@ function MetasFacturacionContent() {
                           {/* 4. SECCIÓN HORAS EXTRAS                                   */}
                           {/* ========================================================= */}
                           <tr className="bg-slate-100/80 border-b border-slate-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10">
                               Horas Extras
                             </td>
                           </tr>
 
                           {/* Cantidad de horas */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Cantidad de horas extras
                             </td>
                             {filteredMonths.map(m => {
@@ -3132,7 +3132,7 @@ function MetasFacturacionContent() {
 
                           {/* Valor Hora */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Valor Hora
                             </td>
                             {filteredMonths.map(m => {
@@ -3147,7 +3147,7 @@ function MetasFacturacionContent() {
 
                           {/* Total Horas Extra */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Total Horas Extra (Horas × Tarifa)
                             </td>
                             {filteredMonths.map(m => {
@@ -3166,7 +3166,7 @@ function MetasFacturacionContent() {
                           {/* 5. LIQUIDACIÓN TIENDA WEB                                  */}
                           {/* ========================================================= */}
                           <tr className="bg-slate-50/70 border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-slate-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-800 font-semibold pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-800 font-semibold pl-9 border-r border-slate-200">
                               Newsan - Sesiones (Aplica Mínimo)
                             </td>
                             {filteredMonths.map(m => {
@@ -3182,7 +3182,7 @@ function MetasFacturacionContent() {
                           </tr>
 
                           <tr className="bg-slate-50/70 border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-slate-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-800 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-800 font-medium pl-9 border-r border-slate-200">
                               Monto Horas Extra
                             </td>
                             {filteredMonths.map(m => {
@@ -3199,7 +3199,7 @@ function MetasFacturacionContent() {
 
                           {/* Monto Factura Tienda */}
                           <tr className="bg-blue-50/50 hover:bg-blue-50/70 transition-colors border-b border-blue-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold border-r border-blue-200">
                               Monto factura - Tienda Web
                             </td>
                             {filteredMonths.map(m => {
@@ -3222,7 +3222,7 @@ function MetasFacturacionContent() {
                           {/* ========================================================= */}
                           {/* Subtotal Reply */}
                           <tr className="bg-blue-100/80 hover:bg-blue-100 transition-colors border-b border-blue-200 font-black">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs border-r border-blue-200">
                               Total (Subtotal Ingreso Reply)
                             </td>
                             {filteredMonths.map(m => {
@@ -3243,7 +3243,7 @@ function MetasFacturacionContent() {
 
                           {/* IVA (21%) */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-600">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium border-r border-slate-100">
                               IVA (21% Débito Fiscal)
                             </td>
                             {filteredMonths.map(m => {
@@ -3265,7 +3265,7 @@ function MetasFacturacionContent() {
 
                           {/* Total Factura + IVA */}
                           <tr className="bg-emerald-50/60 hover:bg-emerald-50/80 transition-colors border-b-2 border-emerald-300 font-black">
-                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-50/95 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
                               Total Factura + IVA
                             </td>
                             {filteredMonths.map(m => {
@@ -3306,7 +3306,7 @@ function MetasFacturacionContent() {
                         <tbody key="grupo_axo_mexico_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                           {/* 1. CABECERA GENERAL DE GRUPO AXO */}
                           <tr className="bg-purple-100/80 border-b border-purple-200">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-purple-100/95 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-purple-950 border-r border-purple-200">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-purple-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-purple-950 border-r border-purple-200">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
@@ -3326,7 +3326,7 @@ function MetasFacturacionContent() {
 
                           {/* 2. SECCIÓN FACTURACIÓN BRUTA (GMV) POR CUENTA EN MXN */}
                           <tr className="bg-slate-100/90 border-b border-slate-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10">
                               <div className="flex items-center justify-between">
                                 <span>Facturación Bruta (GMV) por Cuenta — Pesos Mexicanos (MXN)</span>
                                 <span className="text-[9px] font-medium text-slate-500 lowercase">ventas brutas extraídas de cuentas ML y Liverpool</span>
@@ -3336,7 +3336,7 @@ function MetasFacturacionContent() {
 
                           {AXO_CHANNELS.map(ch => (
                             <tr key={ch.id} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                                 <div className="flex items-center gap-2">
                                   <span className={`w-1.5 h-1.5 rounded-full ${ch.color}`}></span>
                                   <span>{ch.name}</span>
@@ -3355,7 +3355,7 @@ function MetasFacturacionContent() {
 
                           {/* Total Facturación Consolidada en MXN */}
                           <tr className="bg-purple-50/40 hover:bg-purple-50/60 transition-colors border-b-2 border-purple-300 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold border-r border-purple-200">
                               Facturación Total Consolidada (MXN)
                             </td>
                             {filteredMonths.map(m => {
@@ -3370,7 +3370,7 @@ function MetasFacturacionContent() {
 
                           {/* 3. SECCIÓN MÉTRICAS OPERATIVAS & ESCALA COMERCIAL */}
                           <tr className="bg-indigo-50/80 border-b border-indigo-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-indigo-950 sticky left-0 bg-indigo-50/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-indigo-950 sticky left-0 bg-indigo-50 z-10">
                               <div className="flex items-center justify-between">
                                 <span>Métricas Operativas & Escala Comercial Biescala</span>
                                 <span className="text-[9px] font-medium text-indigo-700 lowercase">escala activa s/ créditos del mes (hasta 1.650 vs hasta 2.200)</span>
@@ -3380,7 +3380,7 @@ function MetasFacturacionContent() {
 
                           {/* Créditos Operativos */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Créditos del mes (Unidades Operativas)
                             </td>
                             {filteredMonths.map(m => {
@@ -3395,7 +3395,7 @@ function MetasFacturacionContent() {
 
                           {/* Escala Activa */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Escala Activa Aplicada
                             </td>
                             {filteredMonths.map(m => {
@@ -3413,7 +3413,7 @@ function MetasFacturacionContent() {
 
                           {/* Alícuota / Fee Aplicado */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Fee Aplicado (Alícuota o Mínimo)
                             </td>
                             {filteredMonths.map(m => {
@@ -3441,7 +3441,7 @@ function MetasFacturacionContent() {
 
                           {/* Subtotal Honorarios Reply (MXN) */}
                           <tr className="bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200 font-semibold">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-800 font-semibold pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-800 font-semibold pl-9 border-r border-slate-200">
                               Subtotal Honorarios Reply (MXN)
                             </td>
                             {filteredMonths.map(m => {
@@ -3469,7 +3469,7 @@ function MetasFacturacionContent() {
 
                           {/* 4. SECCIÓN PRORRATEO 50/50 & LIQUIDACIÓN EN DÓLARES (USD) */}
                           <tr className="bg-emerald-50/80 border-b border-emerald-200">
-                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-emerald-950 sticky left-0 bg-emerald-50/95 z-10">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-2 font-bold text-[10px] uppercase tracking-wider text-emerald-950 sticky left-0 bg-emerald-50 z-10">
                               <div className="flex items-center justify-between">
                                 <span>Prorrateo 50% Calvin Klein / 50% Tommy Hilfiger & Conversión a USD</span>
                                 <span className="text-[9px] font-medium text-emerald-700 lowercase">tipo de cambio oficial + USD 170 botmaker fijo a cada cuenta</span>
@@ -3479,7 +3479,7 @@ function MetasFacturacionContent() {
 
                           {/* Tipo de Cambio Oficial */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Tipo de Cambio Oficial (MXN/USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3494,7 +3494,7 @@ function MetasFacturacionContent() {
 
                           {/* Calvin Klein 50% MXN */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Calvin Klein (50% Fee MXN)
                             </td>
                             {filteredMonths.map(m => {
@@ -3523,7 +3523,7 @@ function MetasFacturacionContent() {
 
                           {/* Calvin Klein Fee USD */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Calvin Klein (Subtotal Fee USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3553,7 +3553,7 @@ function MetasFacturacionContent() {
 
                           {/* Calvin Klein Botmaker USD */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Calvin Klein (Botmaker Fijo USD)
                             </td>
                             {filteredMonths.map(m => (
@@ -3565,7 +3565,7 @@ function MetasFacturacionContent() {
 
                           {/* Calvin Klein Total USD */}
                           <tr className="bg-indigo-50/30 hover:bg-indigo-50/50 transition-colors border-b border-indigo-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-indigo-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-950 font-bold pl-9">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-indigo-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-indigo-950 font-bold pl-9 border-r border-indigo-200">
                               Total Calvin Klein (Fee + Botmaker USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3596,7 +3596,7 @@ function MetasFacturacionContent() {
 
                           {/* Tommy Hilfiger 50% MXN */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Tommy Hilfiger (50% Fee MXN)
                             </td>
                             {filteredMonths.map(m => {
@@ -3625,7 +3625,7 @@ function MetasFacturacionContent() {
 
                           {/* Tommy Hilfiger Fee USD */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Tommy Hilfiger (Subtotal Fee USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3655,7 +3655,7 @@ function MetasFacturacionContent() {
 
                           {/* Tommy Hilfiger Botmaker USD */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium pl-9 border-r border-slate-100">
                               Tommy Hilfiger (Botmaker Fijo USD)
                             </td>
                             {filteredMonths.map(m => (
@@ -3667,7 +3667,7 @@ function MetasFacturacionContent() {
 
                           {/* Tommy Hilfiger Total USD */}
                           <tr className="bg-blue-50/40 hover:bg-blue-50/60 transition-colors border-b-2 border-blue-300 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50/70 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold pl-9">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold pl-9 border-r border-blue-200">
                               Total Tommy Hilfiger (Fee + Botmaker USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3699,7 +3699,7 @@ function MetasFacturacionContent() {
                           {/* 5. SECCIÓN CONSOLIDADO FINAL GRUPO AXO */}
                           {/* Subtotal Fee Reply USD */}
                           <tr className="bg-purple-50/50 hover:bg-purple-50/70 transition-colors border-b border-purple-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold border-r border-purple-200">
                               Subtotal Total Fee Reply (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3729,7 +3729,7 @@ function MetasFacturacionContent() {
 
                           {/* Total Botmaker Consolidado */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
                               Botmaker Total Consolidado (USD 170 CK + USD 170 TH)
                             </td>
                             {filteredMonths.map(m => (
@@ -3741,7 +3741,7 @@ function MetasFacturacionContent() {
 
                           {/* Total Liquidación Grupo Axo USD */}
                           <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors border-b-2 border-emerald-300 font-black">
-                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
                               Total Factura Grupo Axo (USD) — 0% IVA
                             </td>
                             {filteredMonths.map(m => {
@@ -3778,7 +3778,7 @@ function MetasFacturacionContent() {
                       <tbody key={seller.id} className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                         {/* Fila Cliente */}
                         <tr className="bg-orange-50/60">
-                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-orange-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-bold text-slate-900 border-r border-orange-100">
+                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-orange-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-bold text-slate-900 border-r border-orange-200">
                             {seller.name}
                           </td>
                           {filteredMonths.map(m => {
@@ -3794,7 +3794,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Facturación Cliente (GMV) */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200">
                             Ventas del Cliente (GMV)
                           </td>
                           {filteredMonths.map(m => {
@@ -3814,7 +3814,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Fee */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200">
                             Fee Aplicado
                           </td>
                           {filteredMonths.map(m => {
@@ -3830,7 +3830,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Monto Servicio */}
                         <tr className="bg-slate-50/50 hover:bg-slate-100/50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-800 font-bold">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-800 font-bold border-r border-slate-200">
                             Monto Servicio
                           </td>
                           {filteredMonths.map(m => {
@@ -3847,7 +3847,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Botmaker */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-600 font-medium">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-600 font-medium border-r border-slate-200">
                             Botmaker
                           </td>
                           {filteredMonths.map(m => {
@@ -3865,7 +3865,7 @@ function MetasFacturacionContent() {
                         {/* Fila Descuento Comercial (ej. Café Martínez -20%) */}
                         {Object.values(seller.months).some(m => ((m as any).descuento || 0) > 0) && (
                           <tr className="bg-rose-50/40 hover:bg-rose-50/70 transition-colors border-b border-rose-100">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-rose-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-rose-900 font-semibold flex items-center justify-between">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-rose-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-rose-900 font-semibold border-r border-rose-200 flex items-center justify-between">
                               <span>Descuento Comercial (-20%)</span>
                               <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-200/60 text-rose-800 ml-2">Pactado</span>
                             </td>
@@ -3885,7 +3885,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Subtotal (Ingreso Reply) */}
                         <tr className="bg-blue-50/50 hover:bg-blue-50 transition-colors border-b border-blue-100 font-bold">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50/80 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-bold border-r border-blue-200">
                             Subtotal (Ingreso Reply)
                           </td>
                           {filteredMonths.map(m => {
@@ -3902,7 +3902,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila IVA */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-500">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-500 border-r border-slate-200">
                             IVA (Débito Fiscal)
                           </td>
                           {filteredMonths.map(m => {
@@ -3918,7 +3918,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Total Factura */}
                         <tr className="bg-emerald-50/40 hover:bg-emerald-50/60 transition-colors">
-                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-50/80 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-bold border-r border-emerald-100">
+                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-bold border-r border-emerald-200">
                             Total Factura
                           </td>
                           {filteredMonths.map(m => {
@@ -3943,7 +3943,7 @@ function MetasFacturacionContent() {
                 <tfoot className="sticky bottom-0 z-20 shadow-xl border-t-2 border-slate-300">
                   {/* Fila Total GMV */}
                   <tr className="bg-slate-100 text-slate-700 font-bold text-xs border-b border-slate-200">
-                    <td className="px-6 py-2.5 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                    <td className="px-6 py-2.5 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
                       TOTAL VENTAS DE LA CARTERA (GMV {selectedCountry === 'CO' ? 'COP' : (selectedCountry === 'CL' ? 'USD' : groupedData[selectedCountry]?.country.currency)})
                     </td>
                     {filteredMonths.map(m => (
@@ -3955,7 +3955,7 @@ function MetasFacturacionContent() {
 
                   {/* Fila Total Monto Servicio */}
                   <tr className="bg-slate-50 text-slate-800 font-bold text-xs border-b border-slate-200">
-                    <td className="px-6 py-2.5 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                    <td className="px-6 py-2.5 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
                       TOTAL MONTO SERVICIO (FEE DE GESTIÓN)
                     </td>
                     {filteredMonths.map(m => (
@@ -3968,7 +3968,7 @@ function MetasFacturacionContent() {
                   {/* Fila Total Botmaker (si hay en el país) */}
                   {Object.values(detailedCountryTotals).some(t => t.botmaker > 0) && (
                     <tr className="bg-white text-slate-700 font-medium text-xs border-b border-slate-200">
-                      <td className="px-6 py-2 sticky left-0 bg-white z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      <td className="px-6 py-2 sticky left-0 bg-white z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
                         TOTAL BOTMAKER (LICENCIAS)
                       </td>
                       {filteredMonths.map(m => (
@@ -3982,7 +3982,7 @@ function MetasFacturacionContent() {
                   {/* Fila Total Descuentos Comerciales (si hay en el país) */}
                   {Object.values(detailedCountryTotals).some(t => ((t as any).descuento || 0) > 0) && (
                     <tr className="bg-rose-50/50 text-rose-900 font-semibold text-xs border-b border-rose-200">
-                      <td className="px-6 py-2 sticky left-0 bg-rose-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      <td className="px-6 py-2 sticky left-0 bg-rose-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-rose-200">
                         TOTAL DESCUENTOS COMERCIALES
                       </td>
                       {filteredMonths.map(m => {
@@ -3998,7 +3998,7 @@ function MetasFacturacionContent() {
 
                   {/* Fila Total Subtotal (Ingreso Genuino Reply) */}
                   <tr className="bg-blue-900 text-white font-black text-xs shadow-md">
-                    <td className="px-6 py-3.5 sticky left-0 bg-blue-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)]">
+                    <td className="px-6 py-3.5 sticky left-0 bg-blue-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)] border-r border-blue-800">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                         <span>TOTAL INGRESO NETO REPLY (SUBTOTAL)</span>
@@ -4013,7 +4013,7 @@ function MetasFacturacionContent() {
 
                   {/* Fila Total IVA */}
                   <tr className="bg-slate-100 text-slate-600 font-semibold text-xs border-b border-slate-200">
-                    <td className="px-6 py-2.5 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                    <td className="px-6 py-2.5 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
                       TOTAL IVA (DÉBITO FISCAL)
                     </td>
                     {filteredMonths.map(m => (
@@ -4025,7 +4025,7 @@ function MetasFacturacionContent() {
 
                   {/* Fila Total Factura Final */}
                   <tr className="bg-slate-900 text-white font-extrabold text-xs">
-                    <td className="px-6 py-3.5 sticky left-0 bg-slate-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)]">
+                    <td className="px-6 py-3.5 sticky left-0 bg-slate-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)] border-r border-slate-800">
                       TOTAL GENERAL FACTURACIÓN A COBRAR
                     </td>
                     {filteredMonths.map(m => (
