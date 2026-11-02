@@ -190,18 +190,22 @@ function MetasFacturacionContent() {
           .from('liquidaciones')
           .select('*')
           .order('periodo', { ascending: true })
-          .order('nombre_seller', { ascending: true }),
+          .order('nombre_seller', { ascending: true })
+          .limit(5000),
         supabase
           .from('dim_sellers')
-          .select('id_seller, nombre_seller, pais, moneda, estado'),
+          .select('id_seller, nombre_seller, pais, moneda, estado')
+          .limit(1000),
         supabase
           .from('fact_metricas_operativas')
           .select('*')
-          .eq('seller_id', 989595440),
+          .eq('seller_id', 989595440)
+          .limit(1000),
         supabase
           .from('facturacion')
           .select('*')
-          .in('seller_id', [256189964, 308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429, 765606810, 938333830, 550082876, 998163061]),
+          .in('seller_id', [256189964, 308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429, 765606810, 938333830, 550082876, 998163061])
+          .limit(5000),
         supabase
           .from('dim_escalas')
           .select('*')
@@ -1319,6 +1323,21 @@ function MetasFacturacionContent() {
               iva += mData.iva || 0;
               total += mData.total || 0;
             }
+          }
+        });
+      } else if (selectedCountry === 'MX') {
+        const tc = getRateToUSD('MXN', m.key) || 18.0;
+        sellers.forEach(s => {
+          const mData = s.months[m.key];
+          if (mData) {
+            const isAxoSeller = s.id === 'axo_ck' || s.id === 'axo_th';
+            const factGmvUsd = isAxoSeller && tc > 0 ? ((mData.facturacion || 0) / tc) : (mData.facturacion || 0);
+            gmv += factGmvUsd;
+            montoServicio += mData.montoServicio || 0;
+            botmaker += mData.botmaker || 0;
+            subtotal += mData.subtotal || 0;
+            iva += mData.iva || 0;
+            total += mData.total || 0;
           }
         });
       } else {
