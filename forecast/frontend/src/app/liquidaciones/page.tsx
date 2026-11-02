@@ -520,6 +520,7 @@ function MetasFacturacionContent() {
           facturacion: number;
           fee: any;
           botmaker: number;
+          descuento?: number;
           montoServicio: number;
           iva: number;
           total: number;
@@ -897,6 +898,46 @@ function MetasFacturacionContent() {
         feeVal = alicuotaVal;
       }
 
+      // Reglas comerciales Botmaker y Café Martínez
+      let botmakerVal = Number(row.botmaker) || 0;
+      let descuentoVal = 0;
+      const isCafeMartinez = sId === '1088146491' || sName.toLowerCase().includes('cafe martinez');
+
+      // 1. Ajuste de Markup Botmaker al 25% para periodos a partir de 2026-10
+      // Reply factura $206.250 (165k base * 1.25) y $410.000 (Soda Stream 328k base * 1.25)
+      if (mKey >= '2026-10') {
+        if (isCafeMartinez) {
+          botmakerVal = 0;
+        } else {
+          const origBm = Number(row.botmaker_original) || 0;
+          if (origBm > 0) {
+            botmakerVal = Math.round(origBm * 1.25 * 100) / 100;
+          } else if (botmakerVal > 0) {
+            // Reescalar de 1.20 a 1.25 si viene con el markup anterior de la base
+            botmakerVal = Math.round((botmakerVal / 1.20) * 1.25 * 100) / 100;
+          }
+        }
+
+        // Si es cuenta AR estándar con Botmaker (no Newsan ni cuentas en USD ni Café Martínez), recalcular subtotal, IVA y total
+        if (cCode === 'AR' && rowCurrency === 'ARS' && !sName.toLowerCase().includes('newsan') && !isCafeMartinez) {
+          subtotalVal = montoServicio + botmakerVal;
+          ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+          totalVal = subtotalVal + ivaVal;
+        }
+      }
+
+      // 2. Reglas comerciales oficiales para Café Martínez:
+      // - "No se le cobra Botmaker" (botmakerVal = 0 bajo toda circunstancia)
+      // - "Se le debe realizar un descuento del 20% todos los meses" sobre el subtotal
+      if (isCafeMartinez) {
+        botmakerVal = 0;
+        const subtotalBruto = montoServicio;
+        descuentoVal = Math.round(subtotalBruto * 0.20 * 100) / 100;
+        subtotalVal = subtotalBruto - descuentoVal;
+        ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+        totalVal = subtotalVal + ivaVal;
+      }
+
       const isProj = row.estado === 'PROYECTADO';
 
       // Conversión dinámica de visualización según currencyView
@@ -920,7 +961,8 @@ function MetasFacturacionContent() {
         originalMoneda: rowCurrency,
         facturacion: factVal,
         fee: feeVal,
-        botmaker: Number(row.botmaker) || 0,
+        botmaker: botmakerVal,
+        descuento: descuentoVal,
         montoServicio: montoServicio,
         iva: ivaVal,
         total: totalVal
@@ -1275,6 +1317,7 @@ function MetasFacturacionContent() {
       gmv: number;
       montoServicio: number;
       botmaker: number;
+      descuento: number;
       subtotal: number;
       iva: number;
       total: number;
@@ -1284,6 +1327,7 @@ function MetasFacturacionContent() {
       let gmv = 0;
       let montoServicio = 0;
       let botmaker = 0;
+      let descuento = 0;
       let subtotal = 0;
       let iva = 0;
       let total = 0;
@@ -1309,6 +1353,7 @@ function MetasFacturacionContent() {
               gmv += (mData.facturacion || 0) / tc;
               montoServicio += mData.montoServicio || 0;
               botmaker += mData.botmaker || 0;
+              descuento += (mData as any)?.descuento || 0;
               subtotal += mData.subtotal || 0;
               iva += mData.iva || 0;
               total += mData.total || 0;
@@ -1346,6 +1391,7 @@ function MetasFacturacionContent() {
               gmv += mData.facturacion || 0;
               montoServicio += mData.montoServicio || 0;
               botmaker += mData.botmaker || 0;
+              descuento += (mData as any)?.descuento || 0;
               subtotal += mData.subtotal || 0;
               iva += mData.iva || 0;
               total += mData.total || 0;
@@ -1362,6 +1408,7 @@ function MetasFacturacionContent() {
             gmv += factGmvUsd;
             montoServicio += mData.montoServicio || 0;
             botmaker += mData.botmaker || 0;
+            descuento += (mData as any)?.descuento || 0;
             subtotal += mData.subtotal || 0;
             iva += mData.iva || 0;
             total += mData.total || 0;
@@ -1374,6 +1421,7 @@ function MetasFacturacionContent() {
             gmv += mData.facturacion || 0;
             montoServicio += mData.montoServicio || 0;
             botmaker += mData.botmaker || 0;
+            descuento += (mData as any)?.descuento || 0;
             subtotal += mData.subtotal || 0;
             iva += mData.iva || 0;
             total += mData.total || 0;
@@ -1381,7 +1429,7 @@ function MetasFacturacionContent() {
         });
       }
 
-      result[m.key] = { gmv, montoServicio, botmaker, subtotal, iva, total };
+      result[m.key] = { gmv, montoServicio, botmaker, descuento, subtotal, iva, total };
     });
 
     return result;
@@ -3782,6 +3830,27 @@ function MetasFacturacionContent() {
                           })}
                         </tr>
 
+                        {/* Fila Descuento Comercial (ej. Café Martínez -20%) */}
+                        {Object.values(seller.months).some(m => ((m as any).descuento || 0) > 0) && (
+                          <tr className="bg-rose-50/40 hover:bg-rose-50/70 transition-colors border-b border-rose-100">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-rose-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-rose-900 font-semibold flex items-center justify-between">
+                              <span>Descuento Comercial (-20%)</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-200/60 text-rose-800 ml-2">Pactado</span>
+                            </td>
+                            {filteredMonths.map(m => {
+                              const mData = seller.months[m.key];
+                              const isProj = mData?.isProjected;
+                              const cur = mData?.moneda || executiveKPIs?.currency;
+                              const dVal = (mData as any)?.descuento || 0;
+                              return (
+                                <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right font-bold border-l ${isProj ? 'bg-orange-50/40 border-orange-100 text-rose-700' : 'border-rose-100 text-rose-600'}`}>
+                                  {dVal > 0 ? `-${formatCurrency(dVal, cur)}` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        )}
+
                         {/* Fila Subtotal (Ingreso Reply) */}
                         <tr className="bg-blue-50/50 hover:bg-blue-50 transition-colors border-b border-blue-100 font-bold">
                           <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50/80 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950">
@@ -3875,6 +3944,23 @@ function MetasFacturacionContent() {
                           {detailedCountryTotals[m.key]?.botmaker > 0 ? formatCurrency(detailedCountryTotals[m.key]?.botmaker, executiveKPIs?.currency) : '-'}
                         </td>
                       ))}
+                    </tr>
+                  )}
+
+                  {/* Fila Total Descuentos Comerciales (si hay en el país) */}
+                  {Object.values(detailedCountryTotals).some(t => ((t as any).descuento || 0) > 0) && (
+                    <tr className="bg-rose-50/50 text-rose-900 font-semibold text-xs border-b border-rose-200">
+                      <td className="px-6 py-2 sticky left-0 bg-rose-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        TOTAL DESCUENTOS COMERCIALES
+                      </td>
+                      {filteredMonths.map(m => {
+                        const d = (detailedCountryTotals[m.key] as any)?.descuento || 0;
+                        return (
+                          <td key={m.key} className="px-6 py-2 text-right font-mono border-l border-rose-200 whitespace-nowrap text-rose-700">
+                            {d > 0 ? `-${formatCurrency(d, executiveKPIs?.currency)}` : '-'}
+                          </td>
+                        );
+                      })}
                     </tr>
                   )}
 

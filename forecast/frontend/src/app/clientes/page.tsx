@@ -272,13 +272,18 @@ export default function DirectorioClientesPage() {
         if (p && p > escMap[sid].max) escMap[sid].max = p;
       });
 
-      // Obtener tramos más recientes para cada seller
+      // Obtener tramos vigentes (último período REAL) para cada seller
       Object.keys(escMap).forEach(sid => {
         const sellerEscalas = escalas.filter((e: any) => String(e.seller_id) === sid);
         if (sellerEscalas.length > 0) {
-          const maxP = escMap[sid].max;
+          // Priorizar el último período con estado REAL para reflejar la escala vigente real y no proyecciones a 12 meses
+          const realEscalas = sellerEscalas.filter((e: any) => e.estado === 'REAL');
+          const targetP = realEscalas.length > 0
+            ? realEscalas.reduce((max: string, e: any) => (e.periodo > max ? e.periodo : max), realEscalas[0].periodo)
+            : escMap[sid].max;
+
           escMap[sid].currentTiers = sellerEscalas
-            .filter((e: any) => e.periodo === maxP)
+            .filter((e: any) => e.periodo === targetP)
             .sort((a: any, b: any) => (a.monto_objetivo || 0) - (b.monto_objetivo || 0));
         }
       });
@@ -450,7 +455,7 @@ export default function DirectorioClientesPage() {
   const countriesCount = new Set(sellersList.map(s => s.codigo_pais).filter(Boolean)).size;
 
   return (
-    <div className="space-y-6 pb-16 w-full flex flex-col select-none">
+    <div className="space-y-6 pb-16 w-full flex flex-col select-text">
       {/* 1. Header & KPIs Globales */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div>
@@ -811,7 +816,7 @@ export default function DirectorioClientesPage() {
       {selectedSeller && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div 
-            className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 select-text"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header del Modal */}
