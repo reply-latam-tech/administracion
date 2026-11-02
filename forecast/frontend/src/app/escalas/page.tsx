@@ -62,9 +62,46 @@ export default function EscalasPage() {
       }
       const dbData = allEscalas;
 
+      // Helper robusto para formatear períodos sin puntos y consistente entre navegadores
+      const formatMonthKey = (periodo: string) => {
+        const date = new Date(periodo + "T12:00:00");
+        let mStr = date.toLocaleDateString("es-AR", { month: "short", year: "numeric" });
+        mStr = mStr.replace(/\./g, '').trim();
+        return mStr.charAt(0).toUpperCase() + mStr.slice(1);
+      };
+
+      // Fetch liquidaciones con paginación completa (evita corte de 1000 filas de PostgREST)
+      const fetchAllLiquidaciones = async () => {
+        let allLiqs: any[] = [];
+        let liqPage = 0;
+        let liqHasMore = true;
+        while (liqHasMore) {
+          const { data: pageData, error } = await supabase
+            .from('liquidaciones')
+            .select('*')
+            .order('periodo', { ascending: true })
+            .order('facturacion_id', { ascending: true })
+            .range(liqPage * 1000, (liqPage + 1) * 1000 - 1);
+
+          if (error) {
+            console.error("Error fetching liquidaciones:", error);
+            break;
+          }
+
+          if (pageData && pageData.length > 0) {
+            allLiqs = allLiqs.concat(pageData);
+            if (pageData.length < 1000) liqHasMore = false;
+            else liqPage++;
+          } else {
+            liqHasMore = false;
+          }
+        }
+        return { data: allLiqs };
+      };
+
       // Fetch liquidaciones to highlight applied tiers y facturación consolidada de Newsan ML y Grupo Axo
       const [{ data: liqData }, { data: factNewsanData }, { data: metricasAxoData }] = await Promise.all([
-        supabase.from('liquidaciones').select('*'),
+        fetchAllLiquidaciones(),
         supabase.from('facturacion').select('seller_id, periodo, valor_facturado').in('seller_id', [256189964, 308973138, 256324891, 765606810, 938333830, 550082876, 998163061]),
         supabase.from('fact_metricas_operativas').select('*').eq('id_cliente', 18).eq('tipo_metrica', 'CREDITOS')
       ]);
@@ -95,11 +132,10 @@ export default function EscalasPage() {
       const liqMap: Record<string, any> = {};
       if (liqData) {
         liqData.forEach((row: any) => {
-          const date = new Date(row.periodo + "T12:00:00");
-          let mStr = date.toLocaleDateString("es-AR", { month: "short", year: "numeric" });
-          mStr = mStr.charAt(0).toUpperCase() + mStr.slice(1);
+          const mStr = formatMonthKey(row.periodo);
+          const sId = String(row.seller_id);
           
-          if (!liqMap[row.seller_id]) liqMap[row.seller_id] = {};
+          if (!liqMap[sId]) liqMap[sId] = {};
           
           let tipo_cargo = row.tipo_cargo_aplicado;
           let alicuota = row.alicuota_aplicada;
@@ -408,7 +444,7 @@ export default function EscalasPage() {
             alicuota = alicuotaVal;
           }
 
-          liqMap[row.seller_id][mStr] = {
+          liqMap[sId][mStr] = {
             tipo_cargo,
             alicuota,
             valor_facturado,
@@ -426,9 +462,7 @@ export default function EscalasPage() {
       const uniqueAxoPeriods = Array.from(new Set(axoPeriods));
 
       uniqueAxoPeriods.forEach((period: any) => {
-        const date = new Date(period + "T12:00:00");
-        let mStr = date.toLocaleDateString("es-AR", { month: "short", year: "numeric" });
-        mStr = mStr.charAt(0).toUpperCase() + mStr.slice(1);
+        const mStr = formatMonthKey(period);
 
         const totMXN = axoTotalMap[period] || 0;
         const credits = axoCreditsMap[period] ?? (period >= '2026-10-01' ? 1306 : 1156);
@@ -470,9 +504,7 @@ export default function EscalasPage() {
       const globalMonthsSet = new Set<string>();
 
       dbData.forEach((row: any) => {
-        const date = new Date(row.periodo + "T12:00:00");
-        let mStr = date.toLocaleDateString("es-AR", { month: "short", year: "numeric" });
-        mStr = mStr.charAt(0).toUpperCase() + mStr.slice(1);
+        const mStr = formatMonthKey(row.periodo);
         globalMonthsSet.add(mStr);
 
         const sId = row.seller_id;
@@ -510,9 +542,10 @@ export default function EscalasPage() {
       const monthsArray = Array.from(globalMonthsSet).sort((a, b) => {
         // Sort months chronologically just in case (e.g. 'Ene 2026' vs 'Feb 2026')
         const parseDate = (str: string) => {
-           const [m, y] = str.split(' ');
+           const clean = str.replace(/\./g, '').trim();
+           const [m, y] = clean.split(' ');
            const map: any = {'Ene':0,'Feb':1,'Mar':2,'Abr':3,'May':4,'Jun':5,'Jul':6,'Ago':7,'Sep':8,'Sept':8,'Oct':9,'Nov':10,'Dic':11};
-           return new Date(parseInt(y), map[m] || 0, 1).getTime();
+           return new Date(parseInt(y), map[m] ?? 0, 1).getTime();
         };
         return parseDate(a) - parseDate(b);
       });
@@ -634,7 +667,7 @@ export default function EscalasPage() {
           isBaja: sellersMetaMap[seller.sellerId]?.isBaja || false,
           fechaEgreso: sellersMetaMap[seller.sellerId]?.fechaEgreso || null,
           months: rowMonths,
-          liquidaciones: liqMapState[seller.sellerId] || {},
+          liquidaciones: liqMapState[String(seller.sellerId)] || liqMapState[seller.sellerId] || {},
           id: `${seller.sellerId}_row_${i}`
         });
       }
@@ -807,21 +840,24 @@ export default function EscalasPage() {
                       let isApplied = false;
                       let isLiqProjected = false;
                       if (liq) {
-                        if (liq.tipo_cargo === cellData.tipoCargo) {
-                          if (cellData.tipoCargo.startsWith('MINIMO')) {
+                        const liqCargo = (liq.tipo_cargo || '').trim().toUpperCase();
+                        const cellCargo = (cellData.tipoCargo || '').trim().toUpperCase();
+
+                        if (liqCargo === cellCargo) {
+                          if (cellCargo.startsWith('MINIMO')) {
                             isApplied = true;
-                          } else if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.00001) {
+                          } else if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.0001) {
                             isApplied = true;
                           }
-                        } else if (liq.tipo_cargo === 'MINIMO' && cellData.tipoCargo === 'MINIMO') {
+                        } else if (liqCargo.startsWith('MINIMO') && cellCargo.startsWith('MINIMO')) {
                           isApplied = true;
-                        } else if (liq.tipo_cargo === 'PORCENTUAL' && cellData.tipoCargo === 'PORCENTUAL') {
-                          if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.00001) {
+                        } else if (liqCargo === 'PORCENTUAL' && cellCargo === 'PORCENTUAL') {
+                          if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.0001) {
                             isApplied = true;
                           }
                         }
                         if (liq.estado === 'PROYECTADO') {
-                            isLiqProjected = true;
+                          isLiqProjected = true;
                         }
                       }
 

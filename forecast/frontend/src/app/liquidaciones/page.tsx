@@ -185,13 +185,39 @@ function MetasFacturacionContent() {
     async function fetchData() {
       setLoading(true);
 
+      // Fetch all liquidaciones con paginación completa (evita corte de 1000 filas de PostgREST)
+      const fetchAllLiquidaciones = async () => {
+        let allLiqs: any[] = [];
+        let liqPage = 0;
+        let liqHasMore = true;
+        let liqError = null;
+        while (liqHasMore) {
+          const { data: pageData, error } = await supabase
+            .from('liquidaciones')
+            .select('*')
+            .order('periodo', { ascending: true })
+            .order('nombre_seller', { ascending: true })
+            .range(liqPage * 1000, (liqPage + 1) * 1000 - 1);
+
+          if (error) {
+            console.error("Error fetching liquidaciones:", error);
+            liqError = error;
+            break;
+          }
+
+          if (pageData && pageData.length > 0) {
+            allLiqs = allLiqs.concat(pageData);
+            if (pageData.length < 1000) liqHasMore = false;
+            else liqPage++;
+          } else {
+            liqHasMore = false;
+          }
+        }
+        return { data: allLiqs, error: liqError };
+      };
+
       const [liqsRes, sellersRes, metricasRes, facturacionSubRes, escalasNewsanRes, metricasAxoRes] = await Promise.all([
-        supabase
-          .from('liquidaciones')
-          .select('*')
-          .order('periodo', { ascending: true })
-          .order('nombre_seller', { ascending: true })
-          .limit(5000),
+        fetchAllLiquidaciones(),
         supabase
           .from('dim_sellers')
           .select('id_seller, nombre_seller, pais, moneda, estado')
