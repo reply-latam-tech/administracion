@@ -178,6 +178,7 @@ function MetasFacturacionContent() {
   const [newsanMetricas, setNewsanMetricas] = useState<Record<string, { sesiones: number; horas: number }>>({});
   const [axoCredits, setAxoCredits] = useState<Record<string, number>>({});
   const [newsanChileExpanded, setNewsanChileExpanded] = useState<boolean>(true);
+  const [evacolExpanded, setEvacolExpanded] = useState<boolean>(true);
   const [newsanEscalas, setNewsanEscalas] = useState<any[]>([]);
 
   // 1. Cargar datos de Supabase
@@ -525,6 +526,9 @@ function MetasFacturacionContent() {
           montoServicio: number;
           iva: number;
           total: number;
+          tc?: number;
+          factUsd?: number;
+          feeUsd?: number;
         }>;
         totalRow: number;
       }>;
@@ -587,6 +591,9 @@ function MetasFacturacionContent() {
       let feeVal = row.tipo_cargo_aplicado === 'MINIMO' ? 'MÍNIMO' : row.alicuota_aplicada;
       let factVal = Number(row.valor_facturado) || 0;
       let rowCurrency = row.moneda || meta.currency;
+      let extraTc: number | undefined = undefined;
+      let extraFactUsd: number | undefined = undefined;
+      let extraFeeUsd: number | undefined = undefined;
 
       // Soporte para cuentas de Chile (Newsan Chile) - Cobro en USD sin IVA
       if (meta.code === 'CL' || cCode === 'CL') {
@@ -923,6 +930,10 @@ function MetasFacturacionContent() {
         subtotalVal = feeCop;
         totalVal = feeCop;
         feeVal = alicuotaVal;
+
+        extraTc = currentTc;
+        extraFactUsd = Math.round(factUsd);
+        extraFeeUsd = feeUsd;
       }
 
       // Soporte para Disuiza Colombia (seller_id 964690754)
@@ -1086,7 +1097,10 @@ function MetasFacturacionContent() {
         descuento: descuentoVal,
         montoServicio: montoServicio,
         iva: ivaVal,
-        total: totalVal
+        total: totalVal,
+        tc: extraTc,
+        factUsd: extraFactUsd,
+        feeUsd: extraFeeUsd
       };
 
       countriesMap[cCode].sellersMap[sId].totalRow += displaySubtotal;
@@ -1543,6 +1557,27 @@ function MetasFacturacionContent() {
             subtotal += mData.subtotal || 0;
             iva += mData.iva || 0;
             total += mData.total || 0;
+          }
+        });
+      } else if (selectedCountry === 'CO') {
+        const tc = getRateToUSD('COP', m.key) || 3182.99;
+        sellers.forEach(s => {
+          const mData = s.months[m.key];
+          if (mData) {
+            const isEvacol = s.name.toLowerCase().includes('evacol');
+            // Para Evacol, los honorarios en la base están en COP reconvertidos.
+            // Para la consolidación en USD de Colombia (executiveKPIs = USD), sumamos el fee en USD (USD 1.000 c/u):
+            const srvUSD = isEvacol && tc > 0 ? (mData.montoServicio / tc) : (mData.montoServicio || 0);
+            const subUSD = isEvacol && tc > 0 ? (mData.subtotal / tc) : (mData.subtotal || 0);
+            const totUSD = isEvacol && tc > 0 ? (mData.total / tc) : (mData.total || 0);
+
+            gmv += mData.facturacion || 0;
+            montoServicio += srvUSD;
+            botmaker += mData.botmaker || 0;
+            descuento += (mData as any)?.descuento || 0;
+            subtotal += subUSD;
+            iva += mData.iva || 0;
+            total += totUSD;
           }
         });
       } else {
@@ -2395,6 +2430,147 @@ function MetasFacturacionContent() {
                       );
                     };
 
+                    // Helper para renderizar el bloque de Colombia (Evacol 3 canales consolidado + otros)
+                    const renderColombiaBlock = (coSellersMap: Record<string, any>) => {
+                      const allCOSellers = Object.values(coSellersMap)
+                        .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                      
+                      const evacolSellers = allCOSellers.filter(s => s.name.toLowerCase().includes('evacol') && !s.name.includes('USA'));
+                      const otherCOSellers = allCOSellers.filter(s => !s.name.toLowerCase().includes('evacol') || s.name.includes('USA'));
+
+                      const evacolMonthlyTotals: Record<string, number> = {};
+                      evacolSellers.forEach(s => {
+                        Object.keys(s.months).forEach(mKey => {
+                          evacolMonthlyTotals[mKey] = (evacolMonthlyTotals[mKey] || 0) + (s.months[mKey]?.subtotal || 0);
+                        });
+                      });
+                      const evacolGrandTotal = filteredMonths.reduce((sum, m) => sum + (evacolMonthlyTotals[m.key] || 0), 0);
+                      const coCur = currencyView === 'ORIGINAL' ? 'COP' : currencyView;
+
+                      return (
+                        <Fragment key="colombia-content-block">
+                          {evacolSellers.length > 0 && (
+                            <tr 
+                              className="bg-amber-50/70 hover:bg-amber-100/60 font-bold transition-all border-b-2 border-amber-200 cursor-pointer"
+                              onClick={() => setEvacolExpanded(prev => !prev)}
+                              title="Haz clic para colapsar o expandir el desglose por canal de Evacol Colombia"
+                            >
+                              <td className="px-5 py-3 font-extrabold sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r bg-amber-50 text-amber-950 border-amber-200 whitespace-nowrap">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    {evacolExpanded ? (
+                                      <ChevronDown className="w-4 h-4 text-amber-700 transition-transform" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4 text-amber-700 transition-transform" />
+                                    )}
+                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                                    <span className="font-extrabold text-amber-950">Evacol Colombia (Consolidado 3 Marketplaces)</span>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-600 text-white">
+                                    OFICIAL • {currencyView === 'USD' ? 'US$ 3.000/mes' : 'COP $ 9.548.970/mes'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {filteredMonths.map(m => {
+                                const val = evacolMonthlyTotals[m.key] || 0;
+                                const isProj = m.isProjected;
+
+                                const { compVal, compKey } = getComparisonData(m.key, variationMode, evacolMonthlyTotals, monthsList);
+                                const variation = calculateVariation(
+                                  val,
+                                  compVal,
+                                  m.key,
+                                  compKey,
+                                  variationMode
+                                );
+
+                                return (
+                                  <td 
+                                    key={m.key} 
+                                    className={`px-3 py-2 text-right whitespace-nowrap border-l font-bold ${
+                                      isProj ? 'bg-orange-50/60 text-orange-950 border-orange-200' : 'bg-amber-50/40 text-amber-950 border-amber-150'
+                                    }`}
+                                  >
+                                    <div className="flex flex-col items-end justify-center">
+                                      <span className="leading-tight">
+                                        {val > 0 ? formatCurrency(val, coCur) : '-'}
+                                      </span>
+                                      {variationMode !== 'none' && variation !== null && (
+                                        <span 
+                                          className={`text-[9px] font-bold leading-none mt-0.5 inline-flex items-center gap-0.5 ${
+                                            variation >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                                          }`}
+                                          title={`Variación ${
+                                            variationMode === 'diaria' ? 'diaria ponderada' : 
+                                            variationMode === 'anual' ? `interanual YoY vs. ${compKey}` : 
+                                            'mensual MoM'
+                                          }: ${(variation * 100).toFixed(1)}%`}
+                                        >
+                                          <span>{variation >= 0 ? '▲' : '▼'}</span>
+                                          <span>{Math.abs(variation * 100).toFixed(1)}%</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+
+                              <td className="px-5 py-3 text-right font-black border-l whitespace-nowrap text-amber-950 bg-amber-100/60 border-amber-200">
+                                {formatCurrency(evacolGrandTotal, coCur)}
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* SUB-FILAS INDIVIDUALES DE EVACON COLOMBIA (SI EXPANDIDO) */}
+                          {evacolExpanded && evacolSellers
+                            .sort((a, b) => b.totalRow - a.totalRow)
+                            .map(seller => {
+                              const isRowSelected = selectedSellerId === seller.id;
+                              return (
+                                <tr 
+                                  key={seller.id}
+                                  onClick={() => setSelectedSellerId(prev => prev === seller.id ? null : seller.id)}
+                                  className={`cursor-pointer transition-all ${
+                                    isRowSelected 
+                                      ? 'bg-amber-50/90 font-bold border-l-4 border-l-amber-600 shadow-xs' 
+                                      : 'hover:bg-slate-50/80 transition-colors'
+                                  }`}
+                                >
+                                  <td className={`px-5 py-2 font-medium sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r whitespace-nowrap pl-9 transition-colors ${
+                                    isRowSelected ? 'bg-amber-50 text-amber-950 border-amber-200 font-bold' : 'bg-white text-slate-700 border-slate-100'
+                                  }`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                        <span className="truncate max-w-[190px]">{seller.name}</span>
+                                      </div>
+                                      <span className="text-[9px] text-slate-400 font-normal">Canal</span>
+                                    </div>
+                                  </td>
+
+                                  {filteredMonths.map(m => {
+                                    const val = seller.months[m.key]?.subtotal || 0;
+                                    return (
+                                      <td key={m.key} className="px-3 py-2 text-right whitespace-nowrap border-l border-slate-100 text-slate-700 font-mono text-[11px]">
+                                        {val > 0 ? formatCurrency(val, coCur) : '-'}
+                                      </td>
+                                    );
+                                  })}
+
+                                  <td className="px-5 py-2 text-right font-semibold border-l whitespace-nowrap text-slate-800 bg-slate-50/40 border-slate-200 font-mono text-[11px]">
+                                    {formatCurrency(seller.totalRow, coCur)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+
+                          {/* OTROS SELLERS DE COLOMBIA (NATURA, DISUIZA, FORMEX) */}
+                          {otherCOSellers.map(seller => renderSellerRow(seller, 'CO'))}
+                        </Fragment>
+                      );
+                    };
+
                     // CASO 1: SELECCIONADO "ALL" (TODOS LOS MERCADOS SEGMENTADOS POR PAÍS)
                     if (selectedCountry === 'ALL') {
                       const countryOrder = ['AR', 'CL', 'CO', 'MX', 'US'];
@@ -2479,7 +2655,9 @@ function MetasFacturacionContent() {
                                 {!isCollapsed && (
                                   cCode === 'CL' 
                                     ? renderChileBlock(cGroup.sellersMap)
-                                    : sellersList.map(seller => renderSellerRow(seller, cCode))
+                                    : cCode === 'CO'
+                                      ? renderColombiaBlock(cGroup.sellersMap)
+                                      : sellersList.map(seller => renderSellerRow(seller, cCode))
                                 )}
                               </Fragment>
                             );
@@ -2551,6 +2729,8 @@ function MetasFacturacionContent() {
                       <>
                         {selectedCountry === 'CL' ? (
                           renderChileBlock(activeGroup?.sellersMap || {})
+                        ) : selectedCountry === 'CO' ? (
+                          renderColombiaBlock(activeGroup?.sellersMap || {})
                         ) : (
                           Object.values(activeGroup?.sellersMap || {})
                             .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -3894,7 +4074,7 @@ function MetasFacturacionContent() {
                         {/* Fila Facturación Cliente (GMV) */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
                           <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200">
-                            Ventas del Cliente (GMV)
+                            {seller.name.toLowerCase().includes('evacol') && !seller.name.includes('USA') ? 'Ventas en Colombia (GMV COP)' : 'Ventas del Cliente (GMV)'}
                           </td>
                           {filteredMonths.map(m => {
                             const mData = seller.months[m.key];
@@ -3911,10 +4091,54 @@ function MetasFacturacionContent() {
                           })}
                         </tr>
 
+                        {/* FILAS EXPLICATIVAS DE CRUCE FX EN DÓLARES PARA EVACOL COLOMBIA */}
+                        {seller.name.toLowerCase().includes('evacol') && !seller.name.includes('USA') && (
+                          <>
+                            {/* Fila Tipo de Cambio */}
+                            <tr className="bg-amber-50/30 hover:bg-amber-50/50 transition-colors border-b border-amber-100/70 text-slate-700">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-amber-50/60 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-amber-900 font-semibold border-r border-amber-200 flex items-center justify-between">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                  <span>Tipo de Cambio (TC Oficial)</span>
+                                </span>
+                                <span className="text-[10px] text-amber-700 font-mono font-bold">COP/USD</span>
+                              </td>
+                              {filteredMonths.map(m => {
+                                const mData = seller.months[m.key];
+                                const isProj = mData?.isProjected;
+                                const tc = mData?.tc || getRateToUSD('COP', m.key) || 3182.99;
+                                return (
+                                  <td key={m.key} className={`px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] font-bold ${isProj ? 'bg-orange-50/30 border-orange-100 text-amber-950' : 'border-amber-100 text-amber-900'}`}>
+                                    $ {tc.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+
+                            {/* Fila Ventas Convertidas a USD */}
+                            <tr className="bg-amber-50/20 hover:bg-amber-50/40 transition-colors border-b border-amber-100/70 text-slate-700">
+                              <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-amber-50/40 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-amber-900 font-semibold border-r border-amber-200">
+                                Facturación Convertida (GMV USD)
+                              </td>
+                              {filteredMonths.map(m => {
+                                const mData = seller.months[m.key];
+                                const isProj = mData?.isProjected;
+                                const tc = mData?.tc || getRateToUSD('COP', m.key) || 3182.99;
+                                const factUsd = tc > 0 ? (mData?.facturacion || 0) / tc : 0;
+                                return (
+                                  <td key={m.key} className={`px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] font-bold ${isProj ? 'bg-orange-50/30 border-orange-100 text-slate-900' : 'border-amber-100 text-slate-800'}`}>
+                                    US$ {Math.round(factUsd).toLocaleString('en-US')}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          </>
+                        )}
+
                         {/* Fila Fee */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
                           <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200">
-                            Fee Aplicado
+                            Fee Aplicado {seller.name.toLowerCase().includes('evacol') && !seller.name.includes('USA') ? '(Escala USD)' : ''}
                           </td>
                           {filteredMonths.map(m => {
                             const mData = seller.months[m.key];
@@ -3927,10 +4151,30 @@ function MetasFacturacionContent() {
                           })}
                         </tr>
 
+                        {/* Fila Honorarios en USD para Evacol */}
+                        {seller.name.toLowerCase().includes('evacol') && !seller.name.includes('USA') && (
+                          <tr className="bg-blue-50/30 hover:bg-blue-50/50 transition-colors border-b border-blue-100 text-slate-700">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-blue-50/50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-900 font-semibold border-r border-blue-200">
+                              Honorarios en Dólares (Fee USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const mData = seller.months[m.key];
+                              const isProj = mData?.isProjected;
+                              const tc = mData?.tc || getRateToUSD('COP', m.key) || 3182.99;
+                              const feeUsd = mData?.feeUsd ?? (tc > 0 && mData?.montoServicio ? mData.montoServicio / tc : 1000);
+                              return (
+                                <td key={m.key} className={`px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] font-bold text-blue-900 ${isProj ? 'bg-orange-50/30 border-orange-100' : 'border-blue-100'}`}>
+                                  US$ {Math.round(feeUsd).toLocaleString('en-US')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        )}
+
                         {/* Fila Monto Servicio */}
                         <tr className="bg-slate-50/50 hover:bg-slate-100/50 transition-colors border-b border-slate-100">
                           <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-800 font-bold border-r border-slate-200">
-                            Monto Servicio
+                            {seller.name.toLowerCase().includes('evacol') && !seller.name.includes('USA') ? 'Monto Servicio Facturado (Fee USD × TC)' : 'Monto Servicio'}
                           </td>
                           {filteredMonths.map(m => {
                             const mData = seller.months[m.key];
@@ -4041,6 +4285,251 @@ function MetasFacturacionContent() {
                       </tbody>
                     );
                   });
+                })()}
+
+                {/* ========================================================================= */}
+                {/* FACTURA FINAL CONSOLIDADA EVACOL COLOMBIA (SUMA DE LOS 3 MARKETPLACES)    */}
+                {/* ========================================================================= */}
+                {(() => {
+                  const evacolSellers = allSellers.filter(s => s.name.toLowerCase().includes('evacol') && !s.name.includes('USA') && !s.name.includes('México'));
+                  if (evacolSellers.length === 0 || (selectedCountry !== 'CO' && selectedCountry !== 'ALL')) return null;
+
+                  const mlSeller = evacolSellers.find(s => s.name.toLowerCase().includes('ml'));
+                  const addiSeller = evacolSellers.find(s => s.name.toLowerCase().includes('addi'));
+                  const dafSeller = evacolSellers.find(s => s.name.toLowerCase().includes('dafitti'));
+
+                  return (
+                    <tbody key="evacol-consolidado-factura" className="border-t-8 border-slate-300">
+                      {/* Fila Encabezado Consolidado */}
+                      <tr className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-b-2 border-amber-300">
+                        <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-amber-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-amber-300">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                              <span className="font-extrabold text-amber-950 text-xs uppercase tracking-wide">
+                                Evacol Colombia (Factura Final Unificada • Suma 3 Canales)
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 border border-amber-300">
+                              ML + ADDI + DAFITI
+                            </span>
+                          </div>
+                        </td>
+                        {filteredMonths.map(m => (
+                          <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right font-bold text-xs text-amber-950 border-l border-amber-200 bg-amber-50/50">
+                            Factura Única COP
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* Fila Ventas ML (COP) */}
+                      <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 pl-9 border-r border-slate-200">
+                          Ventas Mercado Libre (GMV COP)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const val = mlSeller?.months[m.key]?.facturacion || 0;
+                          return (
+                            <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-700">
+                              {val > 0 ? formatCurrency(val, 'COP') : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Ventas ADDI (COP) */}
+                      <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 pl-9 border-r border-slate-200">
+                          Ventas ADDI (GMV COP)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const val = addiSeller?.months[m.key]?.facturacion || 0;
+                          return (
+                            <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-700">
+                              {val > 0 ? formatCurrency(val, 'COP') : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Ventas Dafiti (COP) */}
+                      <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 pl-9 border-r border-slate-200">
+                          Ventas Dafiti (GMV COP)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const val = dafSeller?.months[m.key]?.facturacion || 0;
+                          return (
+                            <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-700">
+                              {val > 0 ? formatCurrency(val, 'COP') : '$ 0 COP'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Total GMV Consolidado (COP) */}
+                      <tr className="bg-amber-50/20 hover:bg-amber-50/40 transition-colors border-b border-amber-200 font-bold text-xs">
+                        <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-amber-50/30 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-amber-950 font-bold border-r border-amber-200">
+                          Total Facturación Consolidada (GMV COP)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (addiSeller?.months[m.key]?.facturacion || 0) + (dafSeller?.months[m.key]?.facturacion || 0);
+                          return (
+                            <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-amber-950 bg-amber-50/20">
+                              {tot > 0 ? formatCurrency(tot, 'COP') : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Tipo de Cambio */}
+                      <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200">
+                          Tipo de Cambio Oficial (TC COP/USD)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const tc = mlSeller?.months[m.key]?.tc || addiSeller?.months[m.key]?.tc || getRateToUSD('COP', m.key) || 3182.99;
+                          return (
+                            <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-700">
+                              $ {tc.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Total GMV Convertido a USD */}
+                      <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200">
+                          Total Ventas Consolidadas en Dólares (GMV USD)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const tc = mlSeller?.months[m.key]?.tc || addiSeller?.months[m.key]?.tc || getRateToUSD('COP', m.key) || 3182.99;
+                          const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (addiSeller?.months[m.key]?.facturacion || 0) + (dafSeller?.months[m.key]?.facturacion || 0);
+                          const gmvUsd = tc > 0 ? tot / tc : 0;
+                          return (
+                            <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800 font-bold">
+                              US$ {Math.round(gmvUsd).toLocaleString('en-US')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Fee ML USD */}
+                      <tr className="bg-slate-50/50 hover:bg-slate-100/50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 pl-9 border-r border-slate-200">
+                          Fee Mercado Libre (Escala USD)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const f = mlSeller?.months[m.key]?.feeUsd || 1000;
+                          return (
+                            <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
+                              US$ {Math.round(f).toLocaleString('en-US')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Fee ADDI USD */}
+                      <tr className="bg-slate-50/50 hover:bg-slate-100/50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 pl-9 border-r border-slate-200">
+                          Fee ADDI (Escala USD)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const f = addiSeller?.months[m.key]?.feeUsd || 1000;
+                          return (
+                            <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
+                              US$ {Math.round(f).toLocaleString('en-US')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Fee Dafiti USD */}
+                      <tr className="bg-slate-50/50 hover:bg-slate-100/50 transition-colors border-b border-slate-100 text-xs">
+                        <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 pl-9 border-r border-slate-200">
+                          Fee Dafiti (Escala USD)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const f = dafSeller?.months[m.key]?.feeUsd || 1000;
+                          return (
+                            <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
+                              US$ {Math.round(f).toLocaleString('en-US')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Total Fees USD */}
+                      <tr className="bg-blue-50/30 hover:bg-blue-50/50 transition-colors border-b border-blue-200 font-bold text-xs">
+                        <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-blue-50/50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-blue-950 font-bold border-r border-blue-200">
+                          Total Honorarios Consolidados (Fee USD)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const fML = mlSeller?.months[m.key]?.feeUsd || 1000;
+                          const fADDI = addiSeller?.months[m.key]?.feeUsd || 1000;
+                          const fDAF = dafSeller?.months[m.key]?.feeUsd || 1000;
+                          const totFeeUSD = fML + fADDI + fDAF;
+                          return (
+                            <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-blue-900 bg-blue-50/20">
+                              US$ {Math.round(totFeeUSD).toLocaleString('en-US')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila Subtotal Consolidado Facturado en COP */}
+                      <tr className="bg-amber-100/50 hover:bg-amber-100/70 transition-colors border-b border-amber-300 font-bold text-xs">
+                        <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-amber-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-amber-950 font-extrabold border-r border-amber-300">
+                          Subtotal Facturado (Fee USD × TC en COP)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const tc = mlSeller?.months[m.key]?.tc || addiSeller?.months[m.key]?.tc || getRateToUSD('COP', m.key) || 3182.99;
+                          const fML = mlSeller?.months[m.key]?.feeUsd || 1000;
+                          const fADDI = addiSeller?.months[m.key]?.feeUsd || 1000;
+                          const fDAF = dafSeller?.months[m.key]?.feeUsd || 1000;
+                          const totFeeUSD = fML + fADDI + fDAF;
+                          const subCop = Math.round(totFeeUSD * tc);
+                          return (
+                            <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-amber-950 bg-amber-100/40">
+                              {formatCurrency(subCop, 'COP')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Fila IVA 0% */}
+                      <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-xs text-slate-400">
+                        <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r border-slate-200">
+                          IVA (0% Exportación de Servicios)
+                        </td>
+                        {filteredMonths.map(m => (
+                          <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px]">
+                            $ 0
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* Fila TOTAL FACTURA FINAL UNIFICADA EN COP */}
+                      <tr className="bg-emerald-100/70 hover:bg-emerald-100/90 transition-colors border-b-2 border-emerald-400">
+                        <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black border-r border-emerald-400 text-xs uppercase tracking-wide">
+                          TOTAL FACTURA FINAL COLOMBIA (COP)
+                        </td>
+                        {filteredMonths.map(m => {
+                          const tc = mlSeller?.months[m.key]?.tc || addiSeller?.months[m.key]?.tc || getRateToUSD('COP', m.key) || 3182.99;
+                          const fML = mlSeller?.months[m.key]?.feeUsd || 1000;
+                          const fADDI = addiSeller?.months[m.key]?.feeUsd || 1000;
+                          const fDAF = dafSeller?.months[m.key]?.feeUsd || 1000;
+                          const totFeeUSD = fML + fADDI + fDAF;
+                          const totCop = Math.round(totFeeUSD * tc);
+                          return (
+                            <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l font-mono text-xs font-black text-emerald-950 bg-emerald-100/50">
+                              {formatCurrency(totCop, 'COP')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  );
                 })()}
 
                 {/* ========================================================= */}
