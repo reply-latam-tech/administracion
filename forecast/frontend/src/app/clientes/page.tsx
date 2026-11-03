@@ -76,6 +76,7 @@ function calculateTenure(startStr?: string | null, endStr?: string | null): stri
 // Reglas de negocio y monedas de cobro de Reply por cuenta
 function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?: string) {
   const sid = String(sId);
+  const sName = (seller.nombre_seller || '').toLowerCase();
   const p = (seller.codigo_pais || seller.pais || '').toUpperCase();
   const mGmv = (seller.moneda || 'ARS').toUpperCase();
 
@@ -89,20 +90,30 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'USD';
     reglaLiquidacion = 'La facturación bruta (GMV) del cliente en Mercado Libre está en Pesos Mexicanos (MXN). Se convierte a USD según el Tipo de Cambio oficial mensual y se cruza con la escala comercial en USD: si el saldo en USD es menor a $35.000 USD se aplica el cargo mínimo garantizado de $1.000 USD; si supera los $35.000 USD se aplica la alícuota correspondiente según tramo (2,93% a 1,30%). Reply factura y cobra los honorarios siempre en Dólares (USD) sin reconvertir a pesos y sin IVA (0% IVA).';
     metodoActualizacion = 'Escala en USD con GMV convertido vía TC y cobro en USD sin IVA.';
-  } else if (sid === '941943480') {
+  } else if (sid === '2451996780' || sid === '941943480' || (sName.includes('natura') && (p === 'CO' || p === 'COL'))) {
     // Natura Colombia
     monedaCobro = 'USD';
-    reglaLiquidacion = 'Ventas brutas de Mercado Libre en Pesos Colombianos (COP) se convierten a USD según el Tipo de Cambio oficial del mes. Se cruza con la escala en USD (mínimo de $1.200 USD o alícuota de 2,93% a 2,28%). La factura de Reply se cobra en USD sin IVA (exportación de servicios).';
-    metodoActualizacion = 'Escala fija en USD.';
+    reglaLiquidacion = 'Las ventas brutas de Mercado Libre Colombia en Pesos Colombianos (COP) se convierten a USD según el Tipo de Cambio oficial del mes. Se cruzan con la escala comercial escalonada en USD (piso mínimo garantizado de $1.200 USD o alícuota del 2,93% al 1,30%). La factura de honorarios de Reply se emite y cobra en Dólares (USD) sin IVA (0% IVA por exportación de servicios a Colombia).';
+    metodoActualizacion = 'Escala fija en USD con GMV convertido vía TC y cobro en USD sin IVA.';
+  } else if (sid === '2539005925' || (sName.includes('natura') && (p === 'MX' || p === 'MEX'))) {
+    // Natura México
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'La facturación bruta (GMV) en Mercado Libre México en Pesos Mexicanos (MXN) se cruza con la escala comercial escalonada en MXN (piso mínimo garantizado de MXN $30.000 o alícuota del 4,50% al 2,00%). El honorario liquidado en MXN se convierte a USD según el Tipo de Cambio oficial del mes y se factura y cobra en Dólares (USD) sin IVA (0% IVA por exportación de servicios a México).';
+    metodoActualizacion = 'Escala en MXN liquidada y cobrada en USD vía TC oficial sin IVA.';
+  } else if (sid === '1181954123' || sName.includes('go advance')) {
+    // Go Advance
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'La facturación bruta (GMV) en Mercado Libre México en Pesos Mexicanos (MXN) se cruza con la escala comercial escalonada en MXN (piso mínimo garantizado de MXN $30.000 o alícuota del 4,50% al 2,00%). El honorario liquidado en MXN se convierte a USD según el Tipo de Cambio oficial del mes y se factura y cobra en Dólares (USD) sin IVA (0% IVA por exportación de servicios a México).';
+    metodoActualizacion = 'Escala en MXN liquidada y cobrada en USD vía TC oficial sin IVA.';
   } else if (sid === '964690754') {
     // Disuiza Colombia
     monedaCobro = 'USD';
     reglaLiquidacion = 'Ventas brutas en COP se convierten a USD vía TC oficial. Se aplica alícuota fija del 2,00% sobre la facturación en USD con un honorario mínimo garantizado de $1.500 USD (si el 2% supera los $1.500 USD se cobra el valor mayor). Cobro en USD sin IVA.';
     metodoActualizacion = 'Alícuota fija del 2% con piso mínimo de $1.500 USD.';
-  } else if (sid === '928666257') {
+  } else if (sid === '2219963574' || sid === '928666257') {
     // Evacol Colombia ML
     monedaCobro = 'USD';
-    reglaLiquidacion = 'Ventas brutas en COP se convierten a USD vía TC oficial. Se cruza con la escala en USD (mínimo de $1.000 USD o alícuota de 4,00% a 2,00%). Se factura y cobra en USD sin IVA (exportación de servicios).';
+    reglaLiquidacion = 'Ventas brutas en COP se convierten a USD vía TC oficial. Se cruza con la escala en USD (mínimo de $1.000 USD o alícuota de 4,00% a 2,00%). Se factura y cobra en USD sin IVA (exportación de servicios a Colombia).';
     metodoActualizacion = 'Escala en USD con cobro liquidado en USD sin IVA.';
   } else if (sid === '928424062') {
     // Evacol Colombia ADDI
@@ -122,8 +133,18 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   } else if (sid === '984167591') {
     // Alma Nativa México
     monedaCobro = 'USD';
-    reglaLiquidacion = 'Ventas en dólares se cruzan con la escala en USD con piso mínimo. Cobro en USD.';
-    metodoActualizacion = 'Escala en USD.';
+    reglaLiquidacion = 'Ventas en dólares o pesos mexicanos se cruzan con la escala en USD con piso mínimo de $500 USD. Cobro en USD sin IVA.';
+    metodoActualizacion = 'Escala en USD con piso de $500 USD.';
+  } else if (['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'].includes(sid) || (sName.includes('newsan') && (p === 'CL' || p === 'CHL'))) {
+    // Newsan Chile Multicanal (6 Cuentas)
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'Las 6 cuentas de Newsan Chile registran su facturación bruta (GMV) en Pesos Chilenos (CLP) y se convierten mensualmente a USD según el Tipo de Cambio oficial. La suma total consolidada se cruza con la escala comercial: si el 1% es menor a $4.000 USD se cobra el cargo mínimo garantizado de $4.000 USD; si supera esa cifra, se cobra el 1% de la facturación consolidada en USD. Se factura y cobra en USD sin IVA (exportación de servicios a Chile).';
+    metodoActualizacion = 'Escala fija consolidada en USD con piso mínimo de $4.000 USD o 1% s/ GMV en USD.';
+  } else if (['765606810', '938333830', '550082876', '998163061'].includes(sid) || sName.includes('axo')) {
+    // Grupo Axo México (Calvin Klein ML/LVP y Tommy Hilfiger ML/LVP)
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'La base de cálculo es la facturación consolidada en MXN de 4 cuentas (Calvin Klein ML y Liverpool + Tommy Hilfiger ML y Liverpool). Según la cantidad de créditos operativos del mes (≤1.650 o ≤2.200) se cruza con la escala comercial correspondiente en MXN (mínimo de MXN $120.000 o MXN $140.000, o alícuota del 1,75% al 0,80%). El fee total en MXN se prorratea 50% para CK y 50% para TH, se convierte a USD según el Tipo de Cambio oficial del mes y se suma el fee fijo de Botmaker ($170 USD para cada cuenta = $340 USD total). Facturación final 100% en USD sin IVA (0% IVA).';
+    metodoActualizacion = 'Escala dinámica por tramos de créditos en MXN, prorrateo 50/50 y cobro en USD + Botmaker USD 170 c/u.';
   } else if (sid === '256189964') {
     // Newsan ML Consolidado
     monedaCobro = 'ARS';
@@ -139,22 +160,13 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'ARS';
     reglaLiquidacion = 'Liquidación basada en métricas operativas de Tienda Web: Sesiones mensuales y Horas Extras de soporte técnico. Escala con cargo mínimo garantizado más tarifa por sesión y tarifa por hora extra. Actualización semestral (Abril y Septiembre). Facturación en ARS + 21% IVA.';
     metodoActualizacion = 'Ajuste semestral por inflación oficial acumulada (Abril y Septiembre).';
-  } else if (['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('newsan') && p === 'CL')) {
-    // Newsan Chile Multicanal (6 Cuentas)
+  } else if (p !== 'AR' && p !== 'ARG' && p !== '') {
+    // Regla de resguardo para cuentas del exterior (CO, MX, CL, US, etc.)
     monedaCobro = 'USD';
-    reglaLiquidacion = 'Las 6 cuentas de Newsan Chile (Mercado Libre, Falabella, Ripley, Walmart, Paris y Kitchen Center) registran su facturación bruta (GMV) en Pesos Chilenos (CLP) y se convierten mensualmente a USD según el Tipo de Cambio oficial. La suma total consolidada se cruza con la escala comercial: si el 1% es menor a $4.000 USD se cobra el cargo mínimo garantizado de $4.000 USD; si supera esa cifra, se cobra el 1% de la facturación consolidada en USD. Se factura y cobra en USD sin IVA (exportación de servicios a Chile).';
-    metodoActualizacion = 'Escala fija consolidada en USD con piso mínimo de $4.000 USD o 1% s/ GMV en USD.';
-  } else if (['765606810', '938333830', '550082876', '998163061'].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('axo'))) {
-    // Grupo Axo México (Calvin Klein ML/LVP y Tommy Hilfiger ML/LVP)
-    monedaCobro = 'USD';
-    reglaLiquidacion = 'La base de cálculo es la facturación consolidada en MXN de 4 cuentas (Calvin Klein ML y Liverpool + Tommy Hilfiger ML y Liverpool). Según la cantidad de créditos operativos del mes (≤1.650 o ≤2.200) se cruza con la escala comercial correspondiente en MXN (mínimo de MXN $120.000 o MXN $140.000, o alícuota del 1,75% al 0,80%). El fee total en MXN se prorratea 50% para CK y 50% para TH, se convierte a USD según el Tipo de Cambio oficial del mes y se suma el fee fijo de Botmaker ($170 USD para cada cuenta = $340 USD total). Facturación final 100% en USD sin IVA (0% IVA).';
-    metodoActualizacion = 'Escala dinámica por tramos de créditos en MXN, prorrateo 50/50 y cobro en USD + Botmaker USD 170 c/u.';
-  } else if (p === 'CL') {
-    monedaCobro = 'CLP';
-    reglaLiquidacion = 'Facturación en Pesos Chilenos (CLP) cruzada con la escala pactada por canal (Falabella, ML, Paris, etc.). Cobro en CLP.';
-    metodoActualizacion = 'Escala en CLP acordada.';
+    reglaLiquidacion = `Facturación de ${seller.nombre_seller || 'la cuenta'} en el exterior (${p}). Liquidación y facturación de honorarios de Reply emitida y cobrada en Dólares (USD) sin IVA (0% exportación de servicios).`;
+    metodoActualizacion = 'Cobro liquidado en USD sin IVA (exportación de servicios).';
   } else {
-    // Clientes generales de Argentina (Nestle, Morixe, Dapsa, etc.)
+    // Clientes locales de Argentina (Nestle, Morixe, Dapsa, etc.)
     monedaCobro = 'ARS';
     reglaLiquidacion = 'Facturación bruta en Mercado Libre Argentina en ARS cruzada con la escala comercial escalonada. Cobro en ARS + 21% IVA.';
     metodoActualizacion = 'Ajuste periódico pactado.';
@@ -162,7 +174,13 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
 
   // 2. Moneda de la escala comercial
   const newsanChileIds = ['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'];
-  let monedaEscala = escalaMoneda || (['941943480', '964690754', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (seller?.nombre_seller?.toLowerCase().includes('newsan') && p === 'CL') ? 'USD' : (['765606810', '938333830', '550082876', '998163061'].includes(sid) || p === 'MX' ? 'MXN' : (p === 'CL' ? 'CLP' : 'ARS')));
+  let monedaEscala = escalaMoneda || (
+    ['2451996780', '941943480', '964690754', '2219963574', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (sName.includes('newsan') && (p === 'CL' || p === 'CHL'))
+      ? 'USD' 
+      : (['2539005925', '1181954123', '765606810', '938333830', '550082876', '998163061'].includes(sid) || p === 'MX' || p === 'MEX' 
+        ? 'MXN' 
+        : (p === 'CL' || p === 'CHL' ? 'CLP' : 'ARS'))
+  );
 
   return {
     monedaCobro,

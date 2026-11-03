@@ -899,6 +899,146 @@ function MetasFacturacionContent() {
         feeVal = alicuotaVal;
       }
 
+      // Soporte para Natura Colombia (seller_id 2451996780 / 941943480)
+      // Facturación en COP -> Convertida a USD vía TC oficial -> Escala en USD (Mínimo $1.200 USD o 2,93% a 1,30%) -> Cobro en USD sin IVA
+      if (sId === '2451996780' || sId === '941943480' || (sName.toLowerCase().includes('natura') && cCode === 'CO')) {
+        rowCurrency = 'USD';
+        ivaVal = 0;
+        const currentTc = getRateToUSD('COP', mKey) || 3182.99;
+        const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
+
+        let feeUsd = 1200.0;
+        let alicuotaVal: any = 'MÍNIMO';
+        if (factUsd >= 230000) {
+          feeUsd = factUsd * 0.0130;
+          alicuotaVal = 0.0130;
+        } else if (factUsd >= 170000) {
+          feeUsd = factUsd * 0.0163;
+          alicuotaVal = 0.0163;
+        } else if (factUsd >= 125000) {
+          feeUsd = factUsd * 0.0195;
+          alicuotaVal = 0.0195;
+        } else if (factUsd >= 90000) {
+          feeUsd = factUsd * 0.0228;
+          alicuotaVal = 0.0228;
+        } else if (factUsd >= 70000) {
+          feeUsd = factUsd * 0.0244;
+          alicuotaVal = 0.0244;
+        } else if (factUsd >= 45000) {
+          feeUsd = factUsd * 0.0276;
+          alicuotaVal = 0.0276;
+        } else if (factUsd >= 35000) {
+          feeUsd = factUsd * 0.0293;
+          alicuotaVal = 0.0293;
+        } else {
+          feeUsd = 1200.0;
+          alicuotaVal = 'MÍNIMO';
+        }
+
+        montoServicio = Math.round(feeUsd * 100) / 100;
+        subtotalVal = montoServicio;
+        totalVal = montoServicio;
+        feeVal = alicuotaVal;
+      }
+
+      // Soporte para Evacol Colombia ML (seller_id 2219963574 / 928666257)
+      // Facturación en COP -> Convertida a USD vía TC oficial -> Escala en USD (Mínimo $1.000 USD o 4,00% a 2,00%) -> Cobro en USD sin IVA
+      if (sId === '2219963574' || sId === '928666257') {
+        rowCurrency = 'USD';
+        ivaVal = 0;
+        const currentTc = getRateToUSD('COP', mKey) || 3182.99;
+        const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
+
+        let feeUsd = 1000.0;
+        let alicuotaVal: any = 'MÍNIMO';
+        if (factUsd >= 150000) {
+          feeUsd = factUsd * 0.0200;
+          alicuotaVal = 0.0200;
+        } else if (factUsd >= 110000) {
+          feeUsd = factUsd * 0.0250;
+          alicuotaVal = 0.0250;
+        } else if (factUsd >= 80000) {
+          feeUsd = factUsd * 0.0300;
+          alicuotaVal = 0.0300;
+        } else if (factUsd >= 60000) {
+          feeUsd = factUsd * 0.0350;
+          alicuotaVal = 0.0350;
+        } else if (factUsd >= 50000) {
+          feeUsd = factUsd * 0.0400;
+          alicuotaVal = 0.0400;
+        } else {
+          feeUsd = 1000.0;
+          alicuotaVal = 'MÍNIMO';
+        }
+
+        montoServicio = Math.round(feeUsd * 100) / 100;
+        subtotalVal = montoServicio;
+        totalVal = montoServicio;
+        feeVal = alicuotaVal;
+      }
+
+      // Soporte para Disuiza Colombia (seller_id 964690754)
+      // Cobro en USD sin IVA (Mínimo $1.500 USD o 2% sobre GMV en USD)
+      if (sId === '964690754') {
+        rowCurrency = 'USD';
+        ivaVal = 0;
+        const currentTc = getRateToUSD('COP', mKey) || 3182.99;
+        const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
+        const feeCalculado = factUsd * 0.0200;
+        const feeFinal = Math.max(1500.0, feeCalculado);
+        montoServicio = Math.round(feeFinal * 100) / 100;
+        subtotalVal = montoServicio;
+        totalVal = montoServicio;
+        feeVal = feeCalculado >= 1500.0 ? 0.0200 : 'MÍNIMO';
+      }
+
+      // Soporte para Natura México (seller_id 2539005925) y Go Advance (seller_id 1181954123)
+      // Facturación en MXN cruzada con escala MXN (Mínimo MXN $30.000 o 4,50% a 2,00%) -> Convertida a USD vía TC -> Cobro en USD sin IVA
+      if (sId === '2539005925' || sId === '1181954123' || (sName.toLowerCase().includes('natura') && cCode === 'MX') || sName.toLowerCase().includes('go advance')) {
+        rowCurrency = 'USD';
+        ivaVal = 0;
+        let feeMxn = 30000.0;
+        let alicuotaVal: any = 'MÍNIMO';
+        if (factVal >= 8000000) {
+          feeMxn = factVal * 0.0200;
+          alicuotaVal = 0.0200;
+        } else if (factVal >= 6000000) {
+          feeMxn = factVal * 0.0250;
+          alicuotaVal = 0.0250;
+        } else if (factVal >= 4500000) {
+          feeMxn = factVal * 0.0275;
+          alicuotaVal = 0.0275;
+        } else if (factVal >= 3500000) {
+          feeMxn = factVal * 0.0300;
+          alicuotaVal = 0.0300;
+        } else if (factVal >= 2500000) {
+          feeMxn = factVal * 0.0325;
+          alicuotaVal = 0.0325;
+        } else if (factVal >= 1800000) {
+          feeMxn = factVal * 0.0350;
+          alicuotaVal = 0.0350;
+        } else if (factVal >= 1250000) {
+          feeMxn = factVal * 0.0375;
+          alicuotaVal = 0.0375;
+        } else if (factVal >= 800000) {
+          feeMxn = factVal * 0.0425;
+          alicuotaVal = 0.0425;
+        } else if (factVal >= 700000) {
+          feeMxn = factVal * 0.0450;
+          alicuotaVal = 0.0450;
+        } else {
+          feeMxn = 30000.0;
+          alicuotaVal = 'MÍNIMO';
+        }
+
+        const tcMxn = getRateToUSD('MXN', mKey) || 18.0;
+        const feeUsd = tcMxn > 0 ? Math.round((feeMxn / tcMxn) * 100) / 100 : 0;
+        montoServicio = feeUsd;
+        subtotalVal = feeUsd;
+        totalVal = feeUsd;
+        feeVal = alicuotaVal;
+      }
+
       // Reglas comerciales Botmaker, Cuentas del Exterior y Café Martínez
       let botmakerVal = Number(row.botmaker) || 0;
       let descuentoVal = 0;
