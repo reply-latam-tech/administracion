@@ -138,23 +138,23 @@ def process_file(filepath, sellers_map):
                     except:
                         pass
                         
-            # Insertar registro tanto para el mes de consumo como para el mes de liquidación
+            # Regla comercial: La factura de Botmaker del mes N se cobra en la liquidación de Reply del mes N+1 (desfase de 1 mes)
             base_row = {
+                "periodo": periodo_liquidacion,
                 "seller_id": seller_id,
                 "child_project_id": child_project_id,
                 "child_project_name": row.get("Child Project Name", ""),
                 "total_billed": round(total_billed, 2),
                 "raw_data": raw_data
             }
-            rows_to_upsert.append({ **base_row, "periodo": periodo_consumo })
-            rows_to_upsert.append({ **base_row, "periodo": periodo_liquidacion })
+            rows_to_upsert.append(base_row)
             
         if rows_to_upsert:
             response = supabase.table("botmaker_consumos").upsert(
                 rows_to_upsert, 
                 on_conflict="periodo,child_project_id"
             ).execute()
-            print(f"OK: Se guardaron/actualizaron {len(rows_to_upsert)} registros en Supabase (consumo + liquidación).")
+            print(f"OK: Se guardaron/actualizaron {len(rows_to_upsert)} registros en Supabase para liquidación {periodo_liquidacion} (consumo {periodo_consumo}).")
             return True
         else:
             print("WARN: No se encontraron filas de Child Accounts para procesar.")
