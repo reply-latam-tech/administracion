@@ -5,7 +5,7 @@ nombre_seller: Pinturas Online
 pais: AR
 moneda: ARS
 estado: TRUE
-cobrar_botmaker: TRUE
+cobrar_botmaker: FALSE
 frecuencia_actualizacion: TRUE
 
 facturacion

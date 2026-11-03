@@ -1002,6 +1002,7 @@ function MetasFacturacionContent() {
       let botmakerVal = Number(row.botmaker) || 0;
       let descuentoVal = 0;
       const isCafeMartinez = sId === '1088146491' || sName.toLowerCase().includes('cafe martinez');
+      const isPinturasOnline = sId === '484050606' || sName.toLowerCase().includes('pinturas online');
       const isExterior = cCode !== 'AR' || rowCurrency === 'USD';
 
       // 1. Cuentas del exterior (CO, MX, CL, US o facturadas en USD):
@@ -1036,7 +1037,7 @@ function MetasFacturacionContent() {
       } else {
         // Cuentas locales de Argentina (ARS):
         if (mKey >= '2026-10') {
-          if (isCafeMartinez) {
+          if (isCafeMartinez || isPinturasOnline) {
             botmakerVal = 0;
           } else {
             const origBm = Number(row.botmaker_original) || 0;
@@ -1068,6 +1069,20 @@ function MetasFacturacionContent() {
         subtotalVal = subtotalBruto - descuentoVal;
         ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
         totalVal = subtotalVal + ivaVal;
+      }
+
+      // 4. Regla comercial oficial para Pinturas Online (seller_id 484050606):
+      // - "A Pinturas Online No se le cobra botmaker, por más de que esté en la tabla"
+      if (isPinturasOnline || row.cobrar_botmaker === false) {
+        botmakerVal = 0;
+        subtotalVal = Math.round((montoServicio - descuentoVal) * 100) / 100;
+        if (cCode === 'AR' && rowCurrency === 'ARS') {
+          ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+          totalVal = Math.round((subtotalVal + ivaVal) * 100) / 100;
+        } else {
+          ivaVal = 0;
+          totalVal = subtotalVal;
+        }
       }
 
       const isProj = row.estado === 'PROYECTADO';
