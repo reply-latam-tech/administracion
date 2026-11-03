@@ -110,16 +110,11 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'USD';
     reglaLiquidacion = 'Ventas brutas en COP se convierten a USD vía TC oficial. Se aplica alícuota fija del 2,00% sobre la facturación en USD con un honorario mínimo garantizado de $1.500 USD (si el 2% supera los $1.500 USD se cobra el valor mayor). Cobro en USD sin IVA.';
     metodoActualizacion = 'Alícuota fija del 2% con piso mínimo de $1.500 USD.';
-  } else if (sid === '2219963574' || sid === '928666257') {
-    // Evacol Colombia ML
-    monedaCobro = 'USD';
-    reglaLiquidacion = 'Ventas brutas en COP se convierten a USD vía TC oficial. Se cruza con la escala en USD (mínimo de $1.000 USD o alícuota de 4,00% a 2,00%). Se factura y cobra en USD sin IVA (exportación de servicios a Colombia).';
-    metodoActualizacion = 'Escala en USD con cobro liquidado en USD sin IVA.';
-  } else if (sid === '928424062') {
-    // Evacol Colombia ADDI
-    monedaCobro = 'USD';
-    reglaLiquidacion = 'Tarifa plana fija (Flat Fee) de $1.000 USD mensuales independientemente del volumen facturado. Se factura y cobra en USD sin IVA.';
-    metodoActualizacion = 'Flat fee fijo mensual de $1.000 USD.';
+  } else if (['2219963574', '928666257', '928424062', '928424063'].includes(sid) || (sName.includes('evacol') && (p === 'CO' || p === 'COL'))) {
+    // Evacol Colombia (3 Marketplaces: ML, ADDI, DAFITTI)
+    monedaCobro = 'COP';
+    reglaLiquidacion = 'Este cliente opera 3 marketplaces en Colombia: Mercado Libre, ADDI y Dafiti. A cada uno se le aplica la misma escala comercial en USD con piso mínimo garantizado de $1.000 USD (o alícuota del 4,00% al 2,00% sobre el GMV convertido de COP a USD). Los fees de los 3 canales se detallan y totalizan en USD y se reconvierten a Pesos Colombianos (COP) mediante el Tipo de Cambio oficial mensual para emitir y cobrar la factura en COP sin IVA.';
+    metodoActualizacion = 'Escala en USD con mínimo de $1.000 USD c/u, reconvertida y cobrada en COP vía TC oficial.';
   } else if (sid === '127711636') {
     // Formex Colombia
     monedaCobro = 'USD';
@@ -175,7 +170,7 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   // 2. Moneda de la escala comercial
   const newsanChileIds = ['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'];
   let monedaEscala = escalaMoneda || (
-    ['2451996780', '941943480', '964690754', '2219963574', '928666257', '928424062', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (sName.includes('newsan') && (p === 'CL' || p === 'CHL'))
+    ['2451996780', '941943480', '964690754', '2219963574', '928666257', '928424062', '928424063', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (sName.includes('newsan') && (p === 'CL' || p === 'CHL'))
       ? 'USD' 
       : (['2539005925', '1181954123', '765606810', '938333830', '550082876', '998163061'].includes(sid) || p === 'MX' || p === 'MEX' 
         ? 'MXN' 

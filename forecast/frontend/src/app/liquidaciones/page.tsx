@@ -666,50 +666,6 @@ function MetasFacturacionContent() {
         feeVal = feeFinal === 1500.0 ? 'MÍNIMO' : 0.02;
       }
 
-      // Soporte para Evacol Colombia ML (seller_id 928666257 / 2219963574)
-      // Escala en USD (Mínimo $1.000 USD o 4% a 2%) -> Liquidación y cobro en USD sin IVA
-      if (sId === '928666257' || sId === '2219963574') {
-        rowCurrency = 'USD'; // Se factura y reporta en USD
-        ivaVal = 0;
-        const tcCopMap: Record<string, number> = {
-          '2026-02': 3769.00, '2026-03': 3660.00, '2026-04': 3660.00,
-          '2026-05': 3562.00, '2026-06': 3440.83, '2026-07': 3205.80,
-          '2026-08': 3213.97, '2026-09': 3312.84, '2026-10': 3182.99,
-          '2026-11': 3340.00, '2026-12': 3360.00, '2027-01': 3375.00,
-          '2027-02': 3390.00, '2027-03': 3410.00, '2027-04': 3425.00,
-          '2027-05': 3440.00, '2027-06': 3455.00, '2027-07': 3470.00,
-          '2027-08': 3485.00, '2027-09': 3500.00
-        };
-        const currentTc = tcCopMap[mKey] || 3350.0;
-        const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
-        
-        let feeUsd = 1000.0;
-        let alicuotaVal: any = 'MÍNIMO';
-        if (factUsd >= 150000) {
-          feeUsd = factUsd * 0.02;
-          alicuotaVal = 0.02;
-        } else if (factUsd >= 110000) {
-          feeUsd = factUsd * 0.025;
-          alicuotaVal = 0.025;
-        } else if (factUsd >= 80000) {
-          feeUsd = factUsd * 0.03;
-          alicuotaVal = 0.03;
-        } else if (factUsd >= 60000) {
-          feeUsd = factUsd * 0.035;
-          alicuotaVal = 0.035;
-        } else if (factUsd >= 50000) {
-          feeUsd = factUsd * 0.04;
-          alicuotaVal = 0.04;
-        } else {
-          feeUsd = 1000.0;
-          alicuotaVal = 'MÍNIMO';
-        }
-
-        montoServicio = Math.round(feeUsd * 100) / 100;
-        subtotalVal = montoServicio;
-        totalVal = montoServicio;
-        feeVal = alicuotaVal;
-      }
 
       // Soporte para Newsan Mercado Libre Consolidado (seller_id 256189964)
       // Facturación Consolidada ML = Newsan Propio + Newsan Motorola + Pilisar
@@ -740,16 +696,6 @@ function MetasFacturacionContent() {
         feeVal = bestAlic;
       }
 
-      // Soporte para Evacol Colombia ADDI (seller_id 928424062)
-      // Flat fee: 1.000 USD fijos todos los meses independientemente de su facturación
-      if (sId === '928424062') {
-        rowCurrency = 'USD';
-        ivaVal = 0;
-        montoServicio = 1000.00;
-        subtotalVal = 1000.00;
-        totalVal = 1000.00;
-        feeVal = 'FIJO';
-      }
 
       // Soporte para Formex Colombia (seller_id 127711636)
       // Facturación bruta en COP -> Convertir a USD -> Cruce con Escala USD (Mínimo $1.000 USD o 2,93% a 1,30%) -> Cobro en USD
@@ -941,10 +887,11 @@ function MetasFacturacionContent() {
         feeVal = alicuotaVal;
       }
 
-      // Soporte para Evacol Colombia ML (seller_id 2219963574 / 928666257)
-      // Facturación en COP -> Convertida a USD vía TC oficial -> Escala en USD (Mínimo $1.000 USD o 4,00% a 2,00%) -> Cobro en USD sin IVA
-      if (sId === '2219963574' || sId === '928666257') {
-        rowCurrency = 'USD';
+      // Soporte para Evacol Colombia Multicanal (ML: 2219963574, ADDI: 928424062, DAFITTI: 928424063)
+      // Facturación en COP -> Convertida a USD vía TC oficial -> Escala en USD (Mínimo $1.000 USD o 4,00% a 2,00%)
+      // Los 3 honorarios se liquidan y cobran en Pesos Colombianos (COP) reconvirtiendo el fee en USD por el TC oficial mensual sin IVA
+      if (['2219963574', '928666257', '928424062', '928424063'].includes(sId) || (sName.toLowerCase().includes('evacol') && (cCode === 'CO' || meta.code === 'CO'))) {
+        rowCurrency = 'COP';
         ivaVal = 0;
         const currentTc = getRateToUSD('COP', mKey) || 3182.99;
         const factUsd = currentTc > 0 ? (factVal / currentTc) : 0;
@@ -971,9 +918,10 @@ function MetasFacturacionContent() {
           alicuotaVal = 'MÍNIMO';
         }
 
-        montoServicio = Math.round(feeUsd * 100) / 100;
-        subtotalVal = montoServicio;
-        totalVal = montoServicio;
+        const feeCop = Math.round(feeUsd * currentTc);
+        montoServicio = feeCop;
+        subtotalVal = feeCop;
+        totalVal = feeCop;
         feeVal = alicuotaVal;
       }
 
