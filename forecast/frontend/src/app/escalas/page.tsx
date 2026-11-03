@@ -166,8 +166,8 @@ export default function EscalasPage() {
             subtotal_mercado_libre = Math.round(totML * (bestAlic || 0.0031));
           }
 
-          // Soporte para cálculo exacto en USD de Natura Colombia (seller_id 941943480)
-          if (String(row.seller_id) === '941943480') {
+          // Soporte para cálculo exacto en USD de Natura Colombia (seller_id 941943480 / 2451996780)
+          if (String(row.seller_id) === '941943480' || String(row.seller_id) === '2451996780') {
             const pKey = row.periodo?.substring(0, 7);
             const naturaMap: Record<string, { tipo: string; alicuota: number; subtotal: number }> = {
               '2026-02': { tipo: 'MINIMO', alicuota: 0, subtotal: 1200.00 },
@@ -226,8 +226,8 @@ export default function EscalasPage() {
             alicuota = feeFinal === 1500.0 ? 0 : 0.02;
           }
 
-          // Soporte para cálculo exacto en COP de Evacol Colombia ML (seller_id 928666257)
-          if (String(row.seller_id) === '928666257') {
+          // Soporte para cálculo exacto en COP de Evacol Colombia ML (seller_id 928666257 / 2219963574)
+          if (String(row.seller_id) === '928666257' || String(row.seller_id) === '2219963574') {
             const pKey = row.periodo?.substring(0, 7);
             const tcCopMap: Record<string, number> = {
               '2026-02': 3769.00, '2026-03': 3660.00, '2026-04': 3660.00,
@@ -279,7 +279,7 @@ export default function EscalasPage() {
           // Soporte para Evacol Colombia ADDI (seller_id 928424062)
           if (String(row.seller_id) === '928424062') {
             subtotal_mercado_libre = 1000.00;
-            tipo_cargo = 'FIJO';
+            tipo_cargo = 'MINIMO';
             alicuota = 0;
           }
 
@@ -497,7 +497,7 @@ export default function EscalasPage() {
           valor_facturado: totMXN,
           subtotal_mercado_libre: subtotalMXN,
           credits: credits,
-          estado: period <= '2026-09-01' ? 'REAL' : 'PROYECTADO'
+          estado: period <= '2026-10-01' ? 'REAL' : 'PROYECTADO'
         };
       });
 
@@ -845,15 +845,15 @@ export default function EscalasPage() {
                         const cellCargo = (cellData.tipoCargo || '').trim().toUpperCase();
 
                         if (liqCargo === cellCargo) {
-                          if (cellCargo.startsWith('MINIMO')) {
+                          if (cellCargo.startsWith('MINIMO') || cellCargo === 'FIJO') {
                             isApplied = true;
-                          } else if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.0001) {
+                          } else if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.00005) {
                             isApplied = true;
                           }
-                        } else if (liqCargo.startsWith('MINIMO') && cellCargo.startsWith('MINIMO')) {
+                        } else if ((liqCargo.startsWith('MINIMO') || liqCargo === 'FIJO') && (cellCargo.startsWith('MINIMO') || cellCargo === 'FIJO')) {
                           isApplied = true;
-                        } else if (liqCargo === 'PORCENTUAL' && cellCargo === 'PORCENTUAL') {
-                          if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.0001) {
+                        } else if (liqCargo.startsWith('PORCENTUAL') && cellCargo.startsWith('PORCENTUAL')) {
+                          if (Math.abs(Number(liq.alicuota) - Number(cellData.alicuota)) < 0.00005) {
                             isApplied = true;
                           }
                         }

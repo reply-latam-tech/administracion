@@ -601,8 +601,8 @@ function MetasFacturacionContent() {
         totalVal = subtotalVal;
       }
 
-      // Soporte para cuentas con escala en USD (Natura Colombia - seller_id 941943480)
-      if (sId === '941943480') {
+      // Soporte para cuentas con escala en USD (Natura Colombia - seller_id 941943480 / 2451996780)
+      if (sId === '941943480' || sId === '2451996780') {
         rowCurrency = 'USD';
         ivaVal = 0;
         // Cruce exacto: Facturación COP / TC oficial COP -> Facturación USD -> Escala USD
@@ -666,9 +666,9 @@ function MetasFacturacionContent() {
         feeVal = feeFinal === 1500.0 ? 'MÍNIMO' : 0.02;
       }
 
-      // Soporte para Evacol Colombia ML (seller_id 928666257)
+      // Soporte para Evacol Colombia ML (seller_id 928666257 / 2219963574)
       // Escala en USD (Mínimo $1.000 USD o 4% a 2%) -> Liquidación y cobro en USD sin IVA
-      if (sId === '928666257') {
+      if (sId === '928666257' || sId === '2219963574') {
         rowCurrency = 'USD'; // Se factura y reporta en USD
         ivaVal = 0;
         const tcCopMap: Record<string, number> = {
