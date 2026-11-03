@@ -231,7 +231,7 @@ function MetasFacturacionContent() {
         supabase
           .from('facturacion')
           .select('*')
-          .in('seller_id', [256189964, 308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429, 765606810, 938333830, 550082876, 998163061])
+          .in('seller_id', [256189964, 308973138, 256324891, 942368053, 977559914, 962651791, 919428720, 978106559, 936492429, 765606810, 938333830, 550082876, 998163061, 2539005925, 2539005926])
           .limit(5000),
         supabase
           .from('dim_escalas')
@@ -951,51 +951,68 @@ function MetasFacturacionContent() {
         feeVal = feeCalculado >= 1500.0 ? 0.0200 : 'MÍNIMO';
       }
 
-      // Soporte para Natura México (seller_id 2539005925) y Go Advance (seller_id 1181954123)
-      // Facturación en MXN cruzada con escala MXN (Mínimo MXN $30.000 o 4,50% a 2,00%) -> Convertida a USD vía TC -> Cobro en USD sin IVA
-      if (sId === '2539005925' || sId === '1181954123' || (sName.toLowerCase().includes('natura') && cCode === 'MX') || sName.toLowerCase().includes('go advance')) {
+      // Soporte para Natura México (ML: 2539005925, Amazon: 2539005926) y Go Advance (seller_id 1181954123)
+      // Facturación en MXN cruzada con escala MXN (Mínimo MXN $30.000 para ML y MXN $24.000 para canales adicionales como Amazon, o 4,50% a 2,00%)
+      // Para Natura México la escala se evalúa sobre la suma consolidada de todos sus marketplaces (MELI + Amazon)
+      const isNaturaML = sId === '2539005925' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && !sName.toLowerCase().includes('amazon'));
+      const isNaturaAmazon = sId === '2539005926' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && sName.toLowerCase().includes('amazon'));
+      const isGoAdvance = sId === '1181954123' || sName.toLowerCase().includes('go advance');
+
+      if (isNaturaML || isNaturaAmazon || isGoAdvance) {
         rowCurrency = 'USD';
         ivaVal = 0;
-        let feeMxn = 30000.0;
+
+        let baseFactParaEscala = factVal;
+        if (isNaturaML || isNaturaAmazon) {
+          const mlVal = newsanSubAccounts['2539005925']?.[mKey] ?? (isNaturaML ? factVal : 0);
+          const amzVal = newsanSubAccounts['2539005926']?.[mKey] ?? (isNaturaAmazon ? factVal : 0);
+          baseFactParaEscala = mlVal + amzVal;
+        }
+
         let alicuotaVal: any = 'MÍNIMO';
-        if (factVal >= 8000000) {
-          feeMxn = factVal * 0.0200;
+        let alicNum = 0.0450;
+        if (baseFactParaEscala >= 8000000) {
+          alicNum = 0.0200;
           alicuotaVal = 0.0200;
-        } else if (factVal >= 6000000) {
-          feeMxn = factVal * 0.0250;
+        } else if (baseFactParaEscala >= 6000000) {
+          alicNum = 0.0250;
           alicuotaVal = 0.0250;
-        } else if (factVal >= 4500000) {
-          feeMxn = factVal * 0.0275;
+        } else if (baseFactParaEscala >= 4500000) {
+          alicNum = 0.0275;
           alicuotaVal = 0.0275;
-        } else if (factVal >= 3500000) {
-          feeMxn = factVal * 0.0300;
+        } else if (baseFactParaEscala >= 3500000) {
+          alicNum = 0.0300;
           alicuotaVal = 0.0300;
-        } else if (factVal >= 2500000) {
-          feeMxn = factVal * 0.0325;
+        } else if (baseFactParaEscala >= 2500000) {
+          alicNum = 0.0325;
           alicuotaVal = 0.0325;
-        } else if (factVal >= 1800000) {
-          feeMxn = factVal * 0.0350;
+        } else if (baseFactParaEscala >= 1800000) {
+          alicNum = 0.0350;
           alicuotaVal = 0.0350;
-        } else if (factVal >= 1250000) {
-          feeMxn = factVal * 0.0375;
+        } else if (baseFactParaEscala >= 1250000) {
+          alicNum = 0.0375;
           alicuotaVal = 0.0375;
-        } else if (factVal >= 800000) {
-          feeMxn = factVal * 0.0425;
+        } else if (baseFactParaEscala >= 800000) {
+          alicNum = 0.0425;
           alicuotaVal = 0.0425;
-        } else if (factVal >= 700000) {
-          feeMxn = factVal * 0.0450;
+        } else if (baseFactParaEscala >= 700000) {
+          alicNum = 0.0450;
           alicuotaVal = 0.0450;
         } else {
-          feeMxn = 30000.0;
+          alicNum = 0.0450;
           alicuotaVal = 'MÍNIMO';
         }
+
+        // Mínimo de MX$ 30.000 para MELI / Go Advance y MX$ 24.000 para Amazon
+        const minMxn = isNaturaAmazon ? 24000.0 : 30000.0;
+        const feeMxn = Math.max(minMxn, factVal * alicNum);
 
         const tcMxn = getRateToUSD('MXN', mKey) || 18.0;
         const feeUsd = tcMxn > 0 ? Math.round((feeMxn / tcMxn) * 100) / 100 : 0;
         montoServicio = feeUsd;
         subtotalVal = feeUsd;
         totalVal = feeUsd;
-        feeVal = alicuotaVal;
+        feeVal = (factVal * alicNum >= minMxn) ? alicNum : 'MÍNIMO';
       }
 
       // Reglas comerciales Botmaker, Cuentas del Exterior y Café Martínez
@@ -1003,11 +1020,19 @@ function MetasFacturacionContent() {
       let descuentoVal = 0;
       const isCafeMartinez = sId === '1088146491' || sName.toLowerCase().includes('cafe martinez');
       const isPinturasOnline = sId === '484050606' || sName.toLowerCase().includes('pinturas online');
+      const isAlmaNativa = sId === '414078026' || sName.toLowerCase().includes('alma nativa');
+      const isForbasse = sId === '3693335392' || sName.toLowerCase().includes('forbasse');
       const isExterior = cCode !== 'AR' || rowCurrency === 'USD';
 
       // 1. Cuentas del exterior (CO, MX, CL, US o facturadas en USD):
       if (isExterior) {
-        if (botmakerVal > 0) {
+        if (isNaturaML) {
+          // Botmaker costo fijo de USD 200 por marca (se cobra por Marca Natura México, no por marketplace)
+          botmakerVal = 200.0;
+        } else if (isNaturaAmazon) {
+          // Cuenta adicional: no duplica el costo de Botmaker de la marca
+          botmakerVal = 0.0;
+        } else if (botmakerVal > 0) {
           const tcArs = getRateToUSD('ARS', mKey) || 1550.0;
           // Markup del 25% sobre la base de Botmaker a partir de Octubre 2026
           const origBm = Number(row.botmaker_original) || 0;
@@ -1037,8 +1062,11 @@ function MetasFacturacionContent() {
       } else {
         // Cuentas locales de Argentina (ARS):
         if (mKey >= '2026-10') {
-          if (isCafeMartinez || isPinturasOnline) {
+          if (isCafeMartinez || isPinturasOnline || isAlmaNativa) {
             botmakerVal = 0;
+          } else if (isForbasse && mKey === '2026-10') {
+            // Forbasse Octubre 2026: Facturar exactamente $206.750
+            botmakerVal = 206750.0;
           } else {
             const origBm = Number(row.botmaker_original) || 0;
             if (origBm > 0) {
@@ -1071,9 +1099,9 @@ function MetasFacturacionContent() {
         totalVal = subtotalVal + ivaVal;
       }
 
-      // 4. Regla comercial oficial para Pinturas Online (seller_id 484050606):
-      // - "A Pinturas Online No se le cobra botmaker, por más de que esté en la tabla"
-      if (isPinturasOnline || row.cobrar_botmaker === false) {
+      // 4. Regla comercial oficial para Pinturas Online (seller_id 484050606) y Alma Nativa (seller_id 414078026):
+      // - "A Pinturas Online y Alma Nativa No se les cobra botmaker"
+      if (isPinturasOnline || isAlmaNativa || row.cobrar_botmaker === false) {
         botmakerVal = 0;
         subtotalVal = Math.round((montoServicio - descuentoVal) * 100) / 100;
         if (cCode === 'AR' && rowCurrency === 'ARS') {
@@ -2894,6 +2922,7 @@ function MetasFacturacionContent() {
                   let hasRenderedNewsanChile = false;
                   let hasRenderedAxo = false;
                   let hasRenderedEvacol = false;
+                  let hasRenderedNaturaMX = false;
                   const allSellers = Object.values(groupedData[selectedCountry]?.sellersMap || {})
                     .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
                     .sort((a, b) => a.name.localeCompare(b.name));
@@ -2905,6 +2934,7 @@ function MetasFacturacionContent() {
                     const isAxo = seller.name.toLowerCase().includes('axo') || seller.id === 'axo_ck' || seller.id === 'axo_th' || seller.id === '550082876' || seller.id === '765606810' || seller.id === '938333830' || seller.id === '998163061';
                     const isEvacol = seller.name.toLowerCase().includes('evacol');
                     const isEvacolCO = (isEvacol && !seller.name.includes('USA') && !seller.name.includes('México') && !seller.name.includes('Mexico')) || ['2219963574', '928666257', '928424062', '928424063'].includes(seller.id);
+                    const isNaturaMX = (seller.name.toLowerCase().includes('natura') && (selectedCountry === 'MX' || seller.name.toLowerCase().includes('méxico') || seller.name.toLowerCase().includes('mexico') || seller.id === '2539005925' || seller.id === '2539005926'));
 
                     // =====================================================================
                     // A. BLOQUE MULTICANAL CONSOLIDADO NEWSAN CHILE (6 CUENTAS)
@@ -4338,6 +4368,392 @@ function MetasFacturacionContent() {
                               return (
                                 <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l font-mono text-xs font-black text-emerald-950 bg-emerald-100">
                                   {formatCurrency(totCop, 'COP')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+                      );
+                    }
+
+                    // =====================================================================
+                    // E. BLOQUE MULTICANAL CONSOLIDADO NATURA MÉXICO (MELI + AMAZON)
+                    // =====================================================================
+                    if (isNaturaMX) {
+                      if (hasRenderedNaturaMX) return null;
+                      hasRenderedNaturaMX = true;
+
+                      const mxSellers = groupedData['MX']?.sellersMap || groupedData[selectedCountry]?.sellersMap || {};
+                      const mlSeller = mxSellers['2539005925'] || Object.values(mxSellers).find((s: any) => s.name.toLowerCase().includes('natura') && (s.name.toLowerCase().includes('ml') || s.name.toLowerCase().includes('mercado libre')));
+                      const amzSeller = mxSellers['2539005926'] || Object.values(mxSellers).find((s: any) => s.name.toLowerCase().includes('natura') && s.name.toLowerCase().includes('amazon'));
+
+                      return (
+                        <tbody key="natura-mexico-consolidado-group" className={`${sIdx > 0 ? 'border-t-8 border-slate-200' : ''}`}>
+                          {/* 1. CABECERA GENERAL DE NATURA MÉXICO */}
+                          <tr className="bg-emerald-100 border-b border-emerald-300">
+                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] border-r border-emerald-300">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0"></span>
+                                  <span className="font-extrabold text-emerald-950 text-xs tracking-tight truncate">
+                                    Natura México Consolidado
+                                  </span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 border border-emerald-300 shrink-0">
+                                  2 Canales (MELI + Amazon)
+                                </span>
+                              </div>
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-emerald-950 border-l border-emerald-200 bg-emerald-100 text-xs">
+                                Factura Única USD
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* 2. SECCIÓN FACTURACIÓN POR MARKETPLACE (GMV MXN) */}
+                          <tr className="bg-slate-100 border-b border-slate-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-5 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10 border-b border-slate-200">
+                              <div className="flex items-center justify-between">
+                                <span>Facturación por Marketplace — Pesos Mexicanos (GMV MXN)</span>
+                                <span className="text-[9px] font-normal text-slate-500 lowercase">ventas brutas extraídas por canal</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Fila ML */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 font-medium pl-8 border-r border-slate-200 truncate">
+                              Ventas Mercado Libre (MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const val = mlSeller?.months[m.key]?.facturacion || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-700">
+                                  {val > 0 ? formatCurrency(val, 'MXN') : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Fila Amazon */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 font-medium pl-8 border-r border-slate-200 truncate">
+                              Ventas Amazon (MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const val = amzSeller?.months[m.key]?.facturacion || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-700">
+                                  {val > 0 ? formatCurrency(val, 'MXN') : '$ 0 MXN'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Total Facturación Consolidada MXN */}
+                          <tr className="bg-emerald-50/70 hover:bg-emerald-100/50 transition-colors border-b border-emerald-200 font-bold">
+                            <td className="px-5 py-2.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-emerald-950 font-bold border-r border-emerald-200 truncate">
+                              Total Facturación Consolidada (MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-emerald-950 bg-emerald-50/70">
+                                  {tot > 0 ? formatCurrency(tot, 'MXN') : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 3. SECCIÓN CRUCE CON ESCALA MULTICANAL EN MXN */}
+                          <tr className="bg-blue-50 border-b border-blue-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-5 py-2 font-bold text-[10px] uppercase tracking-wider text-blue-900 sticky left-0 bg-blue-50 z-10 border-b border-blue-200">
+                              <div className="flex items-center justify-between">
+                                <span>Escala Multicanal & Cruce Comercial — Pesos Mexicanos (MXN)</span>
+                                <span className="text-[9px] font-normal text-blue-700 lowercase">escala sobre GMV total • mín. MX$ 30k MELI y MX$ 24k Amazon</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Alícuota Escala Consolidada */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-600 font-medium pl-8 border-r border-slate-200 truncate">
+                              Alícuota Escala Consolidada
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800 font-semibold">
+                                  {tot >= 700000 ? formatPercent(alicVal) : 'MÍNIMO (4,50%)'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Fee ML MXN */}
+                          <tr className="bg-slate-50 hover:bg-slate-100/50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-1.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 pl-8 border-r border-slate-200 truncate">
+                              Fee Mercado Libre (Mín. MX$ 30.000)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              const fML = (mlSeller?.months[m.key]?.facturacion || 0);
+                              const feeML = Math.max(30000, fML * alicVal);
+                              return (
+                                <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
+                                  {formatCurrency(feeML, 'MXN')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Fee Amazon MXN */}
+                          <tr className="bg-slate-50 hover:bg-slate-100/50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-1.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 pl-8 border-r border-slate-200 truncate">
+                              Fee Amazon (Mín. MX$ 24.000)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              const fAmz = (amzSeller?.months[m.key]?.facturacion || 0);
+                              const feeAmz = Math.max(24000, fAmz * alicVal);
+                              return (
+                                <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
+                                  {formatCurrency(feeAmz, 'MXN')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Total Fee MXN */}
+                          <tr className="bg-blue-100 hover:bg-blue-100/80 transition-colors border-b border-blue-200 font-bold">
+                            <td className="px-5 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-blue-950 font-bold border-r border-blue-200 truncate">
+                              Total Honorarios Reply (MXN)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              const fML = (mlSeller?.months[m.key]?.facturacion || 0);
+                              const fAmz = (amzSeller?.months[m.key]?.facturacion || 0);
+                              const feeML = Math.max(30000, fML * alicVal);
+                              const feeAmz = Math.max(24000, fAmz * alicVal);
+                              const totFee = feeML + feeAmz;
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-blue-950 bg-blue-100">
+                                  {formatCurrency(totFee, 'MXN')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 4. SECCIÓN CONVERSIÓN FX & FACTURACIÓN EN USD */}
+                          <tr className="bg-emerald-50 border-b border-emerald-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-5 py-2 font-bold text-[10px] uppercase tracking-wider text-emerald-900 sticky left-0 bg-emerald-50 z-10 border-b border-emerald-200">
+                              <div className="flex items-center justify-between">
+                                <span>Liquidación Final Factura Unificada — Dólares Estadounidenses (USD)</span>
+                                <span className="text-[9px] font-normal text-emerald-700 lowercase">conversión FX oficial + Botmaker fijo de USD 200 por marca</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Tipo de Cambio Oficial */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-600 font-medium pl-8 border-r border-slate-200 truncate">
+                              Tipo de Cambio Oficial (TC MXN/USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-700">
+                                  $ {tc.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Fee ML USD */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 pl-8 border-r border-slate-200 truncate">
+                              Honorarios Mercado Libre (USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              const fML = (mlSeller?.months[m.key]?.facturacion || 0);
+                              const feeML = Math.max(30000, fML * alicVal);
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const usd = tc > 0 ? feeML / tc : 0;
+                              return (
+                                <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
+                                  US$ {usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Fee Amazon USD */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 pl-8 border-r border-slate-200 truncate">
+                              Honorarios Amazon (USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              const fAmz = (amzSeller?.months[m.key]?.facturacion || 0);
+                              const feeAmz = Math.max(24000, fAmz * alicVal);
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const usd = tc > 0 ? feeAmz / tc : 0;
+                              return (
+                                <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
+                                  US$ {usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Subtotal Ingreso Reply USD */}
+                          <tr className="bg-amber-100 hover:bg-amber-100/80 transition-colors border-b border-amber-300 font-bold">
+                            <td className="px-5 py-2.5 whitespace-nowrap sticky left-0 bg-amber-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-amber-950 font-extrabold border-r border-amber-300 truncate">
+                              Subtotal (Ingreso Reply USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              const fML = (mlSeller?.months[m.key]?.facturacion || 0);
+                              const fAmz = (amzSeller?.months[m.key]?.facturacion || 0);
+                              const feeML = Math.max(30000, fML * alicVal);
+                              const feeAmz = Math.max(24000, fAmz * alicVal);
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const totUSD = tc > 0 ? (feeML + feeAmz) / tc : 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-amber-950 bg-amber-100">
+                                  US$ {totUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Botmaker Fijo Marca USD 200 */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 font-medium pl-8 border-r border-slate-200 flex items-center justify-between">
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                <span>Botmaker (Costo Fijo Marca)</span>
+                              </span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 ml-1">Fijo USD 200</span>
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800 font-medium">
+                                US$ 200.00
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* IVA 0% */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-400">
+                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] border-r border-slate-200 pl-8 truncate">
+                              IVA (0% Cuentas de México)
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px]">
+                                $ 0
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* Total Factura Final USD */}
+                          <tr className="bg-emerald-100 hover:bg-emerald-100/90 transition-colors border-b-2 border-emerald-400">
+                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-emerald-950 font-black border-r border-emerald-400 text-xs uppercase tracking-wide truncate">
+                              TOTAL FACTURA FINAL NATURA MÉXICO (USD)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = (mlSeller?.months[m.key]?.facturacion || 0) + (amzSeller?.months[m.key]?.facturacion || 0);
+                              let alicVal = 0.0450;
+                              if (tot >= 8000000) alicVal = 0.0200;
+                              else if (tot >= 6000000) alicVal = 0.0250;
+                              else if (tot >= 4500000) alicVal = 0.0275;
+                              else if (tot >= 3500000) alicVal = 0.0300;
+                              else if (tot >= 2500000) alicVal = 0.0325;
+                              else if (tot >= 1800000) alicVal = 0.0350;
+                              else if (tot >= 1250000) alicVal = 0.0375;
+                              else if (tot >= 800000) alicVal = 0.0425;
+                              else if (tot >= 700000) alicVal = 0.0450;
+                              const fML = (mlSeller?.months[m.key]?.facturacion || 0);
+                              const fAmz = (amzSeller?.months[m.key]?.facturacion || 0);
+                              const feeML = Math.max(30000, fML * alicVal);
+                              const feeAmz = Math.max(24000, fAmz * alicVal);
+                              const tc = getRateToUSD('MXN', m.key) || 18.0;
+                              const totUSD = tc > 0 ? (feeML + feeAmz) / tc : 0;
+                              const finalFactura = totUSD + 200.0;
+                              return (
+                                <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l font-mono text-xs font-black text-emerald-950 bg-emerald-100">
+                                  US$ {finalFactura.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                               );
                             })}
