@@ -192,8 +192,34 @@ export default function DirectorioClientesPage() {
     async function loadDirectoryData() {
       setLoading(true);
 
+      // Helper para fetch paginado de dim_escalas evitando límite de 1000 filas de PostgREST
+      const fetchAllEscalas = async () => {
+        let all: any[] = [];
+        let p = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('dim_escalas')
+            .select('seller_id, periodo, tipo_cargo, alicuota, monto_objetivo, moneda, estado')
+            .order('periodo', { ascending: false })
+            .range(p * 1000, (p + 1) * 1000 - 1);
+          if (error) {
+            console.error('Error fetching escalas:', error);
+            break;
+          }
+          if (data && data.length > 0) {
+            all = all.concat(data);
+            if (data.length < 1000) hasMore = false;
+            else p++;
+          } else {
+            hasMore = false;
+          }
+        }
+        return all;
+      };
+
       // 1. Fetch sellers enriquecidos desde v_sellers_completos
-      const [sellersRes, factRes, escRes, liqRes, ordRes] = await Promise.all([
+      const [sellersRes, factRes, escalasList, liqRes, ordRes] = await Promise.all([
         supabase
           .from('v_sellers_completos')
           .select('*')
@@ -202,10 +228,7 @@ export default function DirectorioClientesPage() {
           .from('facturacion')
           .select('seller_id, periodo, valor_facturado, estado')
           .order('periodo', { ascending: true }),
-        supabase
-          .from('dim_escalas')
-          .select('seller_id, periodo, tipo_cargo, alicuota, monto_objetivo, moneda, estado')
-          .order('periodo', { ascending: false }),
+        fetchAllEscalas(),
         supabase
           .from('liquidaciones')
           .select('seller_id, periodo, subtotal, tipo_cargo_aplicado, alicuota_aplicada, estado')
@@ -218,7 +241,7 @@ export default function DirectorioClientesPage() {
 
       const sellers = sellersRes.data || [];
       const facturacion = factRes.data || [];
-      const escalas = escRes.data || [];
+      const escalas = escalasList || [];
       const liquidaciones = liqRes.data || [];
       const ordenes = ordRes.data || [];
 
@@ -259,12 +282,12 @@ export default function DirectorioClientesPage() {
       });
 
       // Mapear escalas por seller
-      const escMap: Record<string, { moneda: string; min: string; max: string; count: number; currentTiers: any[] }> = {};
+      const escMap: Record<string, { moneda: string; min: string; max: string; currentPeriod?: string; count: number; currentTiers: any[] }> = {};
       escalas.forEach((e: any) => {
         const sid = String(e.seller_id);
         const p = e.periodo || '';
         if (!escMap[sid]) {
-          escMap[sid] = { moneda: e.moneda || 'ARS', min: p, max: p, count: 0, currentTiers: [] };
+          escMap[sid] = { moneda: e.moneda || 'ARS', min: p, max: p, currentPeriod: p, count: 0, currentTiers: [] };
         }
         escMap[sid].count++;
         if (e.moneda) escMap[sid].moneda = e.moneda;
@@ -282,6 +305,7 @@ export default function DirectorioClientesPage() {
             ? realEscalas.reduce((max: string, e: any) => (e.periodo > max ? e.periodo : max), realEscalas[0].periodo)
             : escMap[sid].max;
 
+          escMap[sid].currentPeriod = targetP;
           escMap[sid].currentTiers = sellerEscalas
             .filter((e: any) => e.periodo === targetP)
             .sort((a: any, b: any) => (a.monto_objetivo || 0) - (b.monto_objetivo || 0));
@@ -1052,7 +1076,7 @@ export default function DirectorioClientesPage() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-[#4981fb]" />
-                    Tramos de Escala Vigente ({selectedSeller.escInfo?.max || 'Actual'})
+                    Tramos de Escala Vigente ({selectedSeller.escInfo?.currentPeriod || selectedSeller.escInfo?.max || 'Actual'})
                   </h3>
                   <span className="text-[11px] font-mono text-slate-400">
                     Moneda de matriz: <strong>{selectedSeller.rules.monedaEscala}</strong>
