@@ -993,48 +993,58 @@ function MetasFacturacionContent() {
       const isCafeMartinez = sId === '1088146491' || sName.toLowerCase().includes('cafe martinez');
       const isExterior = cCode !== 'AR' || rowCurrency === 'USD';
 
-      // 1. Ajuste de Markup Botmaker al 25% para periodos a partir de 2026-10 (en ARS)
-      // Reply factura $206.250 (165k base * 1.25) y $410.000 (Soda Stream 328k base * 1.25)
-      if (mKey >= '2026-10') {
-        if (isCafeMartinez) {
-          botmakerVal = 0;
-        } else {
-          const origBm = Number(row.botmaker_original) || 0;
-          if (origBm > 0) {
-            botmakerVal = Math.round(origBm * 1.25 * 100) / 100;
-          } else if (botmakerVal > 0) {
-            // Reescalar de 1.20 a 1.25 si viene con el markup anterior de la base
-            botmakerVal = Math.round((botmakerVal / 1.20) * 1.25 * 100) / 100;
-          }
-        }
-      }
-
-      // 2. Cuentas del exterior (CO, MX, CL, US o facturadas en USD):
-      // El fee de Botmaker viene en Pesos Argentinos (ARS) y se debe convertir a Dólares (USD)
-      // según el Tipo de Cambio oficial mensual de ARS.
-      // Se le suma al Subtotal en USD y queda el Total Factura en USD (sin IVA).
+      // 1. Cuentas del exterior (CO, MX, CL, US o facturadas en USD):
       if (isExterior) {
         if (botmakerVal > 0) {
           const tcArs = getRateToUSD('ARS', mKey) || 1550.0;
-          const botmakerUSD = tcArs > 0 ? Math.round((botmakerVal / tcArs) * 100) / 100 : 0;
-          botmakerVal = botmakerUSD;
-          subtotalVal = Math.round((montoServicio + botmakerUSD) * 100) / 100;
-          ivaVal = 0; // Cuentas del exterior no pagan IVA argentino
-          totalVal = subtotalVal;
+          // Markup del 25% sobre la base de Botmaker a partir de Octubre 2026
+          const origBm = Number(row.botmaker_original) || 0;
+          let bmArs = botmakerVal;
+          if (mKey >= '2026-10') {
+            if (origBm > 0) {
+              bmArs = origBm * 1.25;
+            } else if (botmakerVal > 0) {
+              bmArs = (botmakerVal / 1.20) * 1.25;
+            }
+          }
+          const botmakerUSD = tcArs > 0 ? (bmArs / tcArs) : 0;
+
+          // Regla comercial oficial para cuentas del exterior:
+          // Hasta Septiembre 2026 (< 2026-10) si la facturación de botmaker convertida a USD es <= USD 170, se cobra USD 170 (piso mínimo).
+          // A partir de Octubre 2026 (>= 2026-10) el piso mínimo es USD 190. Si supera el piso, se cobra lo que dio.
+          const minExteriorUSD = mKey >= '2026-10' ? 190.0 : 170.0;
+          botmakerVal = Math.round(Math.max(minExteriorUSD, botmakerUSD) * 100) / 100;
         } else {
-          subtotalVal = montoServicio;
-          ivaVal = 0;
-          totalVal = subtotalVal;
+          botmakerVal = 0;
         }
+
+        // Subtotal (Ingreso Reply) = Honorarios netos de gestión Reply (Monto Servicio - Descuento)
+        subtotalVal = Math.round((montoServicio - descuentoVal) * 100) / 100;
+        ivaVal = 0; // Cuentas del exterior no pagan IVA argentino (exportación de servicios)
+        totalVal = Math.round((subtotalVal + botmakerVal) * 100) / 100;
       } else {
         // Cuentas locales de Argentina (ARS):
-        if (mKey >= '2026-10' && !sName.toLowerCase().includes('newsan') && !isCafeMartinez) {
-          if (botmakerVal > 0) {
-            subtotalVal = montoServicio + botmakerVal;
-            ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
-            totalVal = subtotalVal + ivaVal;
+        if (mKey >= '2026-10') {
+          if (isCafeMartinez) {
+            botmakerVal = 0;
+          } else {
+            const origBm = Number(row.botmaker_original) || 0;
+            if (origBm > 0) {
+              botmakerVal = Math.round(origBm * 1.25 * 100) / 100;
+            } else if (botmakerVal > 0) {
+              botmakerVal = Math.round((botmakerVal / 1.20) * 1.25 * 100) / 100;
+            }
           }
         }
+
+        if (isCafeMartinez) {
+          botmakerVal = 0;
+          descuentoVal = Math.round(montoServicio * 0.20 * 100) / 100;
+        }
+
+        subtotalVal = Math.round((montoServicio - descuentoVal) * 100) / 100;
+        ivaVal = Math.round((subtotalVal + botmakerVal) * 0.21 * 100) / 100;
+        totalVal = Math.round((subtotalVal + botmakerVal + ivaVal) * 100) / 100;
       }
 
       // 3. Reglas comerciales oficiales para Café Martínez:
@@ -1152,7 +1162,7 @@ function MetasFacturacionContent() {
 
       const feeUSD_CK = tc > 0 ? (feeMXN_CK / tc) : 0;
       const feeUSD_TH = tc > 0 ? (feeMXN_TH / tc) : 0;
-      const botmakerUSD = 170.0;
+      const botmakerUSD = mKey >= '2026-10' ? 190.0 : 170.0;
 
       const totalUSD_CK = Math.round((feeUSD_CK + botmakerUSD) * 100) / 100;
       const totalUSD_TH = Math.round((feeUSD_TH + botmakerUSD) * 100) / 100;
@@ -1170,36 +1180,38 @@ function MetasFacturacionContent() {
       }
 
       axoCK.months[mKey] = {
-        subtotal: dispCK,
-        originalSubtotal: totalUSD_CK,
+        subtotal: Math.round(feeUSD_CK * 100) / 100,
+        originalSubtotal: Math.round(feeUSD_CK * 100) / 100,
         isProjected: isProj,
         estado: isProj ? 'PROYECTADO' : 'REAL',
         moneda: dispCur,
         originalMoneda: 'USD',
         facturacion: ckML + ckLVP,
         fee: feeAppliedDesc,
-        botmaker: 170,
+        botmaker: botmakerUSD,
+        descuento: 0,
         montoServicio: Math.round(feeUSD_CK * 100) / 100,
         iva: 0,
         total: totalUSD_CK
       };
-      axoCK.totalRow += dispCK;
+      axoCK.totalRow += Math.round(feeUSD_CK * 100) / 100;
 
       axoTH.months[mKey] = {
-        subtotal: dispTH,
-        originalSubtotal: totalUSD_TH,
+        subtotal: Math.round(feeUSD_TH * 100) / 100,
+        originalSubtotal: Math.round(feeUSD_TH * 100) / 100,
         isProjected: isProj,
         estado: isProj ? 'PROYECTADO' : 'REAL',
         moneda: dispCur,
         originalMoneda: 'USD',
         facturacion: thML + thLVP,
         fee: feeAppliedDesc,
-        botmaker: 170,
+        botmaker: botmakerUSD,
+        descuento: 0,
         montoServicio: Math.round(feeUSD_TH * 100) / 100,
         iva: 0,
         total: totalUSD_TH
       };
-      axoTH.totalRow += dispTH;
+      axoTH.totalRow += Math.round(feeUSD_TH * 100) / 100;
 
       let dispTotalAxo = totalUSD_Axo;
       if (currencyView === 'ARS') {
@@ -1457,12 +1469,11 @@ function MetasFacturacionContent() {
         subtotal += feeConsolidado;
         total += feeConsolidado;
 
-        // Si Newsan Chile ML tiene Botmaker (en USD), sumarlo al subtotal y total de Chile
+        // Si Newsan Chile ML tiene Botmaker (en USD), sumarlo al botmaker y total de Chile
         const newsanML = sellers.find(x => x.name.toLowerCase().includes('newsan chile ml') || x.id === '942368053');
         const bmNewsanChile = newsanML?.months[m.key]?.botmaker || 0;
         if (bmNewsanChile > 0) {
           botmaker += bmNewsanChile;
-          subtotal += bmNewsanChile;
           total += bmNewsanChile;
         }
 
@@ -3933,23 +3944,6 @@ function MetasFacturacionContent() {
                           })}
                         </tr>
 
-                        {/* Fila Botmaker */}
-                        <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-600 font-medium border-r border-slate-200">
-                            Botmaker
-                          </td>
-                          {filteredMonths.map(m => {
-                            const mData = seller.months[m.key];
-                            const isProj = mData?.isProjected;
-                            const cur = mData?.moneda || executiveKPIs?.currency;
-                            return (
-                              <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right border-l ${isProj ? 'bg-orange-50/30 border-orange-100 text-orange-950' : 'border-slate-100 text-slate-600'}`}>
-                                {mData && mData.botmaker > 0 ? formatCurrency(mData.botmaker, cur) : '-'}
-                              </td>
-                            );
-                          })}
-                        </tr>
-
                         {/* Fila Descuento Comercial (ej. Café Martínez -20%) */}
                         {Object.values(seller.months).some(m => ((m as any).descuento || 0) > 0) && (
                           <tr className="bg-rose-50/40 hover:bg-rose-50/70 transition-colors border-b border-rose-100">
@@ -3987,6 +3981,30 @@ function MetasFacturacionContent() {
                             );
                           })}
                         </tr>
+
+                        {/* Fila Botmaker (fila aparte después de Subtotal) */}
+                        {Object.values(seller.months).some(m => (m.botmaker || 0) > 0) && (
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-700 font-medium border-r border-slate-200 flex items-center justify-between">
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                <span>Botmaker</span>
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-400">Licencia</span>
+                            </td>
+                            {filteredMonths.map(m => {
+                              const mData = seller.months[m.key];
+                              const isProj = mData?.isProjected;
+                              const cur = mData?.moneda || executiveKPIs?.currency;
+                              const bm = mData?.botmaker || 0;
+                              return (
+                                <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right border-l font-medium ${isProj ? 'bg-orange-50/30 border-orange-100 text-orange-950' : 'border-slate-100 text-slate-700'}`}>
+                                  {bm > 0 ? formatCurrency(bm, cur) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        )}
 
                         {/* Fila IVA */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-500">
@@ -4053,37 +4071,6 @@ function MetasFacturacionContent() {
                     ))}
                   </tr>
 
-                  {/* Fila Total Botmaker (si hay en el país) */}
-                  {Object.values(detailedCountryTotals).some(t => t.botmaker > 0) && (
-                    <tr className="bg-white text-slate-700 font-medium text-xs border-b border-slate-200">
-                      <td className="px-6 py-2 sticky left-0 bg-white z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
-                        TOTAL BOTMAKER (LICENCIAS)
-                      </td>
-                      {filteredMonths.map(m => (
-                        <td key={m.key} className="px-6 py-2 text-right font-mono border-l border-slate-200 whitespace-nowrap">
-                          {detailedCountryTotals[m.key]?.botmaker > 0 ? formatCurrency(detailedCountryTotals[m.key]?.botmaker, executiveKPIs?.currency) : '-'}
-                        </td>
-                      ))}
-                    </tr>
-                  )}
-
-                  {/* Fila Total Descuentos Comerciales (si hay en el país) */}
-                  {Object.values(detailedCountryTotals).some(t => ((t as any).descuento || 0) > 0) && (
-                    <tr className="bg-rose-50/50 text-rose-900 font-semibold text-xs border-b border-rose-200">
-                      <td className="px-6 py-2 sticky left-0 bg-rose-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-rose-200">
-                        TOTAL DESCUENTOS COMERCIALES
-                      </td>
-                      {filteredMonths.map(m => {
-                        const d = (detailedCountryTotals[m.key] as any)?.descuento || 0;
-                        return (
-                          <td key={m.key} className="px-6 py-2 text-right font-mono border-l border-rose-200 whitespace-nowrap text-rose-700">
-                            {d > 0 ? `-${formatCurrency(d, executiveKPIs?.currency)}` : '-'}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  )}
-
                   {/* Fila Total Subtotal (Ingreso Genuino Reply) */}
                   <tr className="bg-blue-900 text-white font-black text-xs shadow-md">
                     <td className="px-6 py-3.5 sticky left-0 bg-blue-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)] border-r border-blue-800">
@@ -4098,6 +4085,20 @@ function MetasFacturacionContent() {
                       </td>
                     ))}
                   </tr>
+
+                  {/* Fila Total Botmaker (si hay en el país) - ubicado después del Subtotal Reply */}
+                  {Object.values(detailedCountryTotals).some(t => t.botmaker > 0) && (
+                    <tr className="bg-slate-50 text-slate-700 font-medium text-xs border-b border-slate-200">
+                      <td className="px-6 py-2.5 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
+                        TOTAL BOTMAKER (LICENCIAS)
+                      </td>
+                      {filteredMonths.map(m => (
+                        <td key={m.key} className="px-6 py-2.5 text-right font-mono border-l border-slate-200 whitespace-nowrap text-indigo-700 font-semibold">
+                          {detailedCountryTotals[m.key]?.botmaker > 0 ? formatCurrency(detailedCountryTotals[m.key]?.botmaker, executiveKPIs?.currency) : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
 
                   {/* Fila Total IVA */}
                   <tr className="bg-slate-100 text-slate-600 font-semibold text-xs border-b border-slate-200">
