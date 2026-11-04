@@ -520,12 +520,18 @@ function MetasFacturacionContent() {
           moneda?: string;
           originalMoneda?: string;
           facturacion: number;
+          originalFacturacion?: number;
           fee: any;
           botmaker: number;
+          originalBotmaker?: number;
           descuento?: number;
+          originalDescuento?: number;
           montoServicio: number;
+          originalMontoServicio?: number;
           iva: number;
+          originalIva?: number;
           total: number;
+          originalTotal?: number;
           tc?: number;
           factUsd?: number;
           feeUsd?: number;
@@ -535,6 +541,68 @@ function MetasFacturacionContent() {
       monthlyTotals: Record<string, number>;
       grandTotal: number;
     }> = {};
+
+    // 1. Precomputar Botmaker calculado para Octubre 2026 (última facturación real)
+    // para repetirlo idéntico en todos los períodos proyectados (>= 2026-11)
+    const sellerOctBotmaker: Record<string, number> = {};
+    rawLiquidaciones.forEach((row: any) => {
+      const d = new Date(row.periodo + 'T12:00:00');
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const mKey = `${yyyy}-${mm}`;
+      if (mKey !== '2026-10') return;
+
+      const sId = String(row.seller_id);
+      const sName = row.nombre_seller || '';
+      const meta = sellersMap[sId] || { code: 'AR', currency: 'ARS' };
+      const cCode = meta.code;
+      const rowCurrency = row.moneda || meta.currency;
+      const isExterior = cCode !== 'AR' || rowCurrency === 'USD';
+
+      const isCafeMartinez = sId === '1088146491' || sName.toLowerCase().includes('cafe martinez');
+      const isPinturasOnline = sId === '484050606' || sName.toLowerCase().includes('pinturas online');
+      const isAlmaNativa = sId === '414078026' || sName.toLowerCase().includes('alma nativa');
+      const isForbasse = sId === '3693335392' || sName.toLowerCase().includes('forbasse');
+      const isNaturaML = sId === '2539005925' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && !sName.toLowerCase().includes('amazon'));
+      const isNaturaAmazon = sId === '2539005926' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && sName.toLowerCase().includes('amazon'));
+
+      let bm = Number(row.botmaker) || 0;
+
+      if (isCafeMartinez || isPinturasOnline || isAlmaNativa || row.cobrar_botmaker === false) {
+        bm = 0;
+      } else if (isForbasse) {
+        bm = 206750.0;
+      } else if (isNaturaML) {
+        bm = 200.0;
+      } else if (isNaturaAmazon) {
+        bm = 0.0;
+      } else if (isExterior) {
+        if (bm > 0) {
+          const tcArs = getRateToUSD('ARS', '2026-10') || 1550.0;
+          const origBm = Number(row.botmaker_original) || 0;
+          let bmArs = bm;
+          if (origBm > 0) {
+            bmArs = origBm * 1.25;
+          } else if (bm > 0) {
+            bmArs = (bm / 1.20) * 1.25;
+          }
+          const botmakerUSD = tcArs > 0 ? (bmArs / tcArs) : 0;
+          bm = Math.round(Math.max(190.0, botmakerUSD) * 100) / 100;
+        } else {
+          bm = 0;
+        }
+      } else {
+        // Cuentas locales de Argentina (ARS)
+        const origBm = Number(row.botmaker_original) || 0;
+        if (origBm > 0) {
+          bm = Math.round(origBm * 1.25 * 100) / 100;
+        } else if (bm > 0) {
+          bm = Math.round((bm / 1.20) * 1.25 * 100) / 100;
+        }
+      }
+
+      sellerOctBotmaker[sId] = bm;
+    });
 
     rawLiquidaciones.forEach((row: any) => {
       const sId = String(row.seller_id);
@@ -1024,6 +1092,11 @@ function MetasFacturacionContent() {
       const isForbasse = sId === '3693335392' || sName.toLowerCase().includes('forbasse');
       const isExterior = cCode !== 'AR' || rowCurrency === 'USD';
 
+      // Proyección Botmaker: Para el proyectado (>= 2026-11) repitamos el monto de la última facturación (Octubre 2026)
+      if (mKey >= '2026-11' && sellerOctBotmaker[sId] !== undefined) {
+        botmakerVal = sellerOctBotmaker[sId];
+      }
+
       // 1. Cuentas del exterior (CO, MX, CL, US o facturadas en USD):
       if (isExterior) {
         if (isNaturaML) {
@@ -1032,27 +1105,29 @@ function MetasFacturacionContent() {
         } else if (isNaturaAmazon) {
           // Cuenta adicional: no duplica el costo de Botmaker de la marca
           botmakerVal = 0.0;
-        } else if (botmakerVal > 0) {
-          const tcArs = getRateToUSD('ARS', mKey) || 1550.0;
-          // Markup del 25% sobre la base de Botmaker a partir de Octubre 2026
-          const origBm = Number(row.botmaker_original) || 0;
-          let bmArs = botmakerVal;
-          if (mKey >= '2026-10') {
-            if (origBm > 0) {
-              bmArs = origBm * 1.25;
-            } else if (botmakerVal > 0) {
-              bmArs = (botmakerVal / 1.20) * 1.25;
+        } else if (mKey < '2026-11') {
+          if (botmakerVal > 0) {
+            const tcArs = getRateToUSD('ARS', mKey) || 1550.0;
+            // Markup del 25% sobre la base de Botmaker a partir de Octubre 2026
+            const origBm = Number(row.botmaker_original) || 0;
+            let bmArs = botmakerVal;
+            if (mKey >= '2026-10') {
+              if (origBm > 0) {
+                bmArs = origBm * 1.25;
+              } else if (botmakerVal > 0) {
+                bmArs = (botmakerVal / 1.20) * 1.25;
+              }
             }
-          }
-          const botmakerUSD = tcArs > 0 ? (bmArs / tcArs) : 0;
+            const botmakerUSD = tcArs > 0 ? (bmArs / tcArs) : 0;
 
-          // Regla comercial oficial para cuentas del exterior:
-          // Hasta Septiembre 2026 (< 2026-10) si la facturación de botmaker convertida a USD es <= USD 170, se cobra USD 170 (piso mínimo).
-          // A partir de Octubre 2026 (>= 2026-10) el piso mínimo es USD 190. Si supera el piso, se cobra lo que dio.
-          const minExteriorUSD = mKey >= '2026-10' ? 190.0 : 170.0;
-          botmakerVal = Math.round(Math.max(minExteriorUSD, botmakerUSD) * 100) / 100;
-        } else {
-          botmakerVal = 0;
+            // Regla comercial oficial para cuentas del exterior:
+            // Hasta Septiembre 2026 (< 2026-10) si la facturación de botmaker convertida a USD es <= USD 170, se cobra USD 170 (piso mínimo).
+            // A partir de Octubre 2026 (>= 2026-10) el piso mínimo es USD 190. Si supera el piso, se cobra lo que dio.
+            const minExteriorUSD = mKey >= '2026-10' ? 190.0 : 170.0;
+            botmakerVal = Math.round(Math.max(minExteriorUSD, botmakerUSD) * 100) / 100;
+          } else {
+            botmakerVal = 0;
+          }
         }
 
         // Subtotal (Ingreso Reply) = Honorarios netos de gestión Reply (Monto Servicio - Descuento)
@@ -1061,10 +1136,10 @@ function MetasFacturacionContent() {
         totalVal = Math.round((subtotalVal + botmakerVal) * 100) / 100;
       } else {
         // Cuentas locales de Argentina (ARS):
-        if (mKey >= '2026-10') {
+        if (mKey === '2026-10') {
           if (isCafeMartinez || isPinturasOnline || isAlmaNativa) {
             botmakerVal = 0;
-          } else if (isForbasse && mKey === '2026-10') {
+          } else if (isForbasse) {
             // Forbasse Octubre 2026: Facturar exactamente $206.750
             botmakerVal = 206750.0;
           } else {
@@ -1074,6 +1149,10 @@ function MetasFacturacionContent() {
             } else if (botmakerVal > 0) {
               botmakerVal = Math.round((botmakerVal / 1.20) * 1.25 * 100) / 100;
             }
+          }
+        } else if (mKey < '2026-10') {
+          if (isCafeMartinez || isPinturasOnline || isAlmaNativa) {
+            botmakerVal = 0;
           }
         }
 
@@ -1115,15 +1194,33 @@ function MetasFacturacionContent() {
 
       const isProj = row.estado === 'PROYECTADO';
 
-      // Conversión dinámica de visualización según currencyView
+      // Conversión dinámica de visualización según currencyView para TODOS los conceptos
       let displaySubtotal = subtotalVal;
+      let displayFacturacion = factVal;
+      let displayMontoServicio = montoServicio;
+      let displayDescuento = descuentoVal;
+      let displayBotmaker = botmakerVal;
+      let displayIva = ivaVal;
+      let displayTotal = totalVal;
       let displayCurrency = rowCurrency;
 
       if (currencyView === 'USD') {
         displaySubtotal = convertCurrency(subtotalVal, rowCurrency, 'USD', mKey);
+        displayFacturacion = convertCurrency(factVal, rowCurrency, 'USD', mKey);
+        displayMontoServicio = convertCurrency(montoServicio, rowCurrency, 'USD', mKey);
+        displayDescuento = convertCurrency(descuentoVal, rowCurrency, 'USD', mKey);
+        displayBotmaker = convertCurrency(botmakerVal, rowCurrency, 'USD', mKey);
+        displayIva = convertCurrency(ivaVal, rowCurrency, 'USD', mKey);
+        displayTotal = convertCurrency(totalVal, rowCurrency, 'USD', mKey);
         displayCurrency = 'USD';
       } else if (currencyView === 'ARS') {
         displaySubtotal = convertCurrency(subtotalVal, rowCurrency, 'ARS', mKey);
+        displayFacturacion = convertCurrency(factVal, rowCurrency, 'ARS', mKey);
+        displayMontoServicio = convertCurrency(montoServicio, rowCurrency, 'ARS', mKey);
+        displayDescuento = convertCurrency(descuentoVal, rowCurrency, 'ARS', mKey);
+        displayBotmaker = convertCurrency(botmakerVal, rowCurrency, 'ARS', mKey);
+        displayIva = convertCurrency(ivaVal, rowCurrency, 'ARS', mKey);
+        displayTotal = convertCurrency(totalVal, rowCurrency, 'ARS', mKey);
         displayCurrency = 'ARS';
       }
 
@@ -1134,13 +1231,19 @@ function MetasFacturacionContent() {
         estado: row.estado || 'REAL',
         moneda: displayCurrency,
         originalMoneda: rowCurrency,
-        facturacion: factVal,
+        facturacion: displayFacturacion,
+        originalFacturacion: factVal,
         fee: feeVal,
-        botmaker: botmakerVal,
-        descuento: descuentoVal,
-        montoServicio: montoServicio,
-        iva: ivaVal,
-        total: totalVal,
+        botmaker: displayBotmaker,
+        originalBotmaker: botmakerVal,
+        descuento: displayDescuento,
+        originalDescuento: descuentoVal,
+        montoServicio: displayMontoServicio,
+        originalMontoServicio: montoServicio,
+        iva: displayIva,
+        originalIva: ivaVal,
+        total: displayTotal,
+        originalTotal: totalVal,
         tc: extraTc,
         factUsd: extraFactUsd,
         feeUsd: extraFeeUsd
@@ -1285,18 +1388,43 @@ function MetasFacturacionContent() {
     const allMonthlyTotals: Record<string, number> = {};
     let allGrandTotal = 0;
     const allSellersMap: Record<string, any> = {};
+    const targetConsolidatedCur = currencyView === 'ARS' ? 'ARS' : 'USD';
 
     Object.entries(countriesMap).forEach(([cCode, cData]) => {
+      if (cCode === 'ALL') return;
       Object.entries(cData.sellersMap).forEach(([sId, seller]) => {
-        allSellersMap[sId] = seller;
+        const consolidatedSellerMonths: Record<string, any> = {};
+
         Object.entries(seller.months).forEach(([mKey, mData]: [string, any]) => {
-          let globalVal = mData.subtotal;
-          if (currencyView === 'ORIGINAL') {
-            globalVal = convertCurrency(mData.originalSubtotal, mData.originalMoneda || 'USD', 'USD', mKey);
-          }
-          allMonthlyTotals[mKey] = (allMonthlyTotals[mKey] || 0) + globalVal;
-          allGrandTotal += globalVal;
+          const fromCur = mData.originalMoneda || 'USD';
+          const subtotalConv = currencyView === 'USD' ? mData.subtotal : convertCurrency(mData.originalSubtotal ?? mData.subtotal, fromCur, targetConsolidatedCur, mKey);
+          const factConv = currencyView === 'USD' ? mData.facturacion : convertCurrency(mData.originalFacturacion ?? mData.facturacion, fromCur, targetConsolidatedCur, mKey);
+          const montoConv = currencyView === 'USD' ? mData.montoServicio : convertCurrency(mData.originalMontoServicio ?? mData.montoServicio, fromCur, targetConsolidatedCur, mKey);
+          const descConv = currencyView === 'USD' ? (mData.descuento || 0) : convertCurrency((mData.originalDescuento ?? mData.descuento) || 0, fromCur, targetConsolidatedCur, mKey);
+          const bmConv = currencyView === 'USD' ? mData.botmaker : convertCurrency(mData.originalBotmaker ?? mData.botmaker, fromCur, targetConsolidatedCur, mKey);
+          const ivaConv = currencyView === 'USD' ? mData.iva : convertCurrency(mData.originalIva ?? mData.iva, fromCur, targetConsolidatedCur, mKey);
+          const totalConv = currencyView === 'USD' ? mData.total : convertCurrency(mData.originalTotal ?? mData.total, fromCur, targetConsolidatedCur, mKey);
+
+          consolidatedSellerMonths[mKey] = {
+            ...mData,
+            moneda: targetConsolidatedCur,
+            subtotal: subtotalConv,
+            facturacion: factConv,
+            montoServicio: montoConv,
+            descuento: descConv,
+            botmaker: bmConv,
+            iva: ivaConv,
+            total: totalConv
+          };
+
+          allMonthlyTotals[mKey] = (allMonthlyTotals[mKey] || 0) + subtotalConv;
+          allGrandTotal += subtotalConv;
         });
+
+        allSellersMap[sId] = {
+          ...seller,
+          months: consolidatedSellerMonths
+        };
       });
     });
 
@@ -1305,8 +1433,8 @@ function MetasFacturacionContent() {
         code: 'ALL',
         name: 'Todos los Mercados (Consolidado)',
         flag: '🌐',
-        currency: currencyView === 'ARS' ? 'ARS' : 'USD',
-        symbol: currencyView === 'ARS' ? '$' : 'US$'
+        currency: targetConsolidatedCur,
+        symbol: targetConsolidatedCur === 'ARS' ? '$' : 'US$'
       },
       sellersMap: allSellersMap,
       monthlyTotals: allMonthlyTotals,
@@ -4789,13 +4917,20 @@ function MetasFacturacionContent() {
                           {filteredMonths.map(m => {
                             const mData = seller.months[m.key];
                             const isProj = mData?.isProjected;
+                            const isConsolidatedUSD = currencyView === 'USD' || selectedCountry === 'ALL';
+                            const isConsolidatedARS = currencyView === 'ARS';
                             const isMex = seller.name.includes('México') || selectedCountry === 'MX';
                             const isChl = seller.name.includes('Chile') || selectedCountry === 'CL';
                             const isCol = !isMex && (seller.name.includes('Colombia') || seller.name.includes('Disuiza') || seller.name.includes('Formex') || seller.name.includes('Natura'));
-                            const gmvCurrency = isMex ? 'MXN' : (isCol ? 'COP' : (isChl ? 'CLP' : executiveKPIs?.currency));
+                            const gmvCurrency = isConsolidatedUSD
+                              ? 'USD'
+                              : isConsolidatedARS
+                              ? 'ARS'
+                              : isMex ? 'MXN' : (isCol ? 'COP' : (isChl ? 'CLP' : (mData?.originalMoneda || executiveKPIs?.currency || 'ARS')));
+                            const showClpCustom = isChl && !isConsolidatedUSD && !isConsolidatedARS;
                             return (
                               <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right border-l ${isProj ? 'bg-orange-50/30 border-orange-100 text-orange-950' : 'border-slate-100 text-slate-800'}`}>
-                                {mData ? (isChl ? `$ ${Math.round(mData.facturacion).toLocaleString('es-CL')} CLP` : formatCurrency(mData.facturacion, gmvCurrency)) : '-'}
+                                {mData ? (showClpCustom ? `$ ${Math.round(mData.facturacion).toLocaleString('es-CL')} CLP` : formatCurrency(mData.facturacion, gmvCurrency)) : '-'}
                               </td>
                             );
                           })}
