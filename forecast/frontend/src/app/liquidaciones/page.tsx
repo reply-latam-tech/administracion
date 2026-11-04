@@ -542,6 +542,22 @@ function MetasFacturacionContent() {
       grandTotal: number;
     }> = {};
 
+    // Precomputar GMV consolidado en COP de Evacol Colombia por mes
+    const evacolTotalGmvCopByMonth: Record<string, number> = {};
+    rawLiquidaciones.forEach((row: any) => {
+      const sId = String(row.seller_id);
+      const sName = row.nombre_seller || '';
+      const meta = sellersMap[sId] || { code: 'AR', currency: 'ARS' };
+      const isEvacolCO = ['2219963574', '928666257', '928424062', '928424063'].includes(sId) || (sName.toLowerCase().includes('evacol') && (meta.code === 'CO'));
+      if (isEvacolCO && row.periodo) {
+        const d = new Date(row.periodo + 'T12:00:00');
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const mKey = `${yyyy}-${mm}`;
+        evacolTotalGmvCopByMonth[mKey] = (evacolTotalGmvCopByMonth[mKey] || 0) + (Number(row.valor_facturado) || 0);
+      }
+    });
+
     // 1. Precomputar Botmaker calculado para Octubre 2026 (última facturación real)
     // para repetirlo idéntico en todos los períodos proyectados (>= 2026-11)
     const sellerOctBotmaker: Record<string, number> = {};
@@ -565,6 +581,7 @@ function MetasFacturacionContent() {
       const isForbasse = sId === '3693335392' || sName.toLowerCase().includes('forbasse');
       const isNaturaML = sId === '2539005925' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && !sName.toLowerCase().includes('amazon'));
       const isNaturaAmazon = sId === '2539005926' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && sName.toLowerCase().includes('amazon'));
+      const isAvon = sId === '901000001' || sName.toLowerCase().includes('avon');
 
       let bm = Number(row.botmaker) || 0;
 
@@ -572,7 +589,7 @@ function MetasFacturacionContent() {
         bm = 0;
       } else if (isForbasse) {
         bm = 206750.0;
-      } else if (isNaturaML) {
+      } else if (isNaturaML || isAvon) {
         bm = 200.0;
       } else if (isNaturaAmazon) {
         bm = 0.0;
@@ -963,8 +980,9 @@ function MetasFacturacionContent() {
       }
 
       // Soporte para Evacol Colombia Multicanal (ML: 2219963574, ADDI: 928424062, DAFITTI: 928424063)
-      // Facturación en COP -> Convertida a USD vía TC oficial -> Escala en USD (Mínimo $1.000 USD o 4,00% a 2,00%)
-      // Los 3 honorarios se liquidan y cobran en Pesos Colombianos (COP) reconvirtiendo el fee en USD por el TC oficial mensual sin IVA
+      // Facturación en COP -> Convertida a USD vía TC oficial -> Escala en USD
+      // Los 3 canales se agrupan entre sí desde Oct/26 inclusive para determinar el tramo sobre el GMV total en USD.
+      // Honorarios se liquidan y cobran en Pesos Colombianos (COP) reconvirtiendo el fee en USD por el TC oficial mensual sin IVA
       if (['2219963574', '928666257', '928424062', '928424063'].includes(sId) || (sName.toLowerCase().includes('evacol') && (cCode === 'CO' || meta.code === 'CO'))) {
         rowCurrency = 'COP';
         ivaVal = 0;
@@ -973,24 +991,65 @@ function MetasFacturacionContent() {
 
         let feeUsd = 1000.0;
         let alicuotaVal: any = 'MÍNIMO';
-        if (factUsd >= 150000) {
-          feeUsd = factUsd * 0.0200;
-          alicuotaVal = 0.0200;
-        } else if (factUsd >= 110000) {
-          feeUsd = factUsd * 0.0250;
-          alicuotaVal = 0.0250;
-        } else if (factUsd >= 80000) {
-          feeUsd = factUsd * 0.0300;
-          alicuotaVal = 0.0300;
-        } else if (factUsd >= 60000) {
-          feeUsd = factUsd * 0.0350;
-          alicuotaVal = 0.0350;
-        } else if (factUsd >= 50000) {
-          feeUsd = factUsd * 0.0400;
-          alicuotaVal = 0.0400;
+
+        if (mKey >= '2026-10') {
+          // Nueva escala comercial unificada desde Octubre 2026 inclusive:
+          // Las 3 cuentas se agrupan entre sí para determinar el volumen consolidado en USD
+          const totGmvCop = evacolTotalGmvCopByMonth[mKey] || factVal;
+          const totGmvUsd = currentTc > 0 ? (totGmvCop / currentTc) : factUsd;
+
+          const isML = sId === '2219963574' || sId === '928666257' || sName.toLowerCase().includes('ml') || sName.toLowerCase().includes('mercado libre');
+
+          let rate = 0;
+          let tierMinUsd = isML ? 1500.0 : 500.0;
+
+          if (totGmvUsd >= 230000) {
+            rate = isML ? 0.0200 : 0.0065;
+          } else if (totGmvUsd >= 170000) {
+            rate = isML ? 0.0250 : 0.0082;
+          } else if (totGmvUsd >= 125000) {
+            rate = isML ? 0.0300 : 0.0098;
+          } else if (totGmvUsd >= 90000) {
+            rate = isML ? 0.0350 : 0.0114;
+          } else if (totGmvUsd >= 70000) {
+            rate = isML ? 0.0375 : 0.0122;
+          } else if (totGmvUsd >= 45000) {
+            rate = isML ? 0.0425 : 0.0138;
+          } else if (totGmvUsd >= 35000) {
+            rate = isML ? 0.0450 : 0.0147;
+          } else {
+            rate = 0;
+          }
+
+          if (rate > 0) {
+            const feeCalculado = factUsd * rate;
+            feeUsd = Math.max(tierMinUsd, feeCalculado);
+            alicuotaVal = feeCalculado >= tierMinUsd ? rate : 'MÍNIMO';
+          } else {
+            feeUsd = tierMinUsd;
+            alicuotaVal = 'MÍNIMO';
+          }
         } else {
-          feeUsd = 1000.0;
-          alicuotaVal = 'MÍNIMO';
+          // Histórico previo a Octubre 2026 (escala individual con base $1.000 USD)
+          if (factUsd >= 150000) {
+            feeUsd = factUsd * 0.0200;
+            alicuotaVal = 0.0200;
+          } else if (factUsd >= 110000) {
+            feeUsd = factUsd * 0.0250;
+            alicuotaVal = 0.0250;
+          } else if (factUsd >= 80000) {
+            feeUsd = factUsd * 0.0300;
+            alicuotaVal = 0.0300;
+          } else if (factUsd >= 60000) {
+            feeUsd = factUsd * 0.0350;
+            alicuotaVal = 0.0350;
+          } else if (factUsd >= 50000) {
+            feeUsd = factUsd * 0.0400;
+            alicuotaVal = 0.0400;
+          } else {
+            feeUsd = 1000.0;
+            alicuotaVal = 'MÍNIMO';
+          }
         }
 
         const feeCop = Math.round(feeUsd * currentTc);
@@ -1019,14 +1078,15 @@ function MetasFacturacionContent() {
         feeVal = feeCalculado >= 1500.0 ? 0.0200 : 'MÍNIMO';
       }
 
-      // Soporte para Natura México (ML: 2539005925, Amazon: 2539005926) y Go Advance (seller_id 1181954123)
-      // Facturación en MXN cruzada con escala MXN (Mínimo MXN $30.000 para ML y MXN $24.000 para canales adicionales como Amazon, o 4,50% a 2,00%)
+      // Soporte para Natura México (ML: 2539005925, Amazon: 2539005926), Go Avance (seller_id 1181954123) y Avon México (seller_id 901000001)
+      // Facturación en MXN cruzada con escala MXN (Mínimo MXN $30.000 para ML / Go Avance / Avon y MXN $24.000 para Amazon, o 4,50% a 2,00%)
       // Para Natura México la escala se evalúa sobre la suma consolidada de todos sus marketplaces (MELI + Amazon)
       const isNaturaML = sId === '2539005925' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && !sName.toLowerCase().includes('amazon'));
       const isNaturaAmazon = sId === '2539005926' || (sName.toLowerCase().includes('natura') && cCode === 'MX' && sName.toLowerCase().includes('amazon'));
-      const isGoAdvance = sId === '1181954123' || sName.toLowerCase().includes('go advance');
+      const isGoAvance = sId === '1181954123' || sName.toLowerCase().includes('go advance') || sName.toLowerCase().includes('go avance');
+      const isAvon = sId === '901000001' || (sName.toLowerCase().includes('avon') && (cCode === 'MX' || meta.code === 'MX'));
 
-      if (isNaturaML || isNaturaAmazon || isGoAdvance) {
+      if (isNaturaML || isNaturaAmazon || isGoAvance || isAvon) {
         rowCurrency = 'USD';
         ivaVal = 0;
 
@@ -1071,7 +1131,7 @@ function MetasFacturacionContent() {
           alicuotaVal = 'MÍNIMO';
         }
 
-        // Mínimo de MX$ 30.000 para MELI / Go Advance y MX$ 24.000 para Amazon
+        // Mínimo de MX$ 30.000 para MELI (Avon / Go Avance / Natura ML) y MX$ 24.000 para Amazon
         const minMxn = isNaturaAmazon ? 24000.0 : 30000.0;
         const feeMxn = Math.max(minMxn, factVal * alicNum);
 
@@ -1099,8 +1159,8 @@ function MetasFacturacionContent() {
 
       // 1. Cuentas del exterior (CO, MX, CL, US o facturadas en USD):
       if (isExterior) {
-        if (isNaturaML) {
-          // Botmaker costo fijo de USD 200 por marca (se cobra por Marca Natura México, no por marketplace)
+        if (isNaturaML || isAvon) {
+          // Botmaker costo fijo de USD 200 por marca (se cobra por Marca Avon México / Natura México, no por marketplace)
           botmakerVal = 200.0;
         } else if (isNaturaAmazon) {
           // Cuenta adicional: no duplica el costo de Botmaker de la marca
@@ -4339,7 +4399,7 @@ function MetasFacturacionContent() {
                             <td colSpan={filteredMonths.length + 1} className="px-5 py-2 font-bold text-[10px] uppercase tracking-wider text-blue-900 sticky left-0 bg-blue-50 z-10 border-b border-blue-200">
                               <div className="flex items-center justify-between">
                                 <span>Conversión FX & Cruce con Escala — Dólares Estadounidenses (USD)</span>
-                                <span className="text-[9px] font-normal text-blue-700 lowercase">mínimo USD $1.000 por marketplace</span>
+                                <span className="text-[9px] font-normal text-blue-700 lowercase">escala consolidada en USD (Oct 26+: mín. US$ 1.500 ML / US$ 500 ADDI & Dafiti)</span>
                               </div>
                             </td>
                           </tr>
@@ -4382,7 +4442,7 @@ function MetasFacturacionContent() {
                               Fee Mercado Libre (Escala USD)
                             </td>
                             {filteredMonths.map(m => {
-                              const f = mlSeller?.months[m.key]?.feeUsd || 1000;
+                              const f = mlSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 1500 : 1000);
                               return (
                                 <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
                                   US$ {Math.round(f).toLocaleString('en-US')}
@@ -4397,7 +4457,7 @@ function MetasFacturacionContent() {
                               Fee ADDI (Escala USD)
                             </td>
                             {filteredMonths.map(m => {
-                              const f = addiSeller?.months[m.key]?.feeUsd || 1000;
+                              const f = addiSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
                               return (
                                 <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
                                   US$ {Math.round(f).toLocaleString('en-US')}
@@ -4412,7 +4472,7 @@ function MetasFacturacionContent() {
                               Fee Dafiti (Escala USD)
                             </td>
                             {filteredMonths.map(m => {
-                              const f = dafSeller?.months[m.key]?.feeUsd || 1000;
+                              const f = dafSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
                               return (
                                 <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800">
                                   US$ {Math.round(f).toLocaleString('en-US')}
@@ -4427,9 +4487,9 @@ function MetasFacturacionContent() {
                               Total Honorarios Consolidados (Fee USD)
                             </td>
                             {filteredMonths.map(m => {
-                              const fML = mlSeller?.months[m.key]?.feeUsd || 1000;
-                              const fADDI = addiSeller?.months[m.key]?.feeUsd || 1000;
-                              const fDAF = dafSeller?.months[m.key]?.feeUsd || 1000;
+                              const fML = mlSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 1500 : 1000);
+                              const fADDI = addiSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
+                              const fDAF = dafSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
                               const totFeeUSD = fML + fADDI + fDAF;
                               return (
                                 <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-blue-950 bg-blue-100">
@@ -4456,9 +4516,9 @@ function MetasFacturacionContent() {
                             </td>
                             {filteredMonths.map(m => {
                               const tc = mlSeller?.months[m.key]?.tc || addiSeller?.months[m.key]?.tc || getRateToUSD('COP', m.key) || 3182.99;
-                              const fML = mlSeller?.months[m.key]?.feeUsd || 1000;
-                              const fADDI = addiSeller?.months[m.key]?.feeUsd || 1000;
-                              const fDAF = dafSeller?.months[m.key]?.feeUsd || 1000;
+                              const fML = mlSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 1500 : 1000);
+                              const fADDI = addiSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
+                              const fDAF = dafSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
                               const totFeeUSD = fML + fADDI + fDAF;
                               const subCop = Math.round(totFeeUSD * tc);
                               return (
@@ -4488,9 +4548,9 @@ function MetasFacturacionContent() {
                             </td>
                             {filteredMonths.map(m => {
                               const tc = mlSeller?.months[m.key]?.tc || addiSeller?.months[m.key]?.tc || getRateToUSD('COP', m.key) || 3182.99;
-                              const fML = mlSeller?.months[m.key]?.feeUsd || 1000;
-                              const fADDI = addiSeller?.months[m.key]?.feeUsd || 1000;
-                              const fDAF = dafSeller?.months[m.key]?.feeUsd || 1000;
+                              const fML = mlSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 1500 : 1000);
+                              const fADDI = addiSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
+                              const fDAF = dafSeller?.months[m.key]?.feeUsd || (m.key >= '2026-10' ? 500 : 1000);
                               const totFeeUSD = fML + fADDI + fDAF;
                               const totCop = Math.round(totFeeUSD * tc);
                               return (
@@ -4919,7 +4979,7 @@ function MetasFacturacionContent() {
                             const isProj = mData?.isProjected;
                             const isConsolidatedUSD = currencyView === 'USD' || selectedCountry === 'ALL';
                             const isConsolidatedARS = currencyView === 'ARS';
-                            const isMex = seller.name.includes('México') || selectedCountry === 'MX';
+                            const isMex = seller.name.includes('México') || selectedCountry === 'MX' || seller.name.includes('Avance') || seller.name.includes('Avon');
                             const isChl = seller.name.includes('Chile') || selectedCountry === 'CL';
                             const isCol = !isMex && (seller.name.includes('Colombia') || seller.name.includes('Disuiza') || seller.name.includes('Formex') || seller.name.includes('Natura'));
                             const gmvCurrency = isConsolidatedUSD

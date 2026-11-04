@@ -100,11 +100,21 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'USD';
     reglaLiquidacion = 'La facturación bruta (GMV) en Mercado Libre México en Pesos Mexicanos (MXN) se cruza con la escala comercial escalonada en MXN (piso mínimo garantizado de MXN $30.000 o alícuota del 4,50% al 2,00%). El honorario liquidado en MXN se convierte a USD según el Tipo de Cambio oficial del mes y se factura y cobra en Dólares (USD) sin IVA (0% IVA por exportación de servicios a México).';
     metodoActualizacion = 'Escala en MXN liquidada y cobrada en USD vía TC oficial sin IVA.';
-  } else if (sid === '1181954123' || sName.includes('go advance')) {
-    // Go Advance
+  } else if (sid === '1181954123' || sName.includes('go avance') || sName.includes('go advance')) {
+    // Go Avance
     monedaCobro = 'USD';
     reglaLiquidacion = 'La facturación bruta (GMV) en Mercado Libre México en Pesos Mexicanos (MXN) se cruza con la escala comercial escalonada en MXN (piso mínimo garantizado de MXN $30.000 o alícuota del 4,50% al 2,00%). El honorario liquidado en MXN se convierte a USD según el Tipo de Cambio oficial del mes y se factura y cobra en Dólares (USD) sin IVA (0% IVA por exportación de servicios a México).';
     metodoActualizacion = 'Escala en MXN liquidada y cobrada en USD vía TC oficial sin IVA.';
+  } else if (sid === '901000001' || sName.includes('avon')) {
+    // Avon México ML
+    monedaCobro = 'USD';
+    reglaLiquidacion = 'Facturación en MXN cruzada con escala en MXN (mínimo de MXN $30.000 o tramos del 4,50% al 2,00%). Se convierte a USD según el TC oficial del mes y se cobra en USD sin IVA. Incluye costo fijo de Botmaker de USD 200 por marca.';
+    metodoActualizacion = 'Escala en MXN cobrada en USD vía TC oficial + Botmaker fijo USD 200 sin IVA.';
+  } else if (sid === '901000002' || sName.includes('granix')) {
+    // Granix Argentina
+    monedaCobro = 'ARS';
+    reglaLiquidacion = 'Ventas brutas en Mercado Libre Argentina cruzadas con escala comercial en ARS (piso mínimo garantizado de $2.475.000 o alícuotas del 5,50% al 2,00%). Actualización mensual por inflación oficial (REM). Cobro de Botmaker en ARS + 21% IVA.';
+    metodoActualizacion = 'Ajuste mensual por inflación oficial acumulada (REM) + Botmaker.';
   } else if (sid === '964690754') {
     // Disuiza Colombia
     monedaCobro = 'USD';
@@ -113,8 +123,8 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   } else if (['2219963574', '928666257', '928424062', '928424063'].includes(sid) || (sName.includes('evacol') && (p === 'CO' || p === 'COL'))) {
     // Evacol Colombia (3 Marketplaces: ML, ADDI, DAFITTI)
     monedaCobro = 'COP';
-    reglaLiquidacion = 'Este cliente opera 3 marketplaces en Colombia: Mercado Libre, ADDI y Dafiti. A cada uno se le aplica la misma escala comercial en USD con piso mínimo garantizado de $1.000 USD (o alícuota del 4,00% al 2,00% sobre el GMV convertido de COP a USD). Los fees de los 3 canales se detallan y totalizan en USD y se reconvierten a Pesos Colombianos (COP) mediante el Tipo de Cambio oficial mensual para emitir y cobrar la factura en COP sin IVA.';
-    metodoActualizacion = 'Escala en USD con mínimo de $1.000 USD c/u, reconvertida y cobrada en COP vía TC oficial.';
+    reglaLiquidacion = 'Este cliente opera 3 marketplaces en Colombia: Mercado Libre, ADDI y Dafiti. Desde Octubre 2026, las 3 cuentas se agrupan entre sí para determinar el tramo sobre el volumen consolidado en USD (piso mínimo de $1.500 USD para ML y $500 USD para ADDI/Dafiti, o tramos de 4,50%-2,00% para ML y 1,47%-0,65% para ADDI/Dafiti). Los honorarios se reconvierten a Pesos Colombianos (COP) según el Tipo de Cambio oficial mensual para emitir y cobrar la factura en COP sin IVA.';
+    metodoActualizacion = 'Escala consolidada en USD agrupada (Oct 26+: mín. US$ 1.500 ML / US$ 500 Otros), reconvertida y cobrada en COP vía TC oficial.';
   } else if (sid === '127711636') {
     // Formex Colombia
     monedaCobro = 'USD';
@@ -172,7 +182,7 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   let monedaEscala = escalaMoneda || (
     ['2451996780', '941943480', '964690754', '2219963574', '928666257', '928424062', '928424063', '127711636', '918210724', '807100133', '984167591', ...newsanChileIds].includes(sid) || (sName.includes('newsan') && (p === 'CL' || p === 'CHL'))
       ? 'USD' 
-      : (['2539005925', '1181954123', '765606810', '938333830', '550082876', '998163061'].includes(sid) || p === 'MX' || p === 'MEX' 
+      : (['2539005925', '1181954123', '901000001', '765606810', '938333830', '550082876', '998163061'].includes(sid) || p === 'MX' || p === 'MEX' 
         ? 'MXN' 
         : (p === 'CL' || p === 'CHL' ? 'CLP' : 'ARS'))
   );
