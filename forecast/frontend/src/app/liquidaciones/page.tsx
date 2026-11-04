@@ -1267,6 +1267,27 @@ function MetasFacturacionContent() {
         ivaVal = Math.round((montoServicio - subtotalVal) * 100) / 100;
       }
 
+      // 6. Regla comercial oficial para Violetta Cosméticos (seller_id 1397861779):
+      // - Descuentos comerciales excepcionales por única vez:
+      //   * Agosto 2026: 50%
+      //   * Septiembre 2026: 70%
+      //   * Octubre 2026: 50%
+      const isVioletta = sId === '1397861779' || sName.toLowerCase().includes('violetta');
+      if (isVioletta) {
+        let discountRate = 0;
+        if (mKey === '2026-08') discountRate = 0.50;
+        else if (mKey === '2026-09') discountRate = 0.70;
+        else if (mKey === '2026-10') discountRate = 0.50;
+
+        if (discountRate > 0) {
+          const subtotalBruto = montoServicio;
+          descuentoVal = Math.round(subtotalBruto * discountRate * 100) / 100;
+          subtotalVal = subtotalBruto - descuentoVal;
+          ivaVal = Math.round((subtotalVal + botmakerVal) * 0.21 * 100) / 100;
+          totalVal = Math.round((subtotalVal + botmakerVal + ivaVal) * 100) / 100;
+        }
+      }
+
       const isProj = row.estado === 'PROYECTADO';
 
       // Conversión dinámica de visualización según currencyView para TODOS los conceptos
@@ -5044,11 +5065,11 @@ function MetasFacturacionContent() {
                           })}
                         </tr>
 
-                        {/* Fila Descuento Comercial (ej. Café Martínez -20%) */}
+                        {/* Fila Descuento Comercial (ej. Café Martínez -20%, Violetta Cosméticos -50%/-70%) */}
                         {Object.values(seller.months).some(m => ((m as any).descuento || 0) > 0) && (
                           <tr className="bg-rose-50/40 hover:bg-rose-50/70 transition-colors border-b border-rose-100">
                             <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-rose-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-rose-900 font-semibold border-r border-rose-200 w-[280px] min-w-[280px] max-w-[280px] flex items-center justify-between">
-                              <span>Descuento Comercial (-20%)</span>
+                              <span>Descuento Comercial</span>
                               <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-200/60 text-rose-800 ml-2">Pactado</span>
                             </td>
                             {filteredMonths.map(m => {
@@ -5056,9 +5077,15 @@ function MetasFacturacionContent() {
                               const isProj = mData?.isProjected;
                               const cur = mData?.moneda || executiveKPIs?.currency;
                               const dVal = (mData as any)?.descuento || 0;
+                              const pct = mData?.montoServicio && dVal > 0 ? Math.round((dVal / mData.montoServicio) * 100) : 0;
                               return (
                                 <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right font-bold border-l ${isProj ? 'bg-orange-50/40 border-orange-100 text-rose-700' : 'border-rose-100 text-rose-600'}`}>
-                                  {dVal > 0 ? `-${formatCurrency(dVal, cur)}` : '-'}
+                                  {dVal > 0 ? (
+                                    <div className="flex flex-col items-end">
+                                      <span>-{formatCurrency(dVal, cur)}</span>
+                                      <span className="text-[9px] font-mono text-rose-500 font-normal">(-{pct}%)</span>
+                                    </div>
+                                  ) : '-'}
                                 </td>
                               );
                             })}

@@ -145,6 +145,11 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'ARS';
     reglaLiquidacion = 'Facturación con IVA inverso: El monto del servicio pactado ($1.031.910,79 en Octubre 2026 con indexación mensual por inflación REM) representa el Total de Factura final a cobrar con IVA incluido. El IVA del 21% se calcula de forma inversa desglosando la base imponible neta (Subtotal neto = Monto Servicio / 1,21; IVA 21% = Monto Servicio - Subtotal; Total Factura = Monto Servicio). No se cobra Botmaker.';
     metodoActualizacion = 'Indexación mensual por inflación oficial (REM) sobre total cerrado con IVA inverso. Sin Botmaker.';
+  } else if (sid === '1397861779' || sName.includes('violetta')) {
+    // Violetta Cosméticos Argentina
+    monedaCobro = 'ARS';
+    reglaLiquidacion = 'Ventas brutas en Mercado Libre Argentina cruzadas con escala comercial en ARS con actualización mensual por inflación oficial (REM). Descuentos comerciales pactados excepcionalmente por única vez: 50% en Agosto 2026, 70% en Septiembre 2026 y 50% en Octubre 2026. A partir de Noviembre 2026 rige la escala completa sin descuento.';
+    metodoActualizacion = 'Indexación mensual por inflación oficial (REM). Descuentos puntuales: 50% Ago/26, 70% Sep/26, 50% Oct/26.';
   } else if (['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'].includes(sid) || (sName.includes('newsan') && (p === 'CL' || p === 'CHL'))) {
     // Newsan Chile Multicanal (6 Cuentas)
     monedaCobro = 'USD';
