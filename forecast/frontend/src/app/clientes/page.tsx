@@ -140,6 +140,11 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
     monedaCobro = 'USD';
     reglaLiquidacion = 'Ventas en dólares o pesos mexicanos se cruzan con la escala en USD con piso mínimo de $500 USD. Cobro en USD sin IVA.';
     metodoActualizacion = 'Escala en USD con piso de $500 USD.';
+  } else if (sid === '414078026' || (sName.includes('alma nativa') && (p === 'AR' || p === 'ARG'))) {
+    // Alma Nativa Argentina
+    monedaCobro = 'ARS';
+    reglaLiquidacion = 'Facturación con IVA inverso: El monto del servicio pactado ($1.031.910,79 en Octubre 2026 con indexación mensual por inflación REM) representa el Total de Factura final a cobrar con IVA incluido. El IVA del 21% se calcula de forma inversa desglosando la base imponible neta (Subtotal neto = Monto Servicio / 1,21; IVA 21% = Monto Servicio - Subtotal; Total Factura = Monto Servicio). No se cobra Botmaker.';
+    metodoActualizacion = 'Indexación mensual por inflación oficial (REM) sobre total cerrado con IVA inverso. Sin Botmaker.';
   } else if (['942368053', '977559914', '962651791', '919428720', '978106559', '936492429'].includes(sid) || (sName.includes('newsan') && (p === 'CL' || p === 'CHL'))) {
     // Newsan Chile Multicanal (6 Cuentas)
     monedaCobro = 'USD';
@@ -322,11 +327,15 @@ export default function DirectorioClientesPage() {
       Object.keys(escMap).forEach(sid => {
         const sellerEscalas = escalas.filter((e: any) => String(e.seller_id) === sid);
         if (sellerEscalas.length > 0) {
-          // Priorizar el último período con estado REAL para reflejar la escala vigente real y no proyecciones a 12 meses
+          // Priorizar el último período con estado REAL <= período actual para reflejar la escala vigente real y no proyecciones a 12 meses
+          const currentMonthPeriod = '2026-10-01';
+          const validRealEscalas = sellerEscalas.filter((e: any) => e.estado === 'REAL' && e.periodo <= currentMonthPeriod);
           const realEscalas = sellerEscalas.filter((e: any) => e.estado === 'REAL');
-          const targetP = realEscalas.length > 0
-            ? realEscalas.reduce((max: string, e: any) => (e.periodo > max ? e.periodo : max), realEscalas[0].periodo)
-            : escMap[sid].max;
+          const targetP = validRealEscalas.length > 0
+            ? validRealEscalas.reduce((max: string, e: any) => (e.periodo > max ? e.periodo : max), validRealEscalas[0].periodo)
+            : (realEscalas.length > 0
+                ? realEscalas.reduce((max: string, e: any) => (e.periodo > max ? e.periodo : max), realEscalas[0].periodo)
+                : (sellerEscalas.find((e: any) => e.periodo <= currentMonthPeriod)?.periodo || escMap[sid].max));
 
           escMap[sid].currentPeriod = targetP;
           escMap[sid].currentTiers = sellerEscalas

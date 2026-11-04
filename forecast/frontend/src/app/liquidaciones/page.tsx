@@ -1238,9 +1238,9 @@ function MetasFacturacionContent() {
         totalVal = subtotalVal + ivaVal;
       }
 
-      // 4. Regla comercial oficial para Pinturas Online (seller_id 484050606) y Alma Nativa (seller_id 414078026):
-      // - "A Pinturas Online y Alma Nativa No se les cobra botmaker"
-      if (isPinturasOnline || isAlmaNativa || row.cobrar_botmaker === false) {
+      // 4. Regla comercial oficial para Pinturas Online (seller_id 484050606):
+      // - "A Pinturas Online No se le cobra botmaker"
+      if (isPinturasOnline || (row.cobrar_botmaker === false && !isAlmaNativa)) {
         botmakerVal = 0;
         subtotalVal = Math.round((montoServicio - descuentoVal) * 100) / 100;
         if (cCode === 'AR' && rowCurrency === 'ARS') {
@@ -1250,6 +1250,21 @@ function MetasFacturacionContent() {
           ivaVal = 0;
           totalVal = subtotalVal;
         }
+      }
+
+      // 5. Regla comercial oficial para Alma Nativa Argentina (seller_id 414078026):
+      // - "No se le cobra Botmaker" (botmakerVal = 0 para todo el histórico y proyectado)
+      // - "El IVA de este cliente no se factura sobre la base. La base es el monto a facturar, por lo que se calcula el IVA de forma inversa"
+      //   Monto Servicio / Total Factura = montoServicio (cerrado con IVA incluido para todo el histórico y proyectado)
+      //   Subtotal (Base Imponible Neta Reply) = Math.round((montoServicio / 1.21) * 100) / 100
+      //   IVA (21% Débito Fiscal) = Math.round((montoServicio - subtotalVal) * 100) / 100
+      //   Total Factura = montoServicio
+      if (isAlmaNativa) {
+        botmakerVal = 0;
+        descuentoVal = 0;
+        totalVal = montoServicio;
+        subtotalVal = Math.round((montoServicio / 1.21) * 100) / 100;
+        ivaVal = Math.round((montoServicio - subtotalVal) * 100) / 100;
       }
 
       const isProj = row.estado === 'PROYECTADO';
