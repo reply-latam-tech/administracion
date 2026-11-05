@@ -399,6 +399,9 @@ function MetasFacturacionContent() {
 
   // Función para obtener tarifas históricas de Tienda Newsan Web
   const getNewsanWebTarifas = (monthKey: string) => {
+    if (monthKey >= '2026-10') {
+      return { valorSesion: 896.00, minGarantizado: 6506954.09, valorHora: 15099.79 };
+    }
     if (monthKey >= '2026-09') {
       return { valorSesion: 846.49, minGarantizado: 6506954.09, valorHora: 14270.86 };
     }
@@ -411,24 +414,45 @@ function MetasFacturacionContent() {
     if (monthKey >= '2026-01') {
       return { valorSesion: 0, minGarantizado: 5165193.00, valorHora: 12211.01 };
     }
-    return { valorSesion: 846.49, minGarantizado: 6506954.09, valorHora: 14270.86 };
+    if (monthKey >= '2025-10') {
+      return { valorSesion: 0, minGarantizado: 4872057.93, valorHora: 11328.15 };
+    }
+    if (monthKey >= '2025-07') {
+      return { valorSesion: 0, minGarantizado: 4595783.68, valorHora: 10685.25 };
+    }
+    if (monthKey >= '2025-04') {
+      return { valorSesion: 0, minGarantizado: 4234771.39, valorHora: 10079.33 };
+    }
+    if (monthKey >= '2025-01') {
+      return { valorSesion: 0, minGarantizado: 3920930.34, valorHora: 9287.57 };
+    }
+    if (monthKey >= '2024-10') {
+      return { valorSesion: 0, minGarantizado: 3495809.18, valorHora: 8599.27 };
+    }
+    if (monthKey >= '2024-07') {
+      return { valorSesion: 0, minGarantizado: 3495809.18, valorHora: 7666.90 };
+    }
+    if (monthKey >= '2024-04') {
+      return { valorSesion: 0, minGarantizado: 2947945.29, valorHora: 6465.34 };
+    }
+    return { valorSesion: 0, minGarantizado: 1945372.20, valorHora: 4266.53 };
   };
 
   // Formateadores de moneda
   const formatCurrency = (val: number, currency = 'ARS') => {
     if (val === 0 || !val) return '$ 0';
     try {
+      const hasDecimals = val % 1 !== 0;
       if (currency === 'MXN') {
-        return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
+        return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 }).format(val);
       }
       if (currency === 'USD') {
-        const hasDecimals = val % 1 !== 0;
         return `US$ ${val.toLocaleString('en-US', { minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 })}`;
       }
       if (currency === 'COP') {
         return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
       }
-      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(val);
+      return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 }).format(val);
     } catch {
       return `$ ${Math.round(val).toLocaleString()}`;
     }

@@ -173,8 +173,8 @@ function getSellerBusinessRules(sId: number | string, seller: any, escalaMoneda?
   } else if (sid === '989595440') {
     // Newsan Tienda Web
     monedaCobro = 'ARS';
-    reglaLiquidacion = 'Liquidación basada en métricas operativas de Tienda Web: Sesiones mensuales y Horas Extras de soporte técnico. Escala con cargo mínimo garantizado más tarifa por sesión y tarifa por hora extra. Actualización semestral (Abril y Septiembre). Facturación en ARS + 21% IVA.';
-    metodoActualizacion = 'Ajuste semestral por inflación oficial acumulada (Abril y Septiembre).';
+    reglaLiquidacion = 'Liquidación basada en métricas operativas de Tienda Web: Sesiones mensuales y Horas Extras de soporte técnico. Escala con cargo mínimo garantizado más tarifa por sesión y tarifa por hora extra. Actualización trimestral (Enero, Abril, Julio y Octubre). Facturación en ARS + 21% IVA.';
+    metodoActualizacion = 'Ajuste trimestral por inflación oficial acumulada (Enero, Abril, Julio y Octubre).';
   } else if (p !== 'AR' && p !== 'ARG' && p !== '') {
     // Regla de resguardo para cuentas del exterior (CO, MX, CL, US, etc.)
     monedaCobro = 'USD';

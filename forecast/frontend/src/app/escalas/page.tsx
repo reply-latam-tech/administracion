@@ -570,16 +570,17 @@ export default function EscalasPage() {
   }, []);
 
   const formatCurrency = (val: number, currency = 'ARS') => {
+    const hasDecimals = val % 1 !== 0;
     if (currency === 'USD') {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 }).format(val);
     }
     if (currency === 'COP') {
       return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
     }
     if (currency === 'MXN') {
-      return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
+      return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 }).format(val);
     }
-    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(val);
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 }).format(val);
   };
 
   const formatPercent = (val: number) => 
@@ -632,20 +633,22 @@ export default function EscalasPage() {
       monthsStr.forEach((m) => {
         if (seller.tiersByMonth[m]) {
           seller.tiersByMonth[m].sort((a: any, b: any) => {
-            const isAMin = a.tipoCargo.startsWith('MINIMO');
-            const isBMin = b.tipoCargo.startsWith('MINIMO');
-            if (isAMin && !isBMin) return -1;
-            if (isBMin && !isAMin) return 1;
-            if (isAMin && isBMin) {
-              return a.monto - b.monto;
-            }
-            if (a.tipoCargo === 'SESIONES' && b.tipoCargo === 'SESIONES') {
-              return a.alicuota - b.alicuota;
-            }
-            if (a.tipoCargo !== b.tipoCargo) {
-              return a.tipoCargo.localeCompare(b.tipoCargo);
-            }
-            return b.alicuota - a.alicuota;
+            const getPriority = (tipo: string) => {
+              if (tipo.startsWith('MINIMO')) return 1;
+              if (tipo === 'TARIFA_SESION') return 2;
+              if (tipo === 'TARIFA_HORA_EXTRA') return 3;
+              if (tipo === 'SESIONES') return 4;
+              if (tipo === 'PORCENTUAL') return 5;
+              return 6;
+            };
+            const pA = getPriority(a.tipoCargo);
+            const pB = getPriority(b.tipoCargo);
+            if (pA !== pB) return pA - pB;
+
+            if (a.tipoCargo.startsWith('MINIMO')) return a.monto - b.monto;
+            if (a.tipoCargo === 'SESIONES') return a.alicuota - b.alicuota;
+            if (a.tipoCargo === 'PORCENTUAL') return b.alicuota - a.alicuota;
+            return a.monto - b.monto;
           });
           maxTiers = Math.max(maxTiers, seller.tiersByMonth[m].length);
         }
@@ -834,6 +837,10 @@ export default function EscalasPage() {
                           ? 'MÍN (≤2.200)'
                           : cellData.tipoCargo === 'SESIONES'
                           ? `${Math.round(cellData.alicuota).toLocaleString('es-AR')} ses`
+                          : cellData.tipoCargo === 'TARIFA_SESION'
+                          ? 'Valor Sesión'
+                          : cellData.tipoCargo === 'TARIFA_HORA_EXTRA'
+                          ? 'Valor Hora'
                           : formatPercent(cellData.alicuota) + (cellData.tipoCargo.includes('1650') ? ' (≤1.650)' : cellData.tipoCargo.includes('2200') ? ' (≤2.200)' : '');
 
                       const isScaleProjected = cellData.estado === 'PROYECTADO';
@@ -886,13 +893,17 @@ export default function EscalasPage() {
                         // No es la escala aplicada
                         if (isScaleProjected) {
                           cellClass = "bg-orange-50/30";
-                          alicuotaClass = "text-orange-600 bg-orange-100";
+                          alicuotaClass = (cellData.tipoCargo === 'TARIFA_SESION' || cellData.tipoCargo === 'TARIFA_HORA_EXTRA')
+                            ? "text-orange-700 bg-orange-100/90 border border-orange-200/60 font-semibold"
+                            : "text-orange-600 bg-orange-100";
                           montoClass = "text-orange-900";
                           arrowUpClass = "text-orange-500";
                           arrowDownClass = "text-red-500";
                         } else {
                           cellClass = "";
-                          alicuotaClass = "text-blue-600 bg-blue-50";
+                          alicuotaClass = (cellData.tipoCargo === 'TARIFA_SESION' || cellData.tipoCargo === 'TARIFA_HORA_EXTRA')
+                            ? "text-indigo-700 bg-indigo-50 border border-indigo-200/60 font-semibold"
+                            : "text-blue-600 bg-blue-50";
                           montoClass = "text-gray-800";
                         }
                       }
@@ -902,7 +913,7 @@ export default function EscalasPage() {
                           <div className="flex justify-between items-center mb-0.5">
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${alicuotaClass}`}>{alicuotaLabel}</span>
                             <div className={`font-semibold text-[13px] ${montoClass}`}>
-                              {formatCurrency(val, row.moneda)}
+                              {val > 0 ? formatCurrency(val, row.moneda) : '-'}
                             </div>
                           </div>
                           
