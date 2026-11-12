@@ -16,10 +16,48 @@ import {
   Layers,
   HelpCircle,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Globe,
+  DollarSign
 } from "lucide-react";
 import TableExportButton from "@/components/TableExportButton";
+import { convertCurrency } from "@/lib/exchangeRates";
 import { ExportData } from "@/lib/exportUtils";
+
+
+interface CountryConfig {
+  code: string;
+  name: string;
+  flag: string;
+  defaultCurrency: string;
+}
+
+const COUNTRY_CONFIG: Record<string, CountryConfig> = {
+  'AR': { code: 'AR', name: 'Argentina', flag: '🇦🇷', defaultCurrency: 'ARS' },
+  'CO': { code: 'CO', name: 'Colombia', flag: '🇨🇴', defaultCurrency: 'COP' },
+  'CL': { code: 'CL', name: 'Chile', flag: '🇨🇱', defaultCurrency: 'CLP' },
+  'MX': { code: 'MX', name: 'México', flag: '🇲🇽', defaultCurrency: 'MXN' },
+  'US': { code: 'US', name: 'Estados Unidos', flag: '🇺🇸', defaultCurrency: 'USD' },
+};
+
+const COUNTRIES = [
+  { code: 'ALL', name: 'Todos los Países', flag: '🌐' },
+  { code: 'AR', name: 'Argentina', flag: '🇦🇷', defaultCurrency: 'ARS' },
+  { code: 'CL', name: 'Chile', flag: '🇨🇱', defaultCurrency: 'CLP' },
+  { code: 'CO', name: 'Colombia', flag: '🇨🇴', defaultCurrency: 'COP' },
+  { code: 'MX', name: 'México', flag: '🇲🇽', defaultCurrency: 'MXN' },
+  { code: 'US', name: 'Estados Unidos', flag: '🇺🇸', defaultCurrency: 'USD' },
+];
+
+function getCountryCode(seller: any): string {
+  const p = (seller.codigo_pais || seller.pais || '').toUpperCase().trim();
+  const name = (seller.nombre_seller || '').toUpperCase();
+  if (p === 'CO' || p.includes('COLOMBIA') || name.includes('COLOMBIA')) return 'CO';
+  if (p === 'CL' || p.includes('CHILE') || name.includes('CHILE')) return 'CL';
+  if (p === 'MX' || p.includes('MEXICO') || p.includes('MÉXICO') || name.includes('MEXICO') || name.includes('MÉXICO')) return 'MX';
+  if (p === 'US' || p === 'USA' || p.includes('ESTADOS UNIDOS') || name.includes('USA')) return 'US';
+  return 'AR';
+}
 
 interface EscalaRow {
   id: number;
@@ -72,6 +110,9 @@ export default function MetasPage() {
   // Filtros
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSellerFilter, setSelectedSellerFilter] = useState<string>("ALL");
+  const [selectedCountryFilter, setSelectedCountryFilter] = useState<string>("ALL");
+  const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState<string>("ALL");
+  const [currencyView, setCurrencyView] = useState<"ORIGINAL" | "USD" | "ARS">("ORIGINAL");
 
   useEffect(() => {
     async function loadData() {
@@ -118,16 +159,26 @@ export default function MetasPage() {
     loadData();
   }, []);
 
-  const formatCurrency = (val: number, decimals: number = 0) => 
-    new Intl.NumberFormat("es-AR", { 
-      style: "currency", 
-      currency: "ARS", 
-      minimumFractionDigits: decimals, 
-      maximumFractionDigits: decimals 
-    }).format(val);
+  const formatCurrency = (val: number, currency: string = "ARS", decimals: number = 2) => {
+    if (val === 0 || !val) return currency === "USD" ? "US$ 0,00" : "$ 0,00";
+    const cur = currency === "ORIGINAL" ? "ARS" : currency;
+    try {
+      if (cur === "MXN") {
+        return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(val);
+      }
+      if (cur === "USD") {
+        return `US$ ${val.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+      }
+      if (cur === "COP") {
+        return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
+      }
+      return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(val);
+    } catch {
+      return `$ ${val.toFixed(decimals)}`;
+    }
+  };
 
-  // Formato estándar con 2 decimales para valores proyectados y metas
-  const formatCurrency2 = (val: number) => formatCurrency(val, 2);
+  const formatCurrency2 = (val: number, cur: string = "ARS") => formatCurrency(val, cur, 2);
 
   const formatMonthStr = (p: string) => {
     const d = new Date(p + "T12:00:00");
@@ -203,11 +254,15 @@ export default function MetasPage() {
         };
       });
 
+      const countryCode = getCountryCode(s);
+      const moneda = (s.moneda || COUNTRY_CONFIG[countryCode]?.defaultCurrency || "ARS").toUpperCase();
+
       return {
         sellerId: sId,
         sellerName: s.nombre_seller,
-        pais: s.pais || "ARG",
-        moneda: s.moneda || "ARS",
+        pais: s.pais || countryCode,
+        countryCode,
+        moneda,
         monthsData
       };
     });
@@ -348,14 +403,44 @@ export default function MetasPage() {
     setSimulatedFees({});
   };
 
+
+  const countryCounts = useMemo(() => {
+    const counts: Record<string, number> = { ALL: sellersMatrix.length };
+    sellersMatrix.forEach((s) => {
+      const code = s.countryCode || "AR";
+      counts[code] = (counts[code] || 0) + 1;
+    });
+    return counts;
+  }, [sellersMatrix]);
+
+  const availableCurrencies = useMemo(() => {
+    const set = new Set<string>();
+    sellersMatrix.forEach((s) => {
+      if (s.moneda) set.add(s.moneda);
+    });
+    return Array.from(set).sort();
+  }, [sellersMatrix]);
+
+  const handleSelectSellerRow = (sellerId: string, sellerName: string) => {
+    const currentPeriodo = selectedCell?.periodo || allPeriodos.find((p) => p >= "2026-09-01") || allPeriodos[allPeriodos.length - 1];
+    setSelectedCell({
+      sellerId,
+      periodo: currentPeriodo,
+      sellerName,
+      monthStr: formatMonthStr(currentPeriodo)
+    });
+  };
+
   // Filtrado de Sellers para la tabla
   const filteredMatrix = useMemo(() => {
     return sellersMatrix.filter((row) => {
       const matchesSearch = row.sellerName.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesFilter = selectedSellerFilter === "ALL" || row.sellerId === selectedSellerFilter;
-      return matchesSearch && matchesFilter;
+      const matchesSeller = selectedSellerFilter === "ALL" || row.sellerId === selectedSellerFilter;
+      const matchesCountry = selectedCountryFilter === "ALL" || row.countryCode === selectedCountryFilter;
+      const matchesCurrency = selectedCurrencyFilter === "ALL" || row.moneda === selectedCurrencyFilter;
+      return matchesSearch && matchesSeller && matchesCountry && matchesCurrency;
     });
-  }, [sellersMatrix, searchQuery, selectedSellerFilter]);
+  }, [sellersMatrix, searchQuery, selectedSellerFilter, selectedCountryFilter, selectedCurrencyFilter]);
 
   // Selección automática de celda por defecto si no hay ninguna seleccionada
   useEffect(() => {
@@ -423,28 +508,119 @@ export default function MetasPage() {
       }
     }
 
+    // 1. Obtener períodos reales cerrados previos al período proyectado
+    const realPeriodsBefore = allPeriodos.filter((p) => {
+      const isProj = periodosMap[p] === "PROYECTADO" || p >= "2026-09-01";
+      return !isProj && p < periodo;
+    });
+
+    // 2. Último mes real cerrado con datos para este seller
+    let lastRealPeriod: string | null = null;
+    let lastRealFee = 0;
+    let lastRealVenta = 0;
+
+    for (let i = realPeriodsBefore.length - 1; i >= 0; i--) {
+      const p = realPeriodsBefore[i];
+      const fee = sellerRow.monthsData[p]?.originalFee || 0;
+      if (fee > 0) {
+        lastRealPeriod = p;
+        lastRealFee = fee;
+        lastRealVenta = sellerRow.monthsData[p]?.originalVentaBruta || 0;
+        break;
+      }
+    }
+
+    if (!lastRealPeriod && realPeriodsBefore.length > 0) {
+      lastRealPeriod = realPeriodsBefore[realPeriodsBefore.length - 1];
+      lastRealFee = sellerRow.monthsData[lastRealPeriod]?.originalFee || 0;
+      lastRealVenta = sellerRow.monthsData[lastRealPeriod]?.originalVentaBruta || 0;
+    }
+
+    const lastRealMonthStr = lastRealPeriod ? formatMonthStr(lastRealPeriod) : "Último Mes";
+
+    // 3. Promedio de los últimos 6 meses reales
+    const last6Periods = realPeriodsBefore.slice(-6);
+    const last6Fees = last6Periods
+      .map((p) => sellerRow.monthsData[p]?.originalFee || 0)
+      .filter((f) => f > 0);
+
+    const avg6MonthsFee = last6Fees.length > 0
+      ? Number((last6Fees.reduce((a, b) => a + b, 0) / last6Fees.length).toFixed(2))
+      : 0;
+
+    const last6Ventas = last6Periods
+      .map((p) => sellerRow.monthsData[p]?.originalVentaBruta || 0)
+      .filter((v) => v > 0);
+
+    const avg6MonthsVenta = last6Ventas.length > 0
+      ? Number((last6Ventas.reduce((a, b) => a + b, 0) / last6Ventas.length).toFixed(2))
+      : 0;
+
+    const cur = currencyView === "ORIGINAL" ? (sellerRow.moneda || "ARS") : currencyView;
+    let displayTargetFee = targetFee;
+    let displayLastRealFee = lastRealFee;
+    let displayAvg6MonthsFee = avg6MonthsFee;
+    let displayChartPoints = chartPoints;
+
+    if (currencyView === "USD" && sellerRow.moneda !== "USD") {
+      displayTargetFee = convertCurrency(targetFee, sellerRow.moneda, "USD", periodo);
+      displayLastRealFee = lastRealPeriod ? convertCurrency(lastRealFee, sellerRow.moneda, "USD", lastRealPeriod) : convertCurrency(lastRealFee, sellerRow.moneda, "USD", periodo);
+      displayAvg6MonthsFee = convertCurrency(avg6MonthsFee, sellerRow.moneda, "USD", periodo);
+      displayChartPoints = chartPoints.map(p => ({
+        ...p,
+        x: convertCurrency(p.x, sellerRow.moneda, "USD", periodo),
+        y: convertCurrency(p.y, sellerRow.moneda, "USD", periodo)
+      }));
+    } else if (currencyView === "ARS" && sellerRow.moneda !== "ARS") {
+      displayTargetFee = convertCurrency(targetFee, sellerRow.moneda, "ARS", periodo);
+      displayLastRealFee = lastRealPeriod ? convertCurrency(lastRealFee, sellerRow.moneda, "ARS", lastRealPeriod) : convertCurrency(lastRealFee, sellerRow.moneda, "ARS", periodo);
+      displayAvg6MonthsFee = convertCurrency(avg6MonthsFee, sellerRow.moneda, "ARS", periodo);
+      displayChartPoints = chartPoints.map(p => ({
+        ...p,
+        x: convertCurrency(p.x, sellerRow.moneda, "ARS", periodo),
+        y: convertCurrency(p.y, sellerRow.moneda, "ARS", periodo)
+      }));
+    }
+
     return {
       sellerId,
       periodo,
       sellerName,
       monthStr,
-      targetFee,
+      currency: cur,
+      targetFee: displayTargetFee,
+      rawTargetFee: targetFee,
       isSimulated: simulatedFees[key] !== undefined,
       originalFee: cellData?.originalFee || 0,
       previousVenta: cellData?.previousVentaBruta || 0,
+      lastRealPeriod,
+      lastRealMonthStr,
+      lastRealFee: displayLastRealFee,
+      lastRealVenta,
+      avg6MonthsFee: displayAvg6MonthsFee,
+      avg6MonthsVenta,
       inverse,
-      chartPoints,
+      chartPoints: displayChartPoints,
       maxVenta
     };
-  }, [selectedCell, simulatedFees, sellersMatrix, escalas]);
+  }, [selectedCell, simulatedFees, sellersMatrix, escalas, allPeriodos, periodosMap, currencyView]);
 
   // Configuración de ECharts para el gráfico de escala cartesiana
   const getCartesianChartOption = () => {
     if (!inspectionData) return {};
 
-    const { chartPoints, targetFee, inverse, sellerName, monthStr } = inspectionData;
+    const { 
+      chartPoints, 
+      targetFee, 
+      inverse, 
+      sellerName, 
+      monthStr,
+      lastRealFee,
+      lastRealMonthStr,
+      avg6MonthsFee,
+      currency 
+    } = inspectionData;
 
-    // Puntos de intersección (soluciones válidas)
     const scatterData = inverse.solutions.map((sol, idx) => ({
       name: `Alternativa ${idx + 1}`,
       value: [sol.ventaBruta, targetFee],
@@ -454,10 +630,16 @@ export default function MetasPage() {
 
     return {
       title: {
-        text: `Curva de Escala & Puntos de Intersección — ${sellerName} (${monthStr})`,
+        text: `Curva de Escala & Puntos de Intersección — ${sellerName} (${monthStr}) [${currency}]`,
         textStyle: { fontSize: 13, fontWeight: 700, color: "#0f172a" },
         left: "center",
         top: 8
+      },
+      legend: {
+        show: true,
+        bottom: 0,
+        data: ["Curva de Escala", "Intersecciones Válidas"],
+        textStyle: { fontSize: 11, color: "#64748b" }
       },
       tooltip: {
         trigger: "item",
@@ -469,27 +651,27 @@ export default function MetasPage() {
               : "";
             return `
               <div style="font-weight:bold;margin-bottom:4px;color:#0f172a;">${data.name} (${data.alicuota})</div>
-              <div>Venta Bruta ML: <b>${formatCurrency2(data.value[0])}</b></div>
-              <div>Fee Reply: <b>${formatCurrency2(data.value[1])}</b></div>
+              <div>Venta Bruta ML: <b>${formatCurrency(data.value[0], currency)}</b></div>
+              <div>Fee Reply: <b>${formatCurrency(data.value[1], currency)}</b></div>
               <div style="margin-top:4px;font-size:11px;">${varStr}</div>
             `;
           }
-          return `Venta: <b>${formatCurrency2(param.value[0])}</b><br/>Fee: <b>${formatCurrency2(param.value[1])}</b>`;
+          return `Venta: <b>${formatCurrency(param.value[0], currency)}</b><br/>Fee: <b>${formatCurrency(param.value[1], currency)}</b>`;
         },
         backgroundColor: "#ffffff",
         borderColor: "#cbd5e1",
         textStyle: { color: "#0f172a", fontSize: 12 }
       },
       grid: {
-        left: "3%",
-        right: "4%",
-        bottom: "12%",
+        left: "4%",
+        right: "5%",
+        bottom: "16%",
         top: "16%",
         containLabel: true
       },
       xAxis: {
         type: "value",
-        name: "Facturación Bruta Mercado Libre ($)",
+        name: `Facturación Bruta Mercado Libre (${currency})`,
         nameLocation: "middle",
         nameGap: 30,
         nameTextStyle: { color: "#64748b", fontSize: 11, fontWeight: 600 },
@@ -497,18 +679,18 @@ export default function MetasPage() {
         axisLabel: {
           color: "#64748b",
           fontSize: 10,
-          formatter: (v: number) => `$${Math.round(v / 1000000)}M`
+          formatter: (v: number) => `${Math.round(v / 1000000)}M`
         }
       },
       yAxis: {
         type: "value",
-        name: "Fee de Servicio Reply ($)",
+        name: `Fee de Servicio Reply (${currency})`,
         nameTextStyle: { color: "#64748b", fontSize: 11, fontWeight: 600 },
         splitLine: { lineStyle: { color: "#f1f5f9" } },
         axisLabel: {
           color: "#64748b",
           fontSize: 10,
-          formatter: (v: number) => `$${(v / 1000000).toFixed(2)}M`
+          formatter: (v: number) => `${(v / 1000000).toFixed(2)}M`
         }
       },
       series: [
@@ -522,24 +704,75 @@ export default function MetasPage() {
           itemStyle: { color: "#4981fb" },
           showSymbol: false,
           markLine: {
-            silent: true,
+            silent: false,
             symbol: ["none", "none"],
-            lineStyle: {
-              type: "dashed",
-              color: "#ff5100",
-              width: 2
-            },
             data: [
+              // 1. Línea Meta Objetivo (Naranja punteada)
               {
                 yAxis: targetFee,
-                label: {
-                  formatter: `Meta Fee: ${formatCurrency2(targetFee)}`,
-                  position: "end",
+                name: "Meta Objetivo",
+                lineStyle: {
+                  type: "dashed",
                   color: "#ff5100",
+                  width: 2.5
+                },
+                label: {
+                  formatter: `🎯 Meta Objetivo: ${formatCurrency(targetFee, currency)}`,
+                  position: "end",
+                  color: "#ea580c",
                   fontWeight: "bold",
-                  fontSize: 11
+                  fontSize: 10,
+                  backgroundColor: "#fff7ed",
+                  borderColor: "#fdba74",
+                  borderWidth: 1,
+                  padding: [3, 6],
+                  borderRadius: 4
                 }
-              }
+              },
+              // 2. Línea Último Mes Real (Azul punteada)
+              ...(lastRealFee > 0 ? [{
+                yAxis: lastRealFee,
+                name: "Último Mes Real",
+                lineStyle: {
+                  type: "dashed",
+                  color: "#2563eb",
+                  width: 2
+                },
+                label: {
+                  formatter: `📅 Último Mes Real (${lastRealMonthStr}): ${formatCurrency(lastRealFee, currency)}`,
+                  position: "insideEndBottom",
+                  color: "#1d4ed8",
+                  fontWeight: "bold",
+                  fontSize: 10,
+                  backgroundColor: "#eff6ff",
+                  borderColor: "#bfdbfe",
+                  borderWidth: 1,
+                  padding: [3, 6],
+                  borderRadius: 4
+                }
+              }] : []),
+              // 3. Línea Promedio Últimos 6 Meses Reales (Violeta punteada)
+              ...(avg6MonthsFee > 0 ? [{
+                yAxis: avg6MonthsFee,
+                name: "Promedio 6 Meses",
+                lineStyle: {
+                  type: "dashed",
+                  color: "#8b5cf6",
+                  width: 2
+                },
+                label: {
+                  formatter: `📊 Promedio 6M Reales: ${formatCurrency(avg6MonthsFee, currency)}`,
+                  position: "insideStartTop",
+                  color: "#6d28d9",
+                  fontWeight: "bold",
+                  fontSize: 10,
+                  backgroundColor: "#f5f3ff",
+                  borderColor: "#ddd6fe",
+                  borderWidth: 1,
+                  padding: [3, 6],
+                  borderRadius: 4
+                }
+              }] : [])
             ]
           }
         },
@@ -552,7 +785,7 @@ export default function MetasPage() {
             color: "#10b981",
             borderColor: "#ffffff",
             borderWidth: 2,
-            shadowColor: "rgba(0,0,0,0.2)",
+            shadowColor: "rgba(0,0,0,0.25)",
             shadowBlur: 6
           },
           z: 10
@@ -567,15 +800,25 @@ export default function MetasPage() {
     let simulatedTotal = 0;
     let modifiedCount = 0;
 
-    // Evaluamos el período proyectado destacado (ej. 2026-09-01 o el primero proyectado)
     const targetPeriodo = selectedCell?.periodo || "2026-09-01";
 
     sellersMatrix.forEach((s) => {
+      if (selectedCountryFilter !== "ALL" && s.countryCode !== selectedCountryFilter) return;
+      if (selectedCurrencyFilter !== "ALL" && s.moneda !== selectedCurrencyFilter) return;
+
       const cell = s.monthsData[targetPeriodo];
       if (cell) {
-        const orig = cell.originalFee || 0;
+        let orig = cell.originalFee || 0;
         const key = `${s.sellerId}_${targetPeriodo}`;
-        const sim = simulatedFees[key] !== undefined ? simulatedFees[key] : orig;
+        let sim = simulatedFees[key] !== undefined ? simulatedFees[key] : orig;
+
+        if (currencyView === "USD") {
+          orig = convertCurrency(orig, s.moneda || "ARS", "USD", targetPeriodo);
+          sim = convertCurrency(sim, s.moneda || "ARS", "USD", targetPeriodo);
+        } else if (currencyView === "ARS") {
+          orig = convertCurrency(orig, s.moneda || "ARS", "ARS", targetPeriodo);
+          sim = convertCurrency(sim, s.moneda || "ARS", "ARS", targetPeriodo);
+        }
 
         originalTotal += orig;
         simulatedTotal += sim;
@@ -585,6 +828,7 @@ export default function MetasPage() {
 
     const diff = simulatedTotal - originalTotal;
     const diffPct = originalTotal > 0 ? (diff / originalTotal) * 100 : 0;
+    const displayCur = currencyView === "ORIGINAL" ? "ARS" : currencyView;
 
     return {
       targetPeriodo,
@@ -593,9 +837,10 @@ export default function MetasPage() {
       simulatedTotal,
       diff,
       diffPct,
-      modifiedCount
+      modifiedCount,
+      displayCur
     };
-  }, [sellersMatrix, simulatedFees, selectedCell]);
+  }, [sellersMatrix, simulatedFees, selectedCell, selectedCountryFilter, selectedCurrencyFilter, currencyView]);
 
   // Handler para disparar el Tooltip flotante interactivo de franjas
   const handleTriggerTooltip = (
@@ -676,7 +921,7 @@ export default function MetasPage() {
               Fee Base Proyectado ({globalKpis.targetMonthStr})
             </p>
             <p className="text-base font-bold text-slate-700 mt-0.5">
-              {formatCurrency2(globalKpis.originalTotal)}
+              {formatCurrency(globalKpis.originalTotal, globalKpis.displayCur)}
             </p>
           </div>
 
@@ -685,7 +930,7 @@ export default function MetasPage() {
               Meta Simulada Reply
             </p>
             <p className="text-base font-extrabold text-[#4981fb] mt-0.5">
-              {formatCurrency2(globalKpis.simulatedTotal)}
+              {formatCurrency(globalKpis.simulatedTotal, globalKpis.displayCur)}
             </p>
           </div>
 
@@ -700,7 +945,7 @@ export default function MetasPage() {
             <p className={`text-base font-extrabold mt-0.5 ${
               globalKpis.diff >= 0 ? "text-emerald-700" : "text-rose-700"
             }`}>
-              {globalKpis.diff >= 0 ? "+" : ""}{formatCurrency2(globalKpis.diff)}
+              {globalKpis.diff >= 0 ? "+" : ""}{formatCurrency(globalKpis.diff, globalKpis.displayCur)}
               <span className="text-xs font-semibold ml-1">
                 ({globalKpis.diffPct >= 0 ? "+" : ""}{globalKpis.diffPct.toFixed(1)}%)
               </span>
@@ -720,44 +965,155 @@ export default function MetasPage() {
         </div>
       </div>
 
-      {/* 2. Barra de Filtros y Buscador */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative w-full sm:w-72">
-            <Search size={16} className="absolute left-3 top-3 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar cliente por nombre..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#4981fb] focus:border-[#4981fb] outline-none transition-all"
-            />
+      {/* 2. Barra de Segmentación por Mercado, Moneda y Buscador */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3.5">
+        {/* Fila Superior: Segmentación por País y Selector de Moneda */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          {/* Segmentación por País / Mercado */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1">
+              <Globe size={14} className="text-blue-600" />
+              Mercado:
+            </span>
+            {COUNTRIES.map((c) => {
+              const count = countryCounts[c.code] || 0;
+              const isSelected = selectedCountryFilter === c.code;
+              return (
+                <button
+                  key={c.code}
+                  onClick={() => setSelectedCountryFilter(c.code)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isSelected
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/80"
+                  }`}
+                >
+                  <span>{c.flag}</span>
+                  <span>{c.name}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    isSelected ? "bg-blue-700 text-white" : "bg-slate-200/80 text-slate-600"
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <select
-            value={selectedSellerFilter}
-            onChange={(e) => setSelectedSellerFilter(e.target.value)}
-            className="text-xs font-medium py-2 px-3 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 outline-none"
-          >
-            <option value="ALL">Todos los clientes ({sellersMatrix.length})</option>
-            {sellersMatrix.map((s) => (
-              <option key={s.sellerId} value={s.sellerId}>
-                {s.sellerName}
-              </option>
-            ))}
-          </select>
+          {/* Selector de Moneda de Visualización */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs self-start md:self-auto">
+            <span className="text-[11px] font-bold text-slate-500 pl-2 pr-1 flex items-center gap-1">
+              <DollarSign size={11} className="text-blue-600" />
+              Moneda:
+            </span>
+            <button
+              onClick={() => setCurrencyView("ORIGINAL")}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                currencyView === "ORIGINAL"
+                  ? "bg-white text-slate-900 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Visualizar cada cliente en su moneda nativa contractual"
+            >
+              <span>🪙 Moneda Origen</span>
+            </button>
+            <button
+              onClick={() => setCurrencyView("USD")}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                currencyView === "USD"
+                  ? "bg-white text-blue-700 shadow-2xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Unificar a dólares estadounidenses (USD) usando cotizaciones oficiales"
+            >
+              <span>💵 USD (Unificado)</span>
+            </button>
+            <button
+              onClick={() => setCurrencyView("ARS")}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                currencyView === "ARS"
+                  ? "bg-white text-blue-700 shadow-2xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Unificar a pesos argentinos (ARS)"
+            >
+              <span>🇦🇷 ARS (Unificado)</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-200 border border-slate-300"></span>
-            <span>Mes Cerrado (Real)</span>
+        {/* Fila Inferior: Buscador, Selectores Específicos, Leyenda y Exportar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">
+            {/* Buscador de Cliente */}
+            <div className="relative min-w-[240px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar cliente por nombre..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-7 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Selector Directo de Cliente */}
+            <select
+              value={selectedSellerFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedSellerFilter(val);
+                if (val !== "ALL") {
+                  const targetSeller = sellersMatrix.find((s) => s.sellerId === val);
+                  if (targetSeller) {
+                    handleSelectSellerRow(targetSeller.sellerId, targetSeller.sellerName);
+                  }
+                }
+              }}
+              className="text-xs font-medium py-1.5 px-2.5 rounded-lg border border-slate-200 bg-slate-50/70 text-slate-700 outline-hidden"
+            >
+              <option value="ALL">Todos los clientes ({sellersMatrix.length})</option>
+              {sellersMatrix.map((s) => (
+                <option key={s.sellerId} value={s.sellerId}>
+                  {s.sellerName} ({COUNTRY_CONFIG[s.countryCode]?.flag || ""} {s.moneda})
+                </option>
+              ))}
+            </select>
+
+            {/* Filtro por Moneda Contractual */}
+            <select
+              value={selectedCurrencyFilter}
+              onChange={(e) => setSelectedCurrencyFilter(e.target.value)}
+              className="text-xs font-medium py-1.5 px-2.5 rounded-lg border border-slate-200 bg-slate-50/70 text-slate-700 outline-hidden"
+            >
+              <option value="ALL">Todas las monedas</option>
+              {availableCurrencies.map((cur) => (
+                <option key={cur} value={cur}>
+                  Moneda: {cur}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-100 border border-[#ff5100]"></span>
-            <span className="font-semibold text-slate-700">Mes Proyectado (Editable)</span>
+
+          <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-500 self-end sm:self-auto">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-200 border border-slate-300"></span>
+              <span>Mes Cerrado (Real)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-100 border border-[#ff5100]"></span>
+              <span className="font-semibold text-slate-700">Mes Proyectado (Editable)</span>
+            </div>
+            <TableExportButton getData={getMetasExportData} label="Exportar" variant="compact" />
           </div>
-          <TableExportButton getData={getMetasExportData} label="Exportar" />
         </div>
       </div>
 
@@ -811,15 +1167,38 @@ export default function MetasPage() {
                 </tr>
               ) : (
                 filteredMatrix.map((row) => (
-                  <tr key={row.sellerId} className="hover:bg-slate-50/60 transition-colors group">
+                  <tr 
+                    key={row.sellerId} 
+                    onClick={() => handleSelectSellerRow(row.sellerId, row.sellerName)}
+                    className={`cursor-pointer transition-colors group ${
+                      selectedCell?.sellerId === row.sellerId 
+                        ? "bg-blue-50/70 hover:bg-blue-100/60" 
+                        : "hover:bg-slate-50/60"
+                    }`}
+                  >
                     {/* Columna Fija: Seller */}
-                    <td className="px-5 py-3.5 font-semibold text-slate-900 sticky left-0 bg-white group-hover:bg-slate-50/90 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r border-slate-200">
+                    <td className={`px-5 py-3.5 font-semibold text-slate-900 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] border-r border-slate-200 transition-colors ${
+                      selectedCell?.sellerId === row.sellerId 
+                        ? "bg-blue-50/95 border-l-4 border-l-blue-600" 
+                        : "bg-white group-hover:bg-slate-50/90"
+                    }`}>
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-[#4981fb] shrink-0"></span>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${
+                          selectedCell?.sellerId === row.sellerId ? "bg-blue-600 ring-2 ring-blue-300" : "bg-[#4981fb]"
+                        }`}></span>
                         <div className="truncate max-w-[170px]" title={row.sellerName}>
-                          <div className="font-bold text-slate-900 text-xs truncate">{row.sellerName}</div>
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            {row.pais} • {row.moneda}
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900 text-xs truncate">{row.sellerName}</span>
+                            {selectedCell?.sellerId === row.sellerId && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-blue-600 text-white shadow-2xs">
+                                Activa
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1">
+                            <span>{COUNTRY_CONFIG[row.countryCode]?.flag || "🌐"} {row.countryCode}</span>
+                            <span>•</span>
+                            <span className="font-bold text-slate-600">{row.moneda}</span>
                           </div>
                         </div>
                       </div>
@@ -1012,18 +1391,18 @@ export default function MetasPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200/80">
+            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200/80 flex-wrap">
               <div>
                 <p className="text-[10px] font-bold uppercase text-slate-400">Venta Mes Anterior</p>
                 <p className="text-sm font-bold text-slate-800 font-mono">
-                  {inspectionData.previousVenta > 0 ? formatCurrency2(inspectionData.previousVenta) : "No registrada"}
+                  {inspectionData.previousVenta > 0 ? formatCurrency(inspectionData.previousVenta, inspectionData.currency) : "No registrada"}
                 </p>
               </div>
               <div className="h-6 w-px bg-slate-200"></div>
               <div>
                 <p className="text-[10px] font-bold uppercase text-slate-400">Fee Objetivo Reply</p>
                 <p className="text-sm font-black text-[#ff5100] font-mono">
-                  {formatCurrency2(inspectionData.targetFee)}
+                  {formatCurrency(inspectionData.targetFee, inspectionData.currency)}
                 </p>
               </div>
             </div>
@@ -1119,6 +1498,68 @@ export default function MetasPage() {
                 );
               })
             )}
+          </div>
+
+
+          {/* Aclaración y Referencias de Meta vs Histórico */}
+          <div className="bg-gradient-to-r from-orange-50/70 via-blue-50/40 to-purple-50/40 border border-slate-200/90 rounded-xl p-4 text-xs space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-[#ff5100]" />
+              <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                Aclaración de Referencias del Gráfico
+              </h4>
+            </div>
+            <p className="text-slate-600 leading-relaxed text-[11.5px]">
+              La curva azul representa la escala de honorarios contractual según facturación bruta en Mercado Libre. Las líneas punteadas horizontales contrastan el objetivo simulado frente a la historia real de la cuenta:
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              <div className="flex items-start gap-2.5 bg-white/95 p-3 rounded-xl border border-orange-200/90 shadow-2xs">
+                <span className="w-3.5 h-1 bg-[#ff5100] rounded-full mt-2 shrink-0 border-t-2 border-dashed border-[#ff5100]"></span>
+                <div>
+                  <span className="font-extrabold text-orange-950 block text-xs">Línea Naranja — Meta Objetivo ({inspectionData.monthStr})</span>
+                  <span className="font-black text-[#ff5100] font-mono text-base block mt-0.5">
+                    {formatCurrency(inspectionData.targetFee, inspectionData.currency)}
+                  </span>
+                  <span className="text-[10px] text-slate-500">Monto objetivo mensual simulado a cobrar</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 bg-white/95 p-3 rounded-xl border border-blue-200/90 shadow-2xs">
+                <span className="w-3.5 h-1 bg-[#2563eb] rounded-full mt-2 shrink-0 border-t-2 border-dashed border-[#2563eb]"></span>
+                <div>
+                  <span className="font-extrabold text-blue-950 block text-xs">Línea Azul — Último Mes Real ({inspectionData.lastRealMonthStr})</span>
+                  <span className="font-black text-[#2563eb] font-mono text-base block mt-0.5">
+                    {inspectionData.lastRealFee > 0 ? formatCurrency(inspectionData.lastRealFee, inspectionData.currency) : "Sin historial"}
+                  </span>
+                  {inspectionData.lastRealFee > 0 && (
+                    <span className={`text-[10px] font-bold block mt-0.5 ${
+                      inspectionData.targetFee >= inspectionData.lastRealFee ? "text-emerald-600" : "text-rose-600"
+                    }`}>
+                      {inspectionData.targetFee >= inspectionData.lastRealFee ? "▲ +" : "▼ "}
+                      {(((inspectionData.targetFee - inspectionData.lastRealFee) / inspectionData.lastRealFee) * 100).toFixed(1)}% vs meta
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 bg-white/95 p-3 rounded-xl border border-purple-200/90 shadow-2xs">
+                <span className="w-3.5 h-1 bg-[#8b5cf6] rounded-full mt-2 shrink-0 border-t-2 border-dashed border-[#8b5cf6]"></span>
+                <div>
+                  <span className="font-extrabold text-purple-950 block text-xs">Línea Violeta — Promedio Últimos 6 Meses</span>
+                  <span className="font-black text-[#8b5cf6] font-mono text-base block mt-0.5">
+                    {inspectionData.avg6MonthsFee > 0 ? formatCurrency(inspectionData.avg6MonthsFee, inspectionData.currency) : "Sin historial"}
+                  </span>
+                  {inspectionData.avg6MonthsFee > 0 && (
+                    <span className={`text-[10px] font-bold block mt-0.5 ${
+                      inspectionData.targetFee >= inspectionData.avg6MonthsFee ? "text-emerald-600" : "text-rose-600"
+                    }`}>
+                      {inspectionData.targetFee >= inspectionData.avg6MonthsFee ? "▲ +" : "▼ "}
+                      {(((inspectionData.targetFee - inspectionData.avg6MonthsFee) / inspectionData.avg6MonthsFee) * 100).toFixed(1)}% vs meta
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Gráfico Cartesiano ECharts de la Escala */}
