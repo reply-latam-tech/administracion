@@ -967,123 +967,27 @@ export default function FacturacionPage() {
           })}
         </div>
 
-        {/* Input de Búsqueda */}
-        <div className="relative min-w-[240px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por cliente o seller..."
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 4. Gráfico: Evolución de Facturación por Seller (Moneda Unificada) */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 shrink-0">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-900">Evolución de Facturación por Seller</h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 uppercase">
-                {currencyView === 'ORIGINAL' && selectedCountryFilter !== 'ALL'
-                  ? `Moneda: ${COUNTRY_CONFIG[selectedCountryFilter]?.defaultCurrency}`
-                  : `Unificado en: ${processedData.globalCurrency}`}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {selectedSeller 
-                ? `Visualizando únicamente: ${selectedSeller}`
-                : `Composición mensual con valores convertidos a escala unificada para análisis real.`}
-            </p>
-          </div>
-          {selectedSeller && (
-            <button
-              onClick={() => setSelectedSeller(null)}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <span>✕ Ver todos los clientes</span>
-            </button>
-          )}
-        </div>
-
-        <div className="h-[380px] w-full">
-          {loading ? (
-             <div className="animate-pulse w-full h-full bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 text-xs">
-               Cargando gráfico...
-             </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={processedData.chartDataset} 
-                margin={{ top: 10, right: 15, left: 10, bottom: 25 }} 
-                stackOffset={valueType === 'relative' ? 'expand' : 'none'}
+        {/* Input de Búsqueda y Exportar */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="relative min-w-[240px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por cliente o seller..."
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 11, fill: '#64748B' }} 
-                  dy={10} 
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 11, fill: '#64748B' }} 
-                  tickFormatter={(value) => {
-                    if (valueType === 'relative') return `${(value * 100).toFixed(0)}%`;
-                    const cur = currencyView === 'ORIGINAL' && selectedCountryFilter !== 'ALL'
-                      ? (COUNTRY_CONFIG[selectedCountryFilter]?.defaultCurrency || 'USD')
-                      : processedData.globalCurrency;
-                    return formatMoney(value, cur, true);
-                  }} 
-                />
-                <Tooltip 
-                  content={<CustomTooltip />} 
-                  cursor={{ fill: 'rgba(73, 129, 251, 0.05)' }} 
-                  wrapperStyle={{ zIndex: 50 }}
-                />
-                <Legend 
-                  iconType="circle" 
-                  wrapperStyle={{ fontSize: '11px', paddingTop: '16px', color: '#64748B' }} 
-                />
-                {processedData.chartSellerNames.filter(name => !selectedSeller || name === selectedSeller).map((name, index) => {
-                  const colors = [
-                    '#4981FB', '#FF5100', '#10B981', '#F59E0B', '#8B5CF6', 
-                    '#06B6D4', '#EC4899', '#14B8A6', '#6366F1'
-                  ];
-                  const isOthers = name === 'Otros';
-                  const color = isOthers ? '#94A3B8' : colors[index % colors.length];
-                  return (
-                    <Bar key={name} dataKey={name} stackId="a" fill={color}>
-                      {processedData.chartDataset.map((entry, idx) => {
-                         const isProjected = entry[`${name}_estado`] === 'PROYECTADO';
-                         return (
-                           <Cell 
-                             key={`cell-${idx}`} 
-                             fill={isProjected ? 'transparent' : color} 
-                             stroke={color} 
-                             strokeDasharray={isProjected ? "4 4" : undefined}
-                             strokeWidth={isProjected ? 2 : 0} 
-                           />
-                         );
-                      })}
-                    </Bar>
-                  );
-                })}
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+                ✕
+              </button>
+            )}
+          </div>
+          <TableExportButton getData={getFacturacionExportData} label="Exportar" variant="compact" />
         </div>
       </div>
 
@@ -1338,6 +1242,105 @@ export default function FacturacionPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* 4. Gráfico: Evolución de Facturación por Seller (Ubicado debajo de la tabla) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 shrink-0">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900">Evolución de Facturación por Seller</h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 uppercase">
+                {currencyView === 'ORIGINAL' && selectedCountryFilter !== 'ALL'
+                  ? `Moneda: ${COUNTRY_CONFIG[selectedCountryFilter]?.defaultCurrency}`
+                  : `Unificado en: ${processedData.globalCurrency}`}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {selectedSeller 
+                ? `Visualizando únicamente: ${selectedSeller}`
+                : `Composición mensual con valores convertidos a escala unificada para análisis real.`}
+            </p>
+          </div>
+          {selectedSeller && (
+            <button
+              onClick={() => setSelectedSeller(null)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <span>✕ Ver todos los clientes</span>
+            </button>
+          )}
+        </div>
+
+        <div className="h-[380px] w-full">
+          {loading ? (
+             <div className="animate-pulse w-full h-full bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 text-xs">
+               Cargando gráfico...
+             </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart 
+                data={processedData.chartDataset} 
+                margin={{ top: 10, right: 15, left: 10, bottom: 25 }} 
+                stackOffset={valueType === 'relative' ? 'expand' : 'none'}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748B' }} 
+                  dy={10} 
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#64748B' }} 
+                  tickFormatter={(value) => {
+                    if (valueType === 'relative') return `${(value * 100).toFixed(0)}%`;
+                    const cur = currencyView === 'ORIGINAL' && selectedCountryFilter !== 'ALL'
+                      ? (COUNTRY_CONFIG[selectedCountryFilter]?.defaultCurrency || 'USD')
+                      : processedData.globalCurrency;
+                    return formatMoney(value, cur, true);
+                  }} 
+                />
+                <Tooltip 
+                  content={<CustomTooltip />} 
+                  cursor={{ fill: 'rgba(73, 129, 251, 0.05)' }} 
+                  wrapperStyle={{ zIndex: 50 }}
+                />
+                <Legend 
+                  iconType="circle" 
+                  wrapperStyle={{ fontSize: '11px', paddingTop: '16px', color: '#64748B' }} 
+                />
+                {processedData.chartSellerNames.filter(name => !selectedSeller || name === selectedSeller).map((name, index) => {
+                  const colors = [
+                    '#4981FB', '#FF5100', '#10B981', '#F59E0B', '#8B5CF6', 
+                    '#06B6D4', '#EC4899', '#14B8A6', '#6366F1'
+                  ];
+                  const isOthers = name === 'Otros';
+                  const color = isOthers ? '#94A3B8' : colors[index % colors.length];
+                  return (
+                    <Bar key={name} dataKey={name} stackId="a" fill={color}>
+                      {processedData.chartDataset.map((entry, idx) => {
+                         const isProjected = entry[`${name}_estado`] === 'PROYECTADO';
+                         return (
+                           <Cell 
+                             key={`cell-${idx}`} 
+                             fill={isProjected ? 'transparent' : color} 
+                             stroke={color} 
+                             strokeDasharray={isProjected ? "4 4" : undefined}
+                             strokeWidth={isProjected ? 2 : 0} 
+                           />
+                         );
+                      })}
+                    </Bar>
+                  );
+                })}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
