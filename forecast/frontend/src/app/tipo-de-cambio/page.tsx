@@ -19,6 +19,8 @@ import {
 import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
 import { supabase } from "@/lib/supabase";
+import TableExportButton from "@/components/TableExportButton";
+import { ExportData } from "@/lib/exportUtils";
 
 // Interfaz para la cotización de un mes
 interface TipoCambioRow {
@@ -410,10 +412,35 @@ export default function TipoDeCambioPage() {
     };
   }, [filteredData, activeCurrencyObj]);
 
-  // Exportar a CSV
-  const handleExportCSV = () => {
-    const headers = ['Periodo', 'ARS (Argentina)', 'MXN (México)', 'PEN (Perú)', 'CLP (Chile)', 'COP (Colombia)', 'Moneda_Base', 'Estado'];
-    const rows = filteredData.map(r => [
+  // Obtener datos de la tabla para exportar (formato matricial en pantalla y serie cronológica)
+  const getTableExportData = (): ExportData => {
+    // 1. Matriz tal como se visualiza en pantalla (filas = monedas, columnas = meses filtrados)
+    const matrixHeaders = [
+      'Moneda / País',
+      ...filteredData.map(r => `${formatShortPeriod(r.periodo)} (${r.estado || (r.periodo >= '2026-10-01' ? 'PROY' : 'REAL')})`)
+    ];
+
+    const matrixRows = CURRENCIES.map(curr => [
+      `${curr.code} (${curr.label})`,
+      ...filteredData.map(r => {
+        const val = r[curr.key] as number | null;
+        return val !== null && val !== undefined ? val : '';
+      })
+    ]);
+
+    // 2. Serie cronológica vertical (filas = períodos, columnas = monedas)
+    const cronoHeaders = [
+      'Periodo',
+      'ARS (Argentina)',
+      'MXN (México)',
+      'PEN (Perú)',
+      'CLP (Chile)',
+      'COP (Colombia)',
+      'Moneda Base',
+      'Estado'
+    ];
+
+    const cronoRows = filteredData.map(r => [
       r.periodo.substring(0, 7),
       r.ars ?? '',
       r.mxn ?? '',
@@ -423,14 +450,26 @@ export default function TipoDeCambioPage() {
       r.moneda_base || 'USD',
       r.estado || (r.periodo >= '2026-10-01' ? 'PROYECTADO' : 'REAL')
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `tipos_de_cambio_reply_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `tipos_de_cambio_${dateStr}`,
+      sheetName: 'Matriz en Pantalla',
+      headers: matrixHeaders,
+      rows: matrixRows,
+      sheets: [
+        {
+          sheetName: 'Matriz en Pantalla',
+          headers: matrixHeaders,
+          rows: matrixRows
+        },
+        {
+          sheetName: 'Serie Cronológica',
+          headers: cronoHeaders,
+          rows: cronoRows
+        }
+      ]
+    };
   };
 
   return (
@@ -475,13 +514,7 @@ export default function TipoDeCambioPage() {
             <RefreshCw size={13} className={loading ? "animate-spin text-blue-600" : ""} />
             <span>Actualizar</span>
           </button>
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer active:scale-95"
-          >
-            <Download size={13} />
-            <span>Exportar CSV</span>
-          </button>
+          <TableExportButton getData={getTableExportData} label="Exportar" />
         </div>
       </div>
 
@@ -622,10 +655,11 @@ export default function TipoDeCambioPage() {
               {filteredData.length} meses en columnas • Haz clic en una fila para seleccionarla y ver su evolución gráfica abajo
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold text-slate-500">
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">
               Unidades de Moneda Local por 1 USD
             </span>
+            <TableExportButton getData={getTableExportData} label="Exportar Tabla" variant="compact" />
           </div>
         </div>
 

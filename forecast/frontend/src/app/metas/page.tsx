@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   AlertTriangle
 } from "lucide-react";
+import TableExportButton from "@/components/TableExportButton";
+import { ExportData } from "@/lib/exportUtils";
 
 interface EscalaRow {
   id: number;
@@ -617,6 +619,38 @@ export default function MetasPage() {
     });
   };
 
+  // Exportar datos de la matriz interactiva de metas
+  const getMetasExportData = (): ExportData => {
+    const headers = [
+      'Seller',
+      'ID Seller',
+      'País',
+      'Moneda',
+      ...allPeriodos.map(p => `${formatMonthStr(p)} (${p >= '2026-09-01' ? 'PROY' : 'REAL'})`)
+    ];
+
+    const rows = filteredMatrix.map(row => [
+      row.sellerName,
+      row.sellerId,
+      row.pais || '',
+      row.moneda || 'ARS',
+      ...allPeriodos.map(p => {
+        const cell = row.monthsData[p];
+        const key = `${row.sellerId}_${p}`;
+        const fee = simulatedFees[key] !== undefined ? simulatedFees[key] : (cell?.originalFee || 0);
+        return fee || '';
+      })
+    ]);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `metas_cobro_${dateStr}`,
+      sheetName: 'Metas',
+      headers,
+      rows
+    };
+  };
+
   return (
     <div className="space-y-6 pb-16 w-full h-full flex flex-col">
       {/* 1. Header y KPIs Consolidados */}
@@ -714,7 +748,7 @@ export default function MetasPage() {
           </select>
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-slate-200 border border-slate-300"></span>
             <span>Mes Cerrado (Real)</span>
@@ -723,6 +757,7 @@ export default function MetasPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-orange-100 border border-[#ff5100]"></span>
             <span className="font-semibold text-slate-700">Mes Proyectado (Editable)</span>
           </div>
+          <TableExportButton getData={getMetasExportData} label="Exportar" />
         </div>
       </div>
 

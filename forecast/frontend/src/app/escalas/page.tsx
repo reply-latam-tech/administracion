@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { ArrowUpRight, ArrowDownRight, Search, X, Clock, Globe, Sparkles } from "lucide-react";
+import TableExportButton from "@/components/TableExportButton";
+import { ExportData } from "@/lib/exportUtils";
 
 export default function EscalasPage() {
   const [sellersList, setSellersList] = useState<any[]>([]);
@@ -679,6 +681,45 @@ export default function EscalasPage() {
     return rows;
   }, [filteredSellers, monthsStr, sellersMetaMap, liqMapState]);
 
+  // Exportar datos de la matriz de escalas
+  const getEscalasExportData = (): ExportData => {
+    const headers = ['Seller', 'ID Seller', 'País', 'Moneda', 'Estado', ...monthsStr];
+
+    const rows: (string | number)[][] = [];
+
+    filteredSellers.forEach(seller => {
+      const isBaja = sellersMetaMap[seller.sellerId]?.isBaja || false;
+      const maxTiers = Math.max(...monthsStr.map(m => seller.tiersByMonth[m]?.length || 0), 1);
+
+      for (let i = 0; i < maxTiers; i++) {
+        const rowData = [
+          i === 0 ? seller.sellerName : `${seller.sellerName} (Tramo ${i + 1})`,
+          seller.sellerId,
+          seller.pais || '',
+          seller.moneda || 'ARS',
+          isBaja ? 'Baja' : 'Activa',
+          ...monthsStr.map(m => {
+            const tiers = seller.tiersByMonth[m];
+            const t = tiers && tiers[i];
+            if (!t) return '';
+            const alicStr = t.tipoCargo === 'MINIMO' ? 'MÍNIMO' : `${(t.alicuota * 100).toFixed(2)}%`;
+            const montoStr = t.monto > 0 ? ` (Monto: ${t.monto})` : '';
+            return `${alicStr}${montoStr}`;
+          })
+        ];
+        rows.push(rowData);
+      }
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `matriz_escalas_${selectedCountry.toLowerCase()}_${dateStr}`,
+      sheetName: 'Escalas',
+      headers,
+      rows
+    };
+  };
+
   return (
     <div className="w-full h-[calc(100vh-80px-4rem)] max-h-[calc(100vh-80px-4rem)] flex flex-col gap-2.5 overflow-hidden">
       {/* 1. Barra de Filtros y Guía Compacta (100% Fija) */}
@@ -721,25 +762,28 @@ export default function EscalasPage() {
             })}
           </div>
 
-          {/* Buscador reactivo por cliente */}
-          <div className="relative shrink-0">
-            <Search size={14} className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar cliente por nombre o ID..."
-              className="pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5100]/20 focus:border-[#ff5100] w-64 text-slate-800 placeholder-slate-400 transition-all"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 transition-colors"
-                title="Limpiar búsqueda"
-              >
-                <X size={12} />
-              </button>
-            )}
+          {/* Buscador reactivo por cliente y Botón Exportar */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative">
+              <Search size={14} className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar cliente por nombre o ID..."
+                className="pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5100]/20 focus:border-[#ff5100] w-64 text-slate-800 placeholder-slate-400 transition-all"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 transition-colors"
+                  title="Limpiar búsqueda"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <TableExportButton getData={getEscalasExportData} label="Exportar" />
           </div>
         </div>
 

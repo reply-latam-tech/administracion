@@ -26,6 +26,8 @@ import {
   ChevronRight
 } from "lucide-react";
 import { useAuth, UserRole, OWNER_EMAIL } from "@/context/AuthContext";
+import TableExportButton from "@/components/TableExportButton";
+import { ExportData } from "@/lib/exportUtils";
 
 interface UserItem {
   id: string;
@@ -170,6 +172,33 @@ export default function UsuariosPage() {
     } catch {
       return dateStr;
     }
+  };
+
+  // Exportar datos de la tabla de usuarios
+  const getUsuariosExportData = (): ExportData => {
+    const headers = [
+      'Colaborador',
+      'Correo Corporativo',
+      'Nivel de Rol',
+      'Último Inicio de Sesión',
+      'Fecha de Alta'
+    ];
+
+    const rows = filteredUsers.map(u => [
+      u.nombre,
+      u.email,
+      u.rol,
+      formatDate(u.ultimo_login),
+      formatDate(u.creado_el)
+    ]);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `usuarios_roles_${dateStr}`,
+      sheetName: 'Usuarios',
+      headers,
+      rows
+    };
   };
 
   // Si no es propietario, pantalla de acceso restringido
@@ -479,15 +508,18 @@ CREATE TRIGGER on_auth_user_created
             ))}
           </div>
 
-          <div className="relative w-full sm:w-72">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por nombre o correo..."
-              className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500 shadow-2xs"
-            />
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <div className="relative w-full sm:w-72">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por nombre o correo..."
+                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500 shadow-2xs"
+              />
+            </div>
+            <TableExportButton getData={getUsuariosExportData} label="Exportar" />
           </div>
         </div>
 

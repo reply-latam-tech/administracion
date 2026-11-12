@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import ReactECharts from 'echarts-for-react';
+import TableExportButton from "@/components/TableExportButton";
+import { ExportData } from "@/lib/exportUtils";
 
 export default function DashboardPage() {
   const [data, setData] = useState<any[]>([]);
@@ -152,6 +154,35 @@ export default function DashboardPage() {
 
     return { rows, months: monthsArr };
   }, [allSeguimiento, sellers, viewMode]);
+
+  // Datos para exportar la matriz
+  const getTableExportData = (): ExportData => {
+    const headers = [
+      'Seller',
+      ...matrixData.months.flatMap(m => [`${m} (Real)`, `${m} (Proy)`, `${m} (Var %)`])
+    ];
+
+    const rows = matrixData.rows.map((row: any) => [
+      row.sellerName,
+      ...matrixData.months.flatMap((m: string) => {
+        const c = row.monthsData[m];
+        if (!c) return ['', '', ''];
+        return [
+          c.facturacion ?? '',
+          c.proyeccion ?? '',
+          c.variation !== null && c.variation !== undefined ? `${(c.variation * 100).toFixed(1)}%` : ''
+        ];
+      })
+    ]);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `proyecciones_facturacion_${viewMode.toLowerCase()}_${dateStr}`,
+      sheetName: 'Proyecciones',
+      headers,
+      rows
+    };
+  };
 
   // Función para formatear moneda
   const formatCurrency = (val: number) => 
@@ -379,27 +410,30 @@ export default function DashboardPage() {
               Ventas reales vs. proyecciones por periodo para toda la cartera
             </p>
           </div>
-          <div className="flex bg-slate-200/80 p-1 rounded-lg self-start sm:self-auto">
-            <button 
-              onClick={() => setViewMode('CIERRE')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                viewMode === 'CIERRE' 
-                  ? 'bg-white text-slate-900 shadow-xs' 
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Cierre de Mes
-            </button>
-            <button 
-              onClick={() => setViewMode('DIA_ACTUAL')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                viewMode === 'DIA_ACTUAL' 
-                  ? 'bg-white text-slate-900 shadow-xs' 
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Al Día Actual (Día {new Date().getDate()})
-            </button>
+          <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+            <div className="flex bg-slate-200/80 p-1 rounded-lg">
+              <button 
+                onClick={() => setViewMode('CIERRE')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  viewMode === 'CIERRE' 
+                    ? 'bg-white text-slate-900 shadow-xs' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Cierre de Mes
+              </button>
+              <button 
+                onClick={() => setViewMode('DIA_ACTUAL')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  viewMode === 'DIA_ACTUAL' 
+                    ? 'bg-white text-slate-900 shadow-xs' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Al Día Actual (Día {new Date().getDate()})
+              </button>
+            </div>
+            <TableExportButton getData={getTableExportData} label="Exportar" />
           </div>
         </div>
         

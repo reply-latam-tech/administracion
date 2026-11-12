@@ -27,6 +27,8 @@ import {
   Edit3,
   Save
 } from 'lucide-react';
+import TableExportButton from '@/components/TableExportButton';
+import { ExportData } from '@/lib/exportUtils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -515,6 +517,51 @@ export default function DirectorioClientesPage() {
   const syncedApiAccounts = sellersList.filter(s => s.hasOrders).length;
   const countriesCount = new Set(sellersList.map(s => s.codigo_pais).filter(Boolean)).size;
 
+  // Obtener datos filtrados para exportación
+  const getClientesExportData = (): ExportData => {
+    const headers = [
+      'ID Seller',
+      'Nombre Seller',
+      'Holding',
+      'País',
+      'Plataforma',
+      'Estado',
+      'Fecha Alta',
+      'Fecha Baja',
+      'Moneda GMV',
+      'Moneda Cobro Reply',
+      'Moneda Escala',
+      'Frecuencia Ajuste',
+      'Meses Facturados',
+      'Órdenes API'
+    ];
+
+    const rows = filteredSellers.map(s => [
+      s.id_seller,
+      s.nombre_seller,
+      s.nombre_holding || '',
+      s.codigo_pais || s.pais || '',
+      s.nombre_plataforma || s.codigo_plataforma || 'MELI',
+      s.isBaja ? 'BAJA' : 'ACTIVA',
+      s.fechaIngreso || '',
+      s.fechaEgreso || '',
+      s.moneda || 'ARS',
+      s.rules?.monedaCobro || '',
+      s.rules?.monedaEscala || '',
+      s.frecuencia_actualizacion || 'MENSUAL',
+      s.factInfo?.count ?? 0,
+      s.ordInfo?.hasOrders ? 'Sincronizado' : 'Sin Órdenes'
+    ]);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `directorio_clientes_${dateStr}`,
+      sheetName: 'Clientes',
+      headers,
+      rows
+    };
+  };
+
   return (
     <div className="space-y-6 pb-16 w-full flex flex-col select-text">
       {/* 1. Header & KPIs Globales */}
@@ -641,6 +688,8 @@ export default function DirectorioClientesPage() {
             <option value="WEB">Tienda Web / Directa</option>
             <option value="OTROS">Otros Marketplaces</option>
           </select>
+
+          <TableExportButton getData={getClientesExportData} label="Exportar" />
         </div>
       </div>
 

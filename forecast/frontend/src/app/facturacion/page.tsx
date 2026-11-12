@@ -32,6 +32,8 @@ import {
   ReferenceLine 
 } from 'recharts';
 import { convertCurrency, formatMoney, getRateToUSD } from '@/lib/exchangeRates';
+import TableExportButton from '@/components/TableExportButton';
+import { ExportData } from '@/lib/exportUtils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -684,6 +686,68 @@ export default function FacturacionPage() {
     return list;
   }, [processedData.countriesData, selectedCountryFilter, searchTerm]);
 
+  // Obtener datos para exportar de la matriz de facturación GMV
+  const getFacturacionExportData = (): ExportData => {
+    const periodos = processedData.sortedPeriodos;
+    const headers = [
+      'País',
+      'Seller',
+      'ID Seller',
+      'Moneda Origen',
+      'Moneda Reportada',
+      'Estado',
+      'Fecha Alta',
+      ...periodos.map(p => `${formatMonthStr(p)}${p >= '2026-10-01' ? ' (PROY)' : ''}`)
+    ];
+
+    const rows: (string | number)[][] = [];
+
+    countriesToDisplay.forEach(cCode => {
+      const countryGroup = processedData.countriesData[cCode];
+      if (!countryGroup) return;
+
+      const sellersList = countryGroup.sellers.filter(s => {
+        if (searchTerm.trim() && !s.sellerName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        return true;
+      });
+
+      // Fila resumen del país
+      const countryCurr = currencyView === 'ORIGINAL' ? countryGroup.country.defaultCurrency : currencyView;
+      rows.push([
+        `[TOTAL ${countryGroup.country.name}]`,
+        `Subtotal (${sellersList.length} sellers)`,
+        '',
+        countryGroup.country.defaultCurrency,
+        countryCurr,
+        'SUBTOTAL',
+        '',
+        ...periodos.map(p => countryGroup.monthlyTotals[p] ?? 0)
+      ]);
+
+      // Filas por seller
+      sellersList.forEach(s => {
+        rows.push([
+          countryGroup.country.name,
+          s.sellerName,
+          s.sellerId,
+          s.monedaOrigen,
+          currencyView === 'ORIGINAL' ? s.monedaOrigen : currencyView,
+          s.isBaja ? 'Baja' : 'Activa',
+          s.fechaIngreso || '',
+          ...periodos.map(p => s.months[p]?.valor ?? '')
+        ]);
+      });
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `ventas_gmv_${currencyView.toLowerCase()}_${dateStr}`,
+      sheetName: 'Ventas GMV',
+      headers,
+      rows
+    };
+  };
+
   return (
     <div className="space-y-6 pb-12 w-full h-full overflow-y-auto flex flex-col pr-2">
       {/* 1. Header con Controles de Moneda y Variación */}
@@ -1039,10 +1103,11 @@ export default function FacturacionPage() {
                 : 'Moneda de visualización: ARS (Unificada en Pesos Argentinos).'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="text-[11px] text-slate-500 font-medium">
               Mostrando {countriesToDisplay.length} {countriesToDisplay.length === 1 ? 'país' : 'países'}
             </span>
+            <TableExportButton getData={getFacturacionExportData} label="Exportar Tabla" variant="compact" />
           </div>
         </div>
 

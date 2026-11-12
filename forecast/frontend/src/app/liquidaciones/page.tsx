@@ -34,6 +34,8 @@ import {
   Cell 
 } from 'recharts';
 import { getRateToUSD, formatMoney, convertCurrency } from '@/lib/exchangeRates';
+import TableExportButton from '@/components/TableExportButton';
+import { ExportData } from '@/lib/exportUtils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -399,6 +401,17 @@ function MetasFacturacionContent() {
 
   // Función para obtener tarifas históricas de Tienda Newsan Web
   const getNewsanWebTarifas = (monthKey: string) => {
+    // Proyecciones 2027 con ajuste trimestral por inflación oficial (REM)
+    if (monthKey >= '2027-07') {
+      return { valorSesion: 1031.56, minGarantizado: 7491390.14, valorHora: 17384.23 };
+    }
+    if (monthKey >= '2027-04') {
+      return { valorSesion: 989.42, minGarantizado: 7185360.30, valorHora: 16674.07 };
+    }
+    if (monthKey >= '2027-01') {
+      return { valorSesion: 942.48, minGarantizado: 6844475.63, valorHora: 15883.03 };
+    }
+    // Q4 2026 (Octubre, Noviembre, Diciembre)
     if (monthKey >= '2026-10') {
       return { valorSesion: 896.00, minGarantizado: 6506954.09, valorHora: 15099.79 };
     }
@@ -1892,6 +1905,72 @@ function MetasFacturacionContent() {
     return result;
   }, [filteredMonths, selectedCountry, groupedData, newsanSubAccounts, newsanMetricas]);
 
+  // Exportar datos de la tabla de Resumen de Subtotales
+  const getLiquidacionesResumenExportData = (): ExportData => {
+    const headers = [
+      'Cliente / Seller',
+      'ID Seller',
+      'País',
+      'Moneda',
+      ...filteredMonths.map(m => `${m.shortLabel} (${m.isProjected ? 'PROY' : 'REAL'})`),
+      'Total Acumulado'
+    ];
+
+    const rows = allSellers.map(seller => {
+      const sAny = seller as any;
+      const cCur = currencyView === 'ORIGINAL' 
+        ? (sAny.moneda || groupedData[selectedCountry]?.country?.currency || 'USD') 
+        : currencyView;
+      const totalAcum = filteredMonths.reduce((sum, m) => sum + (seller.months[m.key]?.subtotal || 0), 0);
+
+      return [
+        seller.name,
+        seller.id,
+        sAny.countryCode || selectedCountry,
+        cCur,
+        ...filteredMonths.map(m => seller.months[m.key]?.subtotal ?? 0),
+        totalAcum
+      ];
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `ingresos_subtotales_${selectedCountry.toLowerCase()}_${dateStr}`,
+      sheetName: 'Subtotales',
+      headers,
+      rows
+    };
+  };
+
+  // Exportar datos de la tabla de Detalle por Concepto
+  const getLiquidacionesConceptosExportData = (): ExportData => {
+    const headers = [
+      'Cliente / Seller',
+      'ID Seller',
+      'Concepto',
+      ...filteredMonths.map(m => `${m.shortLabel} (${m.isProjected ? 'PROY' : 'REAL'})`)
+    ];
+
+    const rows: (string | number)[][] = [];
+
+    allSellers.forEach(seller => {
+      rows.push([seller.name, seller.id, 'Facturación Bruta (GMV)', ...filteredMonths.map(m => seller.months[m.key]?.facturacion ?? 0)]);
+      rows.push([seller.name, seller.id, 'Honorario Servicio (Fee)', ...filteredMonths.map(m => seller.months[m.key]?.montoServicio ?? 0)]);
+      rows.push([seller.name, seller.id, 'Botmaker', ...filteredMonths.map(m => seller.months[m.key]?.botmaker ?? 0)]);
+      rows.push([seller.name, seller.id, 'Subtotal Neto (Ingreso Reply)', ...filteredMonths.map(m => seller.months[m.key]?.subtotal ?? 0)]);
+      rows.push([seller.name, seller.id, 'IVA', ...filteredMonths.map(m => seller.months[m.key]?.iva ?? 0)]);
+      rows.push([seller.name, seller.id, 'Total Liquidado', ...filteredMonths.map(m => seller.months[m.key]?.total ?? 0)]);
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `liquidacion_detallada_${selectedCountry.toLowerCase()}_${dateStr}`,
+      sheetName: 'Detalle Conceptos',
+      headers,
+      rows
+    };
+  };
+
   return (
     <div className="space-y-6 pb-12 w-full h-full flex flex-col">
       {/* 1. Header con Títulos y Tabs de Navegación */}
@@ -1916,31 +1995,37 @@ function MetasFacturacionContent() {
             </div>
           </div>
 
-          {/* Selector de Vistas / Subsecciones */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/70 self-start md:self-auto">
-            <button
-              onClick={() => handleTabChange('subtotales')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'subtotales'
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BarChart3 size={15} className={activeTab === 'subtotales' ? 'text-[#ff5100]' : 'text-slate-400'} />
-              <span>Resumen de Ingresos (Subtotales)</span>
-              <span className="px-1.5 py-0.2 rounded text-[9px] bg-orange-100 text-[#ff5100] font-black">NUEVO</span>
-            </button>
-            <button
-              onClick={() => handleTabChange('detallado')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'detallado'
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Table size={15} className={activeTab === 'detallado' ? 'text-[#4981fb]' : 'text-slate-400'} />
-              <span>Detalle de Liquidación por Concepto</span>
-            </button>
+          {/* Selector de Vistas / Subsecciones y Exportar */}
+          <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/70">
+              <button
+                onClick={() => handleTabChange('subtotales')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'subtotales'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <BarChart3 size={15} className={activeTab === 'subtotales' ? 'text-[#ff5100]' : 'text-slate-400'} />
+                <span>Resumen de Ingresos (Subtotales)</span>
+                <span className="px-1.5 py-0.2 rounded text-[9px] bg-orange-100 text-[#ff5100] font-black">NUEVO</span>
+              </button>
+              <button
+                onClick={() => handleTabChange('detallado')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'detallado'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Table size={15} className={activeTab === 'detallado' ? 'text-[#4981fb]' : 'text-slate-400'} />
+                <span>Detalle de Liquidación por Concepto</span>
+              </button>
+            </div>
+            <TableExportButton 
+              getData={activeTab === 'subtotales' ? getLiquidacionesResumenExportData : getLiquidacionesConceptosExportData} 
+              label="Exportar" 
+            />
           </div>
         </div>
 
@@ -2148,6 +2233,15 @@ function MetasFacturacionContent() {
                   </button>
                 </div>
               )}
+
+              {/* Botón de exportación adicional en barra de filtros */}
+              <div className="ml-auto flex items-center">
+                <TableExportButton 
+                  getData={activeTab === 'subtotales' ? getLiquidacionesResumenExportData : getLiquidacionesConceptosExportData} 
+                  label="Exportar" 
+                  variant="compact" 
+                />
+              </div>
             </div>
           </div>
 
@@ -2293,79 +2387,6 @@ function MetasFacturacionContent() {
             </div>
           )}
 
-          {/* Gráfico de Barras: Evolución del Subtotal Mes a Mes */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <BarChart3 size={18} className="text-[#4981fb]" />
-                  {executiveKPIs?.isSellerSelected ? (
-                    <span>
-                      Evolución Mensual de Ingresos — <span className="text-blue-600 font-extrabold">{executiveKPIs.sellerName}</span> ({executiveKPIs.currency})
-                    </span>
-                  ) : selectedCountry === 'ALL' ? (
-                    <span>
-                      Evolución Mensual de Ingresos Reply — <span className="text-blue-600 font-extrabold">Latam Consolidado</span> ({executiveKPIs?.currency})
-                    </span>
-                  ) : (
-                    <span>
-                      Evolución Mensual de Ingresos Reply (Subtotal Neto) — {groupedData[selectedCountry]?.country.flag} {groupedData[selectedCountry]?.country.name} ({executiveKPIs?.currency})
-                    </span>
-                  )}
-                </h2>
-                <p className="text-xs text-slate-500">
-                  {executiveKPIs?.isSellerSelected 
-                    ? `Curva de honorarios netos históricos y proyectados exclusivos para la cuenta ${executiveKPIs.sellerName}`
-                    : 'Comparativa de facturación real cerrada vs. meses proyectados futuros de la cartera'
-                  }
-                </p>
-              </div>
-
-              {/* Leyenda Gráfico */}
-              <div className="flex items-center gap-4 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-xs bg-[#4981fb]"></span>
-                  <span className="text-slate-600 font-medium">Real (Cerrado)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-xs bg-[#ff5100]"></span>
-                  <span className="text-orange-700 font-medium">Proyectado (Forecast)</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="w-full h-64 pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis 
-                    dataKey="label" 
-                    tick={{ fontSize: 11, fill: '#64748b' }} 
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 10, fill: '#64748b' }} 
-                    tickFormatter={(val) => formatShortCurrency(val, executiveKPIs?.currency)}
-                    axisLine={false}
-                    tickLine={false}
-                    width={55}
-                  />
-                  <Tooltip content={<CustomBarTooltip />} />
-                  <Bar dataKey="subtotal" radius={[4, 4, 0, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={entry.isProjected ? '#ff5100' : '#4981fb'} 
-                        fillOpacity={entry.isProjected ? 0.9 : 1}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
           {/* Tabla de Clientes con Meses, Subtotales y Totales */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex-1 flex flex-col">
             <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -2398,12 +2419,15 @@ function MetasFacturacionContent() {
                   }
                 </p>
               </div>
-              <span className="text-xs text-slate-400 font-medium self-start sm:self-auto">
-                {selectedCountry === 'ALL'
-                  ? `${Object.keys(groupedData['ALL']?.sellersMap || {}).length} cuentas en todos los mercados`
-                  : `${Object.keys(groupedData[selectedCountry]?.sellersMap || {}).length} cuentas listadas`
-                }
-              </span>
+              <div className="flex items-center gap-3 self-start sm:self-auto">
+                <span className="text-xs text-slate-400 font-medium">
+                  {selectedCountry === 'ALL'
+                    ? `${Object.keys(groupedData['ALL']?.sellersMap || {}).length} cuentas en todos los mercados`
+                    : `${Object.keys(groupedData[selectedCountry]?.sellersMap || {}).length} cuentas listadas`
+                  }
+                </span>
+                <TableExportButton getData={getLiquidacionesResumenExportData} label="Exportar" variant="compact" />
+              </div>
             </div>
 
             {/* Banner comercial exclusivo para Chile */}
@@ -3091,6 +3115,79 @@ function MetasFacturacionContent() {
               </table>
             </div>
           </div>
+
+          {/* Gráfico de Barras: Evolución del Subtotal Mes a Mes (Ubicado debajo de la Matriz) */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <BarChart3 size={18} className="text-[#4981fb]" />
+                  {executiveKPIs?.isSellerSelected ? (
+                    <span>
+                      Evolución Mensual de Ingresos — <span className="text-blue-600 font-extrabold">{executiveKPIs.sellerName}</span> ({executiveKPIs.currency})
+                    </span>
+                  ) : selectedCountry === 'ALL' ? (
+                    <span>
+                      Evolución Mensual de Ingresos Reply — <span className="text-blue-600 font-extrabold">Latam Consolidado</span> ({executiveKPIs?.currency})
+                    </span>
+                  ) : (
+                    <span>
+                      Evolución Mensual de Ingresos Reply (Subtotal Neto) — {groupedData[selectedCountry]?.country.flag} {groupedData[selectedCountry]?.country.name} ({executiveKPIs?.currency})
+                    </span>
+                  )}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {executiveKPIs?.isSellerSelected 
+                    ? `Curva de honorarios netos históricos y proyectados exclusivos para la cuenta ${executiveKPIs.sellerName}`
+                    : 'Comparativa de facturación real cerrada vs. meses proyectados futuros de la cartera'
+                  }
+                </p>
+              </div>
+
+              {/* Leyenda Gráfico */}
+              <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-xs bg-[#4981fb]"></span>
+                  <span className="text-slate-600 font-medium">Real (Cerrado)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-xs bg-[#ff5100]"></span>
+                  <span className="text-orange-700 font-medium">Proyectado (Forecast)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full h-64 pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="label" 
+                    tick={{ fontSize: 11, fill: '#64748b' }} 
+                    axisLine={{ stroke: '#cbd5e1' }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    tickFormatter={(val) => formatShortCurrency(val, executiveKPIs?.currency)}
+                    axisLine={false}
+                    tickLine={false}
+                    width={55}
+                  />
+                  <Tooltip content={<CustomBarTooltip />} />
+                  <Bar dataKey="subtotal" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={entry.isProjected ? '#ff5100' : '#4981fb'} 
+                        fillOpacity={entry.isProjected ? 0.9 : 1}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       ) : (
             /* ========================================================================= */
@@ -3138,9 +3235,12 @@ function MetasFacturacionContent() {
                       Matriz vertical granular por cuenta para validación tributaria y contable
                     </p>
                   </div>
-                  <span className="text-xs text-slate-400 font-medium self-start sm:self-auto">
-                    {allSellers.length} cuentas listadas en {groupedData[selectedCountry]?.country.name}
-                  </span>
+                  <div className="flex items-center gap-3 self-start sm:self-auto">
+                    <span className="text-xs text-slate-400 font-medium">
+                      {allSellers.length} cuentas listadas en {groupedData[selectedCountry]?.country.name}
+                    </span>
+                    <TableExportButton getData={getLiquidacionesConceptosExportData} label="Exportar" variant="compact" />
+                  </div>
                 </div>
 
             <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">

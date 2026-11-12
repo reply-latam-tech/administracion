@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import ReactECharts from "echarts-for-react";
 import * as echarts from "echarts";
+import TableExportButton from "@/components/TableExportButton";
+import { ExportData } from "@/lib/exportUtils";
 import { useAuth, OWNER_EMAIL } from "@/context/AuthContext";
 
 interface ConvergencePoint {
@@ -374,6 +376,41 @@ export default function AuditoriaProyeccionesPage() {
     };
   }, [distributionBins, globalStats]);
 
+  // Exportar datos de la tabla de auditoría diaria y desvíos
+  const getAuditoriaExportData = (): ExportData => {
+    const headers = [
+      'Cuenta / Seller',
+      'ID Seller',
+      'País',
+      'Moneda',
+      'Cierre Real ($)',
+      'Desvío Cierre %',
+      'Calidad',
+      'Sesgo',
+      ...daysList.map(d => `Día ${String(d).padStart(2, '0')}`)
+    ];
+
+    const rows = filteredSellers.map(s => [
+      s.nombre,
+      s.seller_id,
+      s.pais || '',
+      s.moneda || '',
+      s.cierre_real ?? '',
+      s.error_pct !== null && s.error_pct !== undefined ? `${s.error_pct.toFixed(2)}%` : '',
+      s.calidad,
+      s.sesgo,
+      ...daysList.map(d => s.dias_proyeccion?.[d]?.proyeccion ?? '')
+    ]);
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `auditoria_desvios_${selectedMonth}_${dateStr}`,
+      sheetName: `Auditoría ${selectedMonth}`,
+      headers,
+      rows
+    };
+  };
+
   // Si no es propietario, pantalla de acceso restringido
   if (!isPropietario) {
     return (
@@ -445,6 +482,8 @@ export default function AuditoriaProyeccionesPage() {
             <Camera size={14} className={snapshotLoading ? "animate-spin" : ""} />
             <span>{snapshotLoading ? "Congelando..." : "Snapshot Mensual"}</span>
           </button>
+
+          <TableExportButton getData={getAuditoriaExportData} label="Exportar Auditoría" />
 
           {/* Botón Refrescar */}
           <button
@@ -723,8 +762,11 @@ export default function AuditoriaProyeccionesPage() {
             })}
           </div>
 
-          <div className="text-[11px] text-slate-500 font-mono shrink-0 hidden sm:block">
-            Mostrando <strong>{filteredSellers.length}</strong> de <strong>{sellerSummaries.length}</strong> cuentas
+          <div className="flex items-center gap-3">
+            <div className="text-[11px] text-slate-500 font-mono shrink-0 hidden sm:block">
+              Mostrando <strong>{filteredSellers.length}</strong> de <strong>{sellerSummaries.length}</strong> cuentas
+            </div>
+            <TableExportButton getData={getAuditoriaExportData} label="Exportar Grilla" variant="compact" />
           </div>
         </div>
 
