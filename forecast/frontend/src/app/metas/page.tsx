@@ -665,8 +665,8 @@ export default function MetasPage() {
       grid: {
         left: "4%",
         right: "5%",
-        bottom: "16%",
-        top: "16%",
+        bottom: 50,
+        top: 60,
         containLabel: true
       },
       xAxis: {
@@ -718,7 +718,7 @@ export default function MetasPage() {
                 },
                 label: {
                   formatter: `🎯 Meta Objetivo: ${formatCurrency(targetFee, currency)}`,
-                  position: "end",
+                  position: "insideEndTop",
                   color: "#ea580c",
                   fontWeight: "bold",
                   fontSize: 10,
@@ -1565,7 +1565,7 @@ export default function MetasPage() {
           {/* Gráfico Cartesiano ECharts de la Escala */}
           {inspectionData.chartPoints.length > 0 && (
             <div className="mt-2 border-t border-slate-100 pt-5">
-              <div className="h-72 w-full">
+              <div className="h-[480px] md:h-[520px] w-full">
                 <ReactECharts
                   option={getCartesianChartOption()}
                   style={{ height: "100%", width: "100%" }}
