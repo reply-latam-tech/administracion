@@ -24,7 +24,9 @@ import {
   Lock,
   X,
   AlertCircle,
-  Clock
+  Clock,
+  ShieldCheck,
+  Sliders
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -98,10 +100,18 @@ export default function FacturacionPage() {
   const [gmvAuditFilterTerm, setGmvAuditFilterTerm] = useState('');
   const [editingGmvCell, setEditingGmvCell] = useState<{ sellerId: string; periodo: string } | null>(null);
   const [editGmvValue, setEditGmvValue] = useState('');
-  const [editGmvEstado, setEditGmvEstado] = useState<'REAL' | 'PROYECTADO'>('PROYECTADO');
   const [savingGmvKey, setSavingGmvKey] = useState<string | null>(null);
   const [justSavedGmvKey, setJustSavedGmvKey] = useState<string | null>(null);
   const [gmvSaveError, setGmvSaveError] = useState<string | null>(null);
+  const [confirmGmvDialog, setConfirmGmvDialog] = useState<{
+    sellerId: string;
+    sellerName: string;
+    periodo: string;
+    numInput: number;
+    rowMonedaOrigen: string;
+    displayMoneda: string;
+    currentEstado?: string;
+  } | null>(null);
   const editGmvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -156,13 +166,11 @@ export default function FacturacionPage() {
     };
   }, []);
 
-  // Manejo de edición inline
+  // Manejo de edición inline (Opción B: Confirmación modal al presionar Enter)
   const handleStartEditGmv = (sellerId: string, periodo: string, currentVal: number, currentEstado?: string) => {
     if (!canEdit) return;
     setEditingGmvCell({ sellerId, periodo });
     setEditGmvValue(currentVal !== undefined && currentVal !== null ? String(currentVal) : '');
-    const defaultEstado = currentEstado === 'REAL' ? 'REAL' : (periodo < '2026-11-01' ? 'REAL' : 'PROYECTADO');
-    setEditGmvEstado(defaultEstado);
     setGmvSaveError(null);
   };
 
@@ -171,10 +179,15 @@ export default function FacturacionPage() {
     setEditGmvValue('');
   };
 
-  const handleSaveGmvCell = async (sellerId: string, periodo: string, rowMonedaOrigen: string, forcedEstado?: 'REAL' | 'PROYECTADO') => {
-    if (!editingGmvCell) return;
-    const targetEstado = forcedEstado || editGmvEstado;
-    const cellKey = `${sellerId}_${periodo}`;
+  // Solicitar guardado (Abre el diálogo modal de confirmación Opción B)
+  const handleRequestSaveGmv = (
+    sellerId: string, 
+    sellerName: string, 
+    periodo: string, 
+    rowMonedaOrigen: string, 
+    displayMoneda: string, 
+    currentEstado?: string
+  ) => {
     const cleanStr = editGmvValue.replace(',', '.').trim();
     const numInput = parseFloat(cleanStr);
 
@@ -182,6 +195,25 @@ export default function FacturacionPage() {
       setGmvSaveError('Ingresá un monto de ventas válido mayor o igual a 0.');
       return;
     }
+
+    setEditingGmvCell(null);
+    setEditGmvValue('');
+    setConfirmGmvDialog({
+      sellerId,
+      sellerName,
+      periodo,
+      numInput,
+      rowMonedaOrigen,
+      displayMoneda,
+      currentEstado: currentEstado || (periodo < '2026-11-01' ? 'REAL' : 'PROYECTADO')
+    });
+  };
+
+  // Ejecutar el guardado con el estado seleccionado en el modal (REAL o PROYECTADO)
+  const handleExecuteSaveGmv = async (targetEstado: 'REAL' | 'PROYECTADO') => {
+    if (!confirmGmvDialog) return;
+    const { sellerId, periodo, numInput, rowMonedaOrigen } = confirmGmvDialog;
+    setConfirmGmvDialog(null);
 
     // Convertir el monto ingresado en pantalla a la moneda nativa del seller
     let rawNewVal = numInput;
@@ -191,7 +223,7 @@ export default function FacturacionPage() {
       rawNewVal = convertCurrency(numInput, 'ARS', rowMonedaOrigen, periodo);
     }
 
-    setEditingGmvCell(null);
+    const cellKey = `${sellerId}_${periodo}`;
     setSavingGmvKey(cellKey);
     setGmvSaveError(null);
 
@@ -256,10 +288,18 @@ export default function FacturacionPage() {
     }
   };
 
-  const handleKeyDownGmv = (e: React.KeyboardEvent, sellerId: string, periodo: string, rowMonedaOrigen: string) => {
+  const handleKeyDownGmv = (
+    e: React.KeyboardEvent, 
+    sellerId: string, 
+    sellerName: string, 
+    periodo: string, 
+    rowMonedaOrigen: string, 
+    displayMoneda: string, 
+    currentEstado?: string
+  ) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleSaveGmvCell(sellerId, periodo, rowMonedaOrigen);
+      handleRequestSaveGmv(sellerId, sellerName, periodo, rowMonedaOrigen, displayMoneda, currentEstado);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       handleCancelEditGmv();
@@ -1426,45 +1466,37 @@ export default function FacturacionPage() {
                                     )}
 
                                     {isEditing ? (
-                                      <div className="flex flex-col items-end py-0.5 relative">
-                                        {/* Floating Selector de Tipo de Dato */}
-                                        <div className="absolute -top-9 right-0 z-50 bg-slate-900/95 text-white px-2 py-1 rounded-xl shadow-2xl border border-slate-700/80 flex items-center gap-1.5 text-[10px] animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md whitespace-nowrap">
-                                          <span className="text-slate-400 font-medium">Estado:</span>
-                                          <button
-                                            type="button"
-                                            onMouseDown={(e) => { e.preventDefault(); setEditGmvEstado('REAL'); }}
-                                            className={`px-1.5 py-0.5 rounded-lg font-bold text-[10px] transition-all flex items-center gap-1 ${
-                                              editGmvEstado === 'REAL' 
-                                                ? 'bg-blue-600 text-white shadow-xs' 
-                                                : 'bg-slate-800 text-slate-400 hover:text-white'
-                                            }`}
-                                          >
-                                            🔵 Real (Cerrado)
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onMouseDown={(e) => { e.preventDefault(); setEditGmvEstado('PROYECTADO'); }}
-                                            className={`px-1.5 py-0.5 rounded-lg font-bold text-[10px] transition-all flex items-center gap-1 ${
-                                              editGmvEstado === 'PROYECTADO' 
-                                                ? 'bg-orange-500 text-white shadow-xs' 
-                                                : 'bg-slate-800 text-slate-400 hover:text-white'
-                                            }`}
-                                          >
-                                            🟠 Proyectado
-                                          </button>
-                                        </div>
-
+                                      <div className="flex items-center gap-1 justify-end py-0.5">
                                         <input
                                           ref={editGmvInputRef}
                                           type="text"
                                           value={editGmvValue}
                                           onChange={(e) => setEditGmvValue(e.target.value)}
-                                          onKeyDown={(e) => handleKeyDownGmv(e, row.sellerId, p, row.monedaOrigen)}
-                                          onBlur={() => handleSaveGmvCell(row.sellerId, p, row.monedaOrigen)}
-                                          className={`w-24 px-1.5 py-1 text-xs font-bold font-mono text-right bg-white border-2 rounded shadow-sm focus:outline-none text-slate-900 ${
-                                            editGmvEstado === 'REAL' ? 'border-blue-500 focus:ring-1 focus:ring-blue-400' : 'border-orange-500 focus:ring-1 focus:ring-orange-400'
-                                          }`}
+                                          onKeyDown={(e) => handleKeyDownGmv(e, row.sellerId, row.sellerName, p, row.monedaOrigen, row.monedaDisplay, cellData?.estado)}
+                                          className="w-24 px-1.5 py-1 text-xs font-bold font-mono text-right bg-white border-2 border-blue-500 rounded-lg shadow-xs focus:outline-none text-slate-900 focus:ring-2 focus:ring-blue-400"
                                         />
+                                        <button
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            handleRequestSaveGmv(row.sellerId, row.sellerName, p, row.monedaOrigen, row.monedaDisplay, cellData?.estado);
+                                          }}
+                                          className="p-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors shrink-0"
+                                          title="Confirmar y elegir estado (Enter)"
+                                        >
+                                          <Check size={13} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            handleCancelEditGmv();
+                                          }}
+                                          className="p-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors shrink-0"
+                                          title="Cancelar (Esc)"
+                                        >
+                                          <X size={13} />
+                                        </button>
                                       </div>
                                     ) : isSavingThis ? (
                                       <div className="flex items-center justify-end gap-1 text-orange-600 text-xs py-1">
@@ -1758,6 +1790,137 @@ export default function FacturacionPage() {
           </div>
         </div>
       </div>
+
+      {/* DIÁLOGO MODAL DE CONFIRMACIÓN - OPCIÓN B */}
+      {confirmGmvDialog && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+            
+            {/* Header del Diálogo */}
+            <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold shadow-xs">
+                  <Sliders size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Confirmar Registro de Ventas
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {confirmGmvDialog.sellerName} • {formatMonthStr(confirmGmvDialog.periodo)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmGmvDialog(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors"
+                title="Cancelar (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 space-y-4">
+              
+              {/* Tarjeta con el Monto Ingresado */}
+              <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/80 text-center">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Monto a registrar ({confirmGmvDialog.displayMoneda})
+                </span>
+                <span className="text-3xl font-black text-slate-900 font-mono">
+                  {formatMoney(confirmGmvDialog.numInput, confirmGmvDialog.displayMoneda)}
+                </span>
+                {currencyView !== 'ORIGINAL' && confirmGmvDialog.rowMonedaOrigen !== confirmGmvDialog.displayMoneda && (
+                  <span className="text-[10px] text-blue-600 font-medium block mt-1">
+                    (Se convertirá automáticamente a {confirmGmvDialog.rowMonedaOrigen} para la base de datos)
+                  </span>
+                )}
+              </div>
+
+              {/* Pregunta */}
+              <div className="text-center pt-1">
+                <p className="text-sm font-bold text-slate-800">
+                  ¿Cómo deseas guardar este valor para {formatMonthStr(confirmGmvDialog.periodo)}?
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Seleccioná el estado contable que le corresponde a este registro:
+                </p>
+              </div>
+
+              {/* Tarjetas de Acción / Selección de Estado */}
+              <div className="grid grid-cols-1 gap-3 pt-1">
+                
+                {/* Opción 1: REAL (Cerrado) */}
+                <button
+                  type="button"
+                  onClick={() => handleExecuteSaveGmv('REAL')}
+                  className="group p-4 rounded-2xl border-2 border-slate-200 hover:border-blue-600 bg-white hover:bg-blue-50/40 text-left transition-all flex items-start gap-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs hover:shadow-md cursor-pointer"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 font-bold group-hover:scale-105 transition-transform">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-extrabold text-slate-900 group-hover:text-blue-700">
+                        🔵 Guardar como Real (Cerrado)
+                      </span>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                        Mes Cerrado
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 leading-snug">
+                      Facturación definitiva confirmada de cierre. La celda y el gráfico se mostrarán con la <strong>barra azul sólida</strong> de mes cerrado, sin etiqueta *PROY.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Opción 2: PROYECTADO (Forecast) */}
+                <button
+                  type="button"
+                  onClick={() => handleExecuteSaveGmv('PROYECTADO')}
+                  className="group p-4 rounded-2xl border-2 border-slate-200 hover:border-orange-500 bg-white hover:bg-orange-50/40 text-left transition-all flex items-start gap-3.5 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-xs hover:shadow-md cursor-pointer"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center shrink-0 font-bold group-hover:scale-105 transition-transform">
+                    <TrendingUp size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-extrabold text-slate-900 group-hover:text-orange-700">
+                        🟠 Guardar como Proyectado (Forecast)
+                      </span>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                        Estimación
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 leading-snug">
+                      Estimación predictiva para análisis de cartera. Conservará la <strong>barra naranja</strong> y la etiqueta <strong>*PROY</strong> para seguimiento futuro.
+                    </p>
+                  </div>
+                </button>
+
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="text-[11px] text-slate-400">
+                Podrás volver a editar o cambiar el estado en cualquier momento.
+              </span>
+              <button
+                type="button"
+                onClick={() => setConfirmGmvDialog(null)}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-200/50 text-slate-600 font-semibold transition-colors"
+              >
+                Cancelar (Esc)
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
