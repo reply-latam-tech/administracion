@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import ReactECharts from 'echarts-for-react';
 import TableExportButton from "@/components/TableExportButton";
+import AuditTooltip from "@/components/AuditTooltip";
 import { ExportData } from "@/lib/exportUtils";
 import { useExchangeRates, CurrencyKey, AuditEntry } from "@/context/ExchangeRateContext";
 import { useAuth } from "@/context/AuthContext";
@@ -823,17 +824,21 @@ export default function TipoDeCambioPage() {
                           } ${
                             canEdit && !isEditing ? 'hover:bg-blue-50/80 cursor-cell group/cell' : ''
                           }`}
-                          title={
-                            cellAudit
-                              ? `Última modificación por ${cellAudit.usuario_email}\nFecha: ${formatDateTime(cellAudit.created_at)}\nAnterior: ${cellAudit.valor_anterior ?? '—'} → Nuevo: ${cellAudit.valor_nuevo}`
-                              : canEdit ? "Doble clic para editar cotización" : "Solo lectura"
-                          }
                         >
+                          <AuditTooltip
+                            audit={cellAudit && !isEditing ? {
+                              usuario_email: cellAudit.usuario_email,
+                              fecha: cellAudit.created_at,
+                              valor_anterior: cellAudit.valor_anterior,
+                              valor_nuevo: cellAudit.valor_nuevo,
+                              moneda: curr.code,
+                              label: `Cotización ${curr.code} / USD`
+                            } : null}
+                          >
                           {/* Indicador de celda auditada */}
                           {cellAudit && !isEditing && (
                             <span 
-                              className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-600 shadow-2xs" 
-                              title={`Editado por ${cellAudit.usuario_email}`}
+                              className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-600 shadow-2xs pointer-events-none" 
                             />
                           )}
 
@@ -898,6 +903,7 @@ export default function TipoDeCambioPage() {
                               )}
                             </div>
                           )}
+                        </AuditTooltip>
                         </td>
                       );
                     })}

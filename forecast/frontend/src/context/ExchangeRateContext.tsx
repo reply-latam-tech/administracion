@@ -3,10 +3,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
-import { 
-  ExchangeRateRow, 
-  EXCHANGE_RATES, 
-  updateLiveRateMap, 
+import {
+  ExchangeRateRow,
+  EXCHANGE_RATES,
+  updateLiveRateMap,
   getRateToUSD as getRateFallback,
   convertCurrency as convertCurrencyFallback
 } from "@/lib/exchangeRates";
@@ -155,8 +155,8 @@ export function ExchangeRateProvider({ children }: { children: React.ReactNode }
 
   // Actualizar un tipo de cambio con Optimistic UI y auditoría
   const updateRate = async (
-    periodo: string, 
-    currency: CurrencyKey, 
+    periodo: string,
+    currency: CurrencyKey,
     newValue: number
   ): Promise<{ success: boolean; error?: string }> => {
     if (!canEdit) {
@@ -267,3 +267,4 @@ export function useExchangeRates() {
   }
   return context;
 }
+

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, Fragment } from 'react';
+import { useEffect, useState, useMemo, Fragment, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   ArrowUpRight, 
@@ -17,7 +17,14 @@ import {
   Building2, 
   Sparkles,
   Layers,
-  CheckCircle2
+  CheckCircle2,
+  Check,
+  Edit3,
+  History,
+  Lock,
+  X,
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -34,6 +41,8 @@ import {
 import { convertCurrency, formatMoney, getRateToUSD } from '@/lib/exchangeRates';
 import { useExchangeRates } from '@/context/ExchangeRateContext';
 import TableExportButton from '@/components/TableExportButton';
+import AuditTooltip from '@/components/AuditTooltip';
+import { useAuth } from '@/context/AuthContext';
 import { ExportData } from '@/lib/exportUtils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -80,6 +89,176 @@ let facturacionCache: {
 
 export default function FacturacionPage() {
   const { rates } = useExchangeRates();
+  const { user, role, isPropietario, isDirectivo, isAdministracion } = useAuth();
+  const canEdit = isPropietario || isDirectivo || isAdministracion || user?.email === 'matias.molesini@replylatam.com';
+
+  // Estados de auditoría y edición inline de proyecciones GMV
+  const [gmvAuditLog, setGmvAuditLog] = useState<any[]>([]);
+  const [showGmvAuditModal, setShowGmvAuditModal] = useState(false);
+  const [gmvAuditFilterTerm, setGmvAuditFilterTerm] = useState('');
+  const [editingGmvCell, setEditingGmvCell] = useState<{ sellerId: string; periodo: string } | null>(null);
+  const [editGmvValue, setEditGmvValue] = useState('');
+  const [savingGmvKey, setSavingGmvKey] = useState<string | null>(null);
+  const [justSavedGmvKey, setJustSavedGmvKey] = useState<string | null>(null);
+  const [gmvSaveError, setGmvSaveError] = useState<string | null>(null);
+  const editGmvInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingGmvCell && editGmvInputRef.current) {
+      editGmvInputRef.current.focus();
+      editGmvInputRef.current.select();
+    }
+  }, [editingGmvCell]);
+
+  // Cargar auditoría de GMV y suscribirse a Realtime
+  const fetchGmvAudit = async () => {
+    try {
+      const res = await fetch('/api/facturacion', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.auditLog) setGmvAuditLog(json.auditLog);
+      }
+    } catch (e) {
+      console.warn('Error fetching /api/facturacion:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchGmvAudit();
+
+    const channel = supabase
+      .channel('facturacion-realtime-sub')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'facturacion' }, () => {
+        supabase
+          .from('facturacion')
+          .select('seller_id, periodo, valor_facturado, estado')
+          .order('periodo', { ascending: true })
+          .then(({ data }) => {
+            if (data) {
+              setRawFacturacion(data);
+              if (facturacionCache) facturacionCache.facturacion = data;
+            }
+          });
+        fetchGmvAudit();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fact_metricas_operativas' }, (payload: any) => {
+        const row = payload.new || {};
+        if (row.tipo_metrica === 'GMV_AUDIT') {
+          fetchGmvAudit();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Manejo de edición inline
+  const handleStartEditGmv = (sellerId: string, periodo: string, currentVal: number) => {
+    if (!canEdit) return;
+    setEditingGmvCell({ sellerId, periodo });
+    setEditGmvValue(currentVal ? String(currentVal) : '');
+    setGmvSaveError(null);
+  };
+
+  const handleCancelEditGmv = () => {
+    setEditingGmvCell(null);
+    setEditGmvValue('');
+  };
+
+  const handleSaveGmvCell = async (sellerId: string, periodo: string, rowMonedaOrigen: string) => {
+    if (!editingGmvCell) return;
+    const cellKey = `${sellerId}_${periodo}`;
+    const cleanStr = editGmvValue.replace(',', '.').trim();
+    const numInput = parseFloat(cleanStr);
+
+    if (isNaN(numInput) || numInput < 0) {
+      setGmvSaveError('Ingresá un monto de ventas válido mayor o igual a 0.');
+      return;
+    }
+
+    // Convertir el monto ingresado en pantalla a la moneda nativa del seller
+    let rawNewVal = numInput;
+    if (currencyView === 'USD' && rowMonedaOrigen !== 'USD') {
+      rawNewVal = convertCurrency(numInput, 'USD', rowMonedaOrigen, periodo);
+    } else if (currencyView === 'ARS' && rowMonedaOrigen !== 'ARS') {
+      rawNewVal = convertCurrency(numInput, 'ARS', rowMonedaOrigen, periodo);
+    }
+
+    setEditingGmvCell(null);
+    setSavingGmvKey(cellKey);
+    setGmvSaveError(null);
+
+    // Optimistic UI en estado local
+    const prevFact = [...rawFacturacion];
+    const sid = parseInt(sellerId, 10);
+    const normP = periodo.length === 7 ? `${periodo}-01` : periodo;
+
+    const nextFact = rawFacturacion.map(f => {
+      if (f.seller_id === sid && f.periodo.startsWith(periodo.substring(0, 7))) {
+        return { ...f, valor_facturado: rawNewVal, estado: 'PROYECTADO' };
+      }
+      return f;
+    });
+
+    // Si la fila no existía en memoria, agregarla
+    const existsInFact = nextFact.some(f => f.seller_id === sid && f.periodo.startsWith(periodo.substring(0, 7)));
+    if (!existsInFact) {
+      nextFact.push({
+        seller_id: sid,
+        periodo: normP,
+        valor_facturado: rawNewVal,
+        estado: 'PROYECTADO',
+        variacion_mensual: 0
+      });
+    }
+
+    setRawFacturacion(nextFact);
+    if (facturacionCache) facturacionCache.facturacion = nextFact;
+
+    try {
+      const userEmail = user?.email || 'matias.molesini@replylatam.com';
+      const res = await fetch('/api/facturacion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seller_id: sid,
+          periodo: normP,
+          nuevo_valor: rawNewVal,
+          usuario_email: userEmail,
+          userRole: role || (isPropietario ? 'propietario' : isDirectivo ? 'directivo' : 'administracion')
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setRawFacturacion(prevFact);
+        if (facturacionCache) facturacionCache.facturacion = prevFact;
+        setGmvSaveError(json.error || 'Error al persistir la proyección de ventas.');
+      } else {
+        setJustSavedGmvKey(cellKey);
+        setTimeout(() => setJustSavedGmvKey(null), 2500);
+        fetchGmvAudit();
+      }
+    } catch (e: any) {
+      setRawFacturacion(prevFact);
+      if (facturacionCache) facturacionCache.facturacion = prevFact;
+      setGmvSaveError(e.message || 'Error de red.');
+    } finally {
+      setSavingGmvKey(null);
+    }
+  };
+
+  const handleKeyDownGmv = (e: React.KeyboardEvent, sellerId: string, periodo: string, rowMonedaOrigen: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveGmvCell(sellerId, periodo, rowMonedaOrigen);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelEditGmv();
+    }
+  };
   // Datos crudos de Supabase (inicializados desde caché si existe para render instantáneo)
   const [rawSellers, setRawSellers] = useState<any[]>(() => facturacionCache?.sellers || []);
   const [rawFacturacion, setRawFacturacion] = useState<any[]>(() => facturacionCache?.facturacion || []);
@@ -1155,11 +1334,34 @@ export default function FacturacionPage() {
                             
                             {processedData.sortedPeriodos.map((p) => {
                               const cellData = row.months[p];
-                              
+                              const isProjected = cellData?.estado === 'PROYECTADO' || p >= '2026-10-01';
+                              const cellKey = `${row.sellerId}_${p}`;
+                              const isEditing = editingGmvCell?.sellerId === row.sellerId && editingGmvCell?.periodo === p;
+                              const isSavingThis = savingGmvKey === cellKey;
+                              const isJustSaved = justSavedGmvKey === cellKey;
+
+                              const gmvAudit = gmvAuditLog.find(a => 
+                                String(a.seller_id) === String(row.sellerId) && 
+                                a.periodo.startsWith(p.substring(0, 7))
+                              );
+
                               if (!cellData || !cellData.valor) {
                                 return (
-                                  <td key={p} className="px-4 py-3 text-right border-l border-b border-slate-100">
-                                    <span className="text-slate-300 font-mono">-</span>
+                                  <td 
+                                    key={p} 
+                                    onDoubleClick={() => isProjected && handleStartEditGmv(row.sellerId, p, 0)}
+                                    className={`px-4 py-3 text-right border-l border-b border-slate-100 relative ${isProjected ? 'bg-orange-50/15' : ''}`}
+                                  >
+                                    {isProjected && canEdit ? (
+                                      <span 
+                                        onClick={() => handleStartEditGmv(row.sellerId, p, 0)}
+                                        className="text-slate-300 hover:text-blue-600 font-mono text-xs cursor-pointer"
+                                      >
+                                        +Proyectar
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300 font-mono">-</span>
+                                    )}
                                   </td>
                                 );
                               }
@@ -1167,40 +1369,119 @@ export default function FacturacionPage() {
                               const val = cellData.valor;
                               const variation = variationType === 'monthly' ? cellData.variacion_mensual : cellData.variacion_anual;
                               const barWidth = Math.min((val / row.maxVal) * 100, 100);
-                              const isProjected = cellData.estado === 'PROYECTADO';
 
                               return (
-                                <td key={p} className={`px-4 py-3 text-right border-l border-b border-slate-100 relative ${isProjected ? 'bg-orange-50/25' : ''}`}>
-                                  {isProjected && (
-                                     <div className="absolute top-0 right-0 mt-1 mr-1 flex">
-                                       <span className="relative flex h-1.5 w-1.5">
-                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                                         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
-                                       </span>
-                                     </div>
-                                  )}
-                                  <div className={`font-semibold text-[13px] mb-0.5 ${isProjected ? 'text-orange-950 font-bold' : 'text-slate-800'}`}>
-                                     {formatMoney(val, row.monedaDisplay)}
-                                     {isProjected && <span className="ml-1 text-[8px] text-orange-600 font-bold uppercase" title="Dato proyectado">*PROY</span>}
-                                  </div>
-                                  
-                                  <div className="h-3 flex items-center justify-end">
-                                    {variation !== null && variation !== 0 ? (
-                                      <div className={`flex items-center gap-0.5 text-[10px] font-semibold ${variation > 0 ? (isProjected ? 'text-orange-600' : 'text-emerald-600') : 'text-rose-500'}`}>
-                                        {variation > 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-                                        {(Math.abs(variation) * 100).toFixed(1)}%
+                                <td 
+                                  key={p} 
+                                  onDoubleClick={() => isProjected && handleStartEditGmv(row.sellerId, p, val)}
+                                  className={`px-4 py-3 text-right border-l border-b border-slate-100 relative group/cell transition-colors ${
+                                    isProjected ? 'bg-orange-50/25' : ''
+                                  } ${
+                                    isJustSaved ? 'bg-emerald-100/90' : ''
+                                  } ${
+                                    isProjected && canEdit && !isEditing ? 'hover:bg-orange-100/40 cursor-cell' : ''
+                                  }`}
+                                >
+                                  <AuditTooltip
+                                    audit={gmvAudit && !isEditing ? {
+                                      usuario_email: gmvAudit.usuario_email,
+                                      fecha: gmvAudit.created_at,
+                                      valor_anterior: formatMoney(
+                                        convertCurrency(gmvAudit.valor_anterior, row.monedaOrigen, row.monedaDisplay, p),
+                                        row.monedaDisplay
+                                      ),
+                                      valor_nuevo: formatMoney(
+                                        convertCurrency(gmvAudit.valor_nuevo, row.monedaOrigen, row.monedaDisplay, p),
+                                        row.monedaDisplay
+                                      ),
+                                      moneda: row.monedaDisplay,
+                                      label: `Proyección GMV • ${row.sellerName}`
+                                    } : null}
+                                  >
+                                    {/* Indicador de edición con auditoría (punto azul) */}
+                                    {gmvAudit && !isEditing && (
+                                      <span 
+                                        className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-blue-600 shadow-2xs z-10 pointer-events-none" 
+                                      />
+                                    )}
+
+                                    {/* Indicador de mes proyectado base si no tiene auditoría */}
+                                    {isProjected && !gmvAudit && !isEditing && (
+                                      <div className="absolute top-0 right-0 mt-1 mr-1 flex pointer-events-none">
+                                        <span className="relative flex h-1.5 w-1.5">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {isEditing ? (
+                                      <div className="flex items-center gap-1 justify-end py-1">
+                                        <input
+                                          ref={editGmvInputRef}
+                                          type="text"
+                                          value={editGmvValue}
+                                          onChange={(e) => setEditGmvValue(e.target.value)}
+                                          onKeyDown={(e) => handleKeyDownGmv(e, row.sellerId, p, row.monedaOrigen)}
+                                          onBlur={() => handleSaveGmvCell(row.sellerId, p, row.monedaOrigen)}
+                                          className="w-24 px-1.5 py-1 text-xs font-bold font-mono text-right bg-white border-2 border-orange-500 rounded shadow-sm focus:outline-none text-slate-900"
+                                        />
+                                      </div>
+                                    ) : isSavingThis ? (
+                                      <div className="flex items-center justify-end gap-1 text-orange-600 text-xs py-1">
+                                        <span className="w-3 h-3 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></span>
+                                        <span className="text-[10px] font-sans">Guardando...</span>
+                                      </div>
+                                    ) : isJustSaved ? (
+                                      <div className="flex items-center justify-end gap-1 text-emerald-700 text-xs font-bold py-1">
+                                        <Check size={12} />
+                                        <span className="text-[10px]">Guardado</span>
                                       </div>
                                     ) : (
-                                      <span className="text-[10px] text-slate-300 font-mono">-</span>
+                                      <>
+                                        <div className={`font-semibold text-[13px] mb-0.5 flex items-center justify-end gap-1 ${
+                                          isProjected ? 'text-orange-950 font-bold' : 'text-slate-800'
+                                        }`}>
+                                          <span>{formatMoney(val, row.monedaDisplay)}</span>
+                                          {isProjected && (
+                                            <span className="text-[8px] text-orange-600 font-bold uppercase">
+                                              *PROY
+                                            </span>
+                                          )}
+                                          {isProjected && canEdit && (
+                                            <Edit3 
+                                              size={10} 
+                                              onClick={(e: React.MouseEvent) => {
+                                                e.stopPropagation();
+                                                handleStartEditGmv(row.sellerId, p, val);
+                                              }}
+                                              className="opacity-0 group-hover/cell:opacity-100 text-orange-600 hover:text-orange-800 transition-opacity cursor-pointer shrink-0" 
+                                            />
+                                          )}
+                                        </div>
+                                        
+                                        <div className="h-3 flex items-center justify-end">
+                                          {variation !== null && variation !== 0 ? (
+                                            <div className={`flex items-center gap-0.5 text-[10px] font-semibold ${
+                                              variation > 0 ? (isProjected ? 'text-orange-600' : 'text-emerald-600') : 'text-rose-500'
+                                            }`}>
+                                              {variation > 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                                              {(Math.abs(variation) * 100).toFixed(1)}%
+                                            </div>
+                                          ) : (
+                                            <span className="text-[10px] text-slate-300 font-mono">-</span>
+                                          )}
+                                        </div>
+                                        
+                                        <div className="w-full bg-slate-100 rounded-full h-1 mt-1.5 overflow-hidden flex justify-end">
+                                          <div 
+                                            className={`${isProjected ? 'bg-orange-400' : 'bg-blue-500'} h-1 rounded-full transition-all duration-500`} 
+                                            style={{ width: `${barWidth}%` }}
+                                          ></div>
+                                        </div>
+                                      </>
                                     )}
-                                  </div>
-                                  
-                                  <div className="w-full bg-slate-100 rounded-full h-1 mt-1.5 overflow-hidden flex justify-end">
-                                    <div 
-                                      className={`${isProjected ? 'bg-orange-400' : 'bg-blue-500'} h-1 rounded-full transition-all duration-500`} 
-                                      style={{ width: `${barWidth}%` }}
-                                    ></div>
-                                  </div>
+                                  </AuditTooltip>
                                 </td>
                               );
                             })}
