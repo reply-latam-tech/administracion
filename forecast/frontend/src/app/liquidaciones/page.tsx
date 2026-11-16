@@ -34,6 +34,7 @@ import {
   Cell 
 } from 'recharts';
 import { getRateToUSD, formatMoney, convertCurrency } from '@/lib/exchangeRates';
+import { useExchangeRates } from '@/context/ExchangeRateContext';
 import TableExportButton from '@/components/TableExportButton';
 import { ExportData } from '@/lib/exportUtils';
 
@@ -59,6 +60,7 @@ interface CountryMeta {
 }
 
 function MetasFacturacionContent() {
+  const { rates } = useExchangeRates();
   const searchParams = useSearchParams();
   const router = useRouter();
   

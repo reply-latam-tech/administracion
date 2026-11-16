@@ -1,91 +1,32 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { 
   Coins, 
   ArrowUpRight, 
   ArrowDownRight, 
   Calendar, 
   Filter, 
-  Download, 
-  Database, 
   RefreshCw, 
-  Globe, 
-  TrendingUp,
-  Search,
-  DollarSign,
-  CheckCircle2
+  Search, 
+  CheckCircle2,
+  History,
+  Edit3,
+  Lock,
+  X,
+  AlertCircle,
+  Clock,
+  User,
+  ShieldCheck,
+  Check,
+  Sparkles
 } from "lucide-react";
 import ReactECharts from 'echarts-for-react';
-import * as echarts from 'echarts';
-import { supabase } from "@/lib/supabase";
 import TableExportButton from "@/components/TableExportButton";
 import { ExportData } from "@/lib/exportUtils";
-
-// Interfaz para la cotización de un mes
-interface TipoCambioRow {
-  periodo: string; // 'YYYY-MM-DD' o 'YYYY-MM'
-  ars: number | null;
-  mxn: number | null;
-  pen: number | null;
-  clp: number | null;
-  cop: number | null;
-  moneda_base: string;
-  fuente?: string;
-  estado?: 'REAL' | 'PROYECTADO';
-}
-
-// Datos predeterminados sincronizados con tipo_de_cambio.txt (33 Reales + 12 Proyectados)
-const DEFAULT_DATA: TipoCambioRow[] = [
-  { periodo: '2024-01-01', ars: null, mxn: 17.16, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-02-01', ars: null, mxn: 17.06, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-03-01', ars: null, mxn: 16.67, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-04-01', ars: null, mxn: 16.93, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-05-01', ars: null, mxn: 17.63, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-06-01', ars: null, mxn: 17.96, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-07-01', ars: null, mxn: 19.04, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-08-01', ars: null, mxn: 19.80, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-09-01', ars: null, mxn: 19.67, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-10-01', ars: null, mxn: 20.16, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-11-01', ars: null, mxn: 20.42, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2024-12-01', ars: null, mxn: 20.27, pen: null, clp: null, cop: null, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-01-01', ars: 1032.0, mxn: 19.50, pen: 3.75, clp: 996.46, cop: 3950.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-02-01', ars: 1046.0, mxn: 19.60, pen: 3.76, clp: 956.90, cop: 3970.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-03-01', ars: 1060.0, mxn: 19.70, pen: 3.77, clp: 946.59, cop: 3990.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-04-01', ars: 1197.74, mxn: 19.61, pen: 3.70, clp: 940.18, cop: 4305.02, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-05-01', ars: 1150.0, mxn: 19.23, pen: 3.66, clp: 935.00, cop: 4107.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-06-01', ars: 1215.0, mxn: 18.83, pen: 3.62, clp: 926.62, cop: 3974.37, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-07-01', ars: 1330.0, mxn: 18.80, pen: 3.56, clp: 964.28, cop: 4097.38, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-08-01', ars: 1330.0, mxn: 18.65, pen: 3.54, clp: 965.28, cop: 4016.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-09-01', ars: 1450.0, mxn: 18.35, pen: 3.50, clp: 959.19, cop: 3897.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-10-01', ars: 1480.0, mxn: 18.54, pen: 3.43, clp: 940.53, cop: 1.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-11-01', ars: 1420.0, mxn: 18.35, pen: 3.37, clp: 928.00, cop: 3784.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-12-01', ars: 1450.0, mxn: 18.00, pen: 3.37, clp: 911.18, cop: 3790.77, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-01-01', ars: 1430.0, mxn: 17.29, pen: 3.36, clp: 860.00, cop: 3622.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-02-01', ars: 1395.0, mxn: 17.22, pen: 3.36, clp: 884.21, cop: 3769.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-03-01', ars: 1405.0, mxn: 18.00, pen: 3.44, clp: 927.46, cop: 3660.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-04-01', ars: 1420.0, mxn: 17.47, pen: 3.51, clp: 903.05, cop: 3660.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-05-01', ars: 1427.0, mxn: 17.29, pen: 3.39, clp: 892.91, cop: 3562.0, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-06-01', ars: 1490.0, mxn: 17.51, pen: 3.39, clp: 922.21, cop: 3440.83, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-07-01', ars: 1525.0, mxn: 17.46, pen: 3.41, clp: 941.93, cop: 3205.80, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-08-01', ars: 1530.0, mxn: 16.97, pen: 3.40, clp: 929.18, cop: 3213.97, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-09-01', ars: 1565.0, mxn: 18.07, pen: 3.36, clp: 972.60, cop: 3312.84, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2026-10-01', ars: 1550.0, mxn: 18.81, pen: 3.43, clp: 981.58, cop: 3182.99, moneda_base: 'USD', estado: 'REAL' },
-  // 11 Meses Proyectados para proyecciones futuras (2026-11 a 2027-09)
-  { periodo: '2026-11-01', ars: 1615.0, mxn: 18.18, pen: 3.37, clp: 978.00, cop: 3340.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2026-12-01', ars: 1645.0, mxn: 18.25, pen: 3.37, clp: 982.00, cop: 3360.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-01-01', ars: 1670.0, mxn: 18.32, pen: 3.38, clp: 985.00, cop: 3375.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-02-01', ars: 1695.0, mxn: 18.38, pen: 3.38, clp: 989.00, cop: 3390.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-03-01', ars: 1720.0, mxn: 18.45, pen: 3.39, clp: 993.00, cop: 3410.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-04-01', ars: 1745.0, mxn: 18.52, pen: 3.39, clp: 998.00, cop: 3425.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-05-01', ars: 1770.0, mxn: 18.60, pen: 3.40, clp: 1002.00, cop: 3440.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-06-01', ars: 1795.0, mxn: 18.68, pen: 3.40, clp: 1006.00, cop: 3455.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-07-01', ars: 1820.0, mxn: 18.75, pen: 3.41, clp: 1010.00, cop: 3470.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-08-01', ars: 1845.0, mxn: 18.82, pen: 3.41, clp: 1014.00, cop: 3485.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-  { periodo: '2027-09-01', ars: 1870.0, mxn: 18.90, pen: 3.42, clp: 1018.00, cop: 3500.00, moneda_base: 'USD', estado: 'PROYECTADO' },
-];
-
-type CurrencyKey = 'ars' | 'mxn' | 'pen' | 'clp' | 'cop';
+import { useExchangeRates, CurrencyKey, AuditEntry } from "@/context/ExchangeRateContext";
+import { useAuth } from "@/context/AuthContext";
+import { ExchangeRateRow } from "@/lib/exchangeRates";
 
 interface CurrencyConfig {
   key: CurrencyKey;
@@ -108,83 +49,33 @@ const CURRENCIES: CurrencyConfig[] = [
 ];
 
 export default function TipoDeCambioPage() {
-  const [data, setData] = useState<TipoCambioRow[]>(DEFAULT_DATA);
-  const [loading, setLoading] = useState(true);
-  const [isLiveFromDb, setIsLiveFromDb] = useState(false);
+  const { rates, auditLog, loading, saving, canEdit, updateRate, refreshRates, lastSync } = useExchangeRates();
+  const { user, role } = useAuth();
+
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<'ALL' | 'REAL' | 'PROYECTADO'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Moneda seleccionada por defecto: siempre ARS
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyKey>('ars');
 
-  // Cargar datos de Supabase
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const { data: dbData, error } = await supabase
-        .from('tipo_de_cambio')
-        .select('*')
-        .order('periodo', { ascending: true });
+  // Estados de edición inline de celdas
+  const [editingCell, setEditingCell] = useState<{ periodo: string; currency: CurrencyKey } | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
+  const [justSavedKey, setJustSavedKey] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-      if (error || !dbData || dbData.length === 0) {
-        console.warn('No se pudo leer tipo_de_cambio de Supabase. Usando datos sincronizados.');
-        setIsLiveFromDb(false);
-        setData(DEFAULT_DATA);
-      } else {
-        setIsLiveFromDb(true);
-        setData(dbData);
-      }
-    } catch (e) {
-      console.warn('Error consultando Supabase:', e);
-      setIsLiveFromDb(false);
-      setData(DEFAULT_DATA);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Modal de Auditoría
+  const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
+  const [auditFilterTerm, setAuditFilterTerm] = useState<string>('');
+
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  // Filtrado de columnas (meses)
-  const filteredData = useMemo(() => {
-    return data.filter(row => {
-      const p = row.periodo;
-      if (selectedYear !== 'ALL') {
-        if (!p.startsWith(selectedYear)) return false;
-      }
-      if (selectedStatus !== 'ALL') {
-        const isProj = row.estado === 'PROYECTADO' || (row.estado !== 'REAL' && p >= '2026-11-01');
-        if (selectedStatus === 'REAL' && isProj) return false;
-        if (selectedStatus === 'PROYECTADO' && !isProj) return false;
-      }
-      if (searchTerm.trim()) {
-        const term = searchTerm.toLowerCase();
-        if (!p.toLowerCase().includes(term)) return false;
-      }
-      return true;
-    });
-  }, [data, selectedYear, selectedStatus, searchTerm]);
-
-  // Moneda activa seleccionada
-  const activeCurrencyObj = useMemo(() => {
-    return CURRENCIES.find(c => c.key === selectedCurrency) || CURRENCIES[0];
-  }, [selectedCurrency]);
-
-  // Último registro real para los KPI cards de cotización vigente
-  const latestRealRow = useMemo(() => {
-    const reals = data.filter(r => r.estado !== 'PROYECTADO' && r.periodo <= '2026-09-01');
-    return reals.length ? reals[reals.length - 1] : (data.length ? data[data.length - 1] : null);
-  }, [data]);
-
-  // Penúltimo registro para variaciones MoM en KPIs
-  const previousRow = useMemo(() => {
-    const reals = data.filter(r => r.estado !== 'PROYECTADO' && r.periodo <= '2026-09-01');
-    if (reals.length < 2) return null;
-    return reals[reals.length - 2];
-  }, [data]);
+    if (editingCell && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingCell]);
 
   // Formateador numérico
   const formatVal = (val: number | null | undefined, decimals = 2) => {
@@ -195,7 +86,7 @@ export default function TipoDeCambioPage() {
     }).format(val);
   };
 
-  // Formato corto de período para encabezados de columnas (ej. "Sep 26")
+  // Formato corto de período (ej. "Sep 26")
   const formatShortPeriod = (p: string) => {
     const clean = p.substring(0, 7);
     const [yyyy, mm] = clean.split('-');
@@ -216,6 +107,62 @@ export default function TipoDeCambioPage() {
     return `${monthNames[mIdx] || mm} ${yyyy}`;
   };
 
+  // Formateador de fecha y hora exacta (ART UTC-3)
+  const formatDateTime = (isoStr: string) => {
+    try {
+      const d = new Date(isoStr);
+      return new Intl.DateTimeFormat('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'America/Argentina/Buenos_Aires'
+      }).format(d);
+    } catch {
+      return isoStr;
+    }
+  };
+
+  // Filtrado de columnas (meses)
+  const filteredData = useMemo(() => {
+    return rates.filter(row => {
+      const p = row.periodo;
+      if (selectedYear !== 'ALL') {
+        if (!p.startsWith(selectedYear)) return false;
+      }
+      if (selectedStatus !== 'ALL') {
+        const isProj = row.estado === 'PROYECTADO' || (row.estado !== 'REAL' && p >= '2026-11-01');
+        if (selectedStatus === 'REAL' && isProj) return false;
+        if (selectedStatus === 'PROYECTADO' && !isProj) return false;
+      }
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        if (!p.toLowerCase().includes(term)) return false;
+      }
+      return true;
+    });
+  }, [rates, selectedYear, selectedStatus, searchTerm]);
+
+  // Moneda activa seleccionada
+  const activeCurrencyObj = useMemo(() => {
+    return CURRENCIES.find(c => c.key === selectedCurrency) || CURRENCIES[0];
+  }, [selectedCurrency]);
+
+  // Último registro real para los KPI cards de cotización vigente
+  const latestRealRow = useMemo(() => {
+    const reals = rates.filter(r => r.estado !== 'PROYECTADO' && r.periodo <= '2026-10-01');
+    return reals.length ? reals[reals.length - 1] : (rates.length ? rates[rates.length - 1] : null);
+  }, [rates]);
+
+  // Penúltimo registro para variaciones MoM en KPIs
+  const previousRow = useMemo(() => {
+    const reals = rates.filter(r => r.estado !== 'PROYECTADO' && r.periodo <= '2026-10-01');
+    if (reals.length < 2) return null;
+    return reals[reals.length - 2];
+  }, [rates]);
+
   // Cálculo de variación porcentual respecto al mes anterior en la tabla
   const getMoMVariation = (currentIndex: number, currKey: CurrencyKey) => {
     if (currentIndex <= 0) return null;
@@ -223,6 +170,74 @@ export default function TipoDeCambioPage() {
     const prevVal = filteredData[currentIndex - 1][currKey] as number | null;
     if (!currentVal || !prevVal || prevVal === 0) return null;
     return ((currentVal - prevVal) / prevVal) * 100;
+  };
+
+  // Buscar última auditoría para una celda específica
+  const getCellAudit = (periodo: string, currKey: CurrencyKey): AuditEntry | undefined => {
+    const p7 = periodo.substring(0, 7);
+    const code = currKey.toUpperCase();
+    return auditLog.find(a => a.periodo.startsWith(p7) && a.moneda.toUpperCase() === code);
+  };
+
+  // Iniciar edición de una celda
+  const handleStartEdit = (periodo: string, currKey: CurrencyKey, currentVal: number | null) => {
+    if (!canEdit) return;
+    setEditingCell({ periodo, currency: currKey });
+    setEditValue(currentVal !== null && currentVal !== undefined ? String(currentVal) : '');
+    setSaveError(null);
+  };
+
+  // Cancelar edición
+  const handleCancelEdit = () => {
+    setEditingCell(null);
+    setEditValue('');
+  };
+
+  // Guardar cambio en celda
+  const handleSaveCell = async (periodo: string, currKey: CurrencyKey) => {
+    if (!editingCell) return;
+    const cellKey = `${periodo}_${currKey}`;
+    const cleanStr = editValue.replace(',', '.').trim();
+    const num = parseFloat(cleanStr);
+
+    if (isNaN(num) || num <= 0) {
+      setSaveError('Ingresá un valor numérico positivo válido.');
+      return;
+    }
+
+    const row = rates.find(r => r.periodo.startsWith(periodo.substring(0, 7)));
+    const currentVal = row ? (row[currKey] as number | null) : null;
+
+    if (currentVal === num) {
+      handleCancelEdit();
+      return;
+    }
+
+    setEditingCell(null);
+    setSavingCellKey(cellKey);
+    setSaveError(null);
+
+    const result = await updateRate(periodo, currKey, num);
+
+    setSavingCellKey(null);
+
+    if (result.success) {
+      setJustSavedKey(cellKey);
+      setTimeout(() => setJustSavedKey(null), 2500);
+    } else {
+      setSaveError(result.error || 'Error al guardar el tipo de cambio.');
+    }
+  };
+
+  // Manejar teclado en celda
+  const handleKeyDown = (e: React.KeyboardEvent, periodo: string, currKey: CurrencyKey) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveCell(periodo, currKey);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelEdit();
+    }
   };
 
   // Estadísticas de la moneda seleccionada para el gráfico
@@ -244,7 +259,7 @@ export default function TipoDeCambioPage() {
     return { minVal, maxVal, latestVal, totalChange };
   }, [filteredData, selectedCurrency]);
 
-  // Configuración de ECharts para el gráfico de línea con puntos
+  // Configuración de ECharts para el gráfico de evolución
   const chartOptions = useMemo(() => {
     const activeCurr = activeCurrencyObj;
     const xAxisData = filteredData.map(r => formatShortPeriod(r.periodo));
@@ -257,11 +272,8 @@ export default function TipoDeCambioPage() {
     const yAxisMin = Math.max(0, Math.floor(minVal - padding));
     const yAxisMax = Math.ceil(maxVal + padding);
 
-    // Índice de inicio de proyecciones
-    const projStartIndex = filteredData.findIndex(r => r.estado === 'PROYECTADO' || r.periodo >= '2026-10-01');
-
     return {
-      animationDuration: 600,
+      animationDuration: 400,
       tooltip: {
         trigger: 'axis',
         backgroundColor: '#ffffff',
@@ -276,7 +288,7 @@ export default function TipoDeCambioPage() {
           const dataIndex = item.dataIndex;
           const row = filteredData[dataIndex];
           const val = row[activeCurr.key] as number | null;
-          const isProj = row.estado === 'PROYECTADO' || row.periodo >= '2026-10-01';
+          const isProj = row.estado === 'PROYECTADO' || row.periodo >= '2026-11-01';
 
           let varStr = '—';
           if (dataIndex > 0) {
@@ -289,8 +301,16 @@ export default function TipoDeCambioPage() {
             }
           }
 
+          const audit = getCellAudit(row.periodo, activeCurr.key);
+          const auditInfo = audit ? `
+            <div style="margin-top:6px;padding-top:4px;border-top:1px dashed #e2e8f0;font-size:11px;color:#0369a1;">
+              <strong>Última edición:</strong> ${audit.usuario_email}<br/>
+              <strong>Fecha:</strong> ${formatDateTime(audit.created_at)}
+            </div>
+          ` : '';
+
           return `
-            <div style="min-width: 180px;">
+            <div style="min-width: 190px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;border-bottom:1px solid #f1f5f9;padding-bottom:4px;">
                 <span style="font-weight:700;color:#0f172a;font-size:13px;">${formatFullPeriod(row.periodo)}</span>
                 <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:${isProj ? '#f3e8ff' : '#f1f5f9'};color:${isProj ? '#7e22ce' : '#475569'};">
@@ -307,6 +327,7 @@ export default function TipoDeCambioPage() {
                 <span style="color:#64748b;">Variación MoM:</span>
                 <span>${varStr}</span>
               </div>
+              ${auditInfo}
             </div>
           `;
         }
@@ -348,107 +369,63 @@ export default function TipoDeCambioPage() {
         {
           name: activeCurr.code,
           type: 'line',
-          smooth: 0.25,
           data: seriesData,
-          showSymbol: true,
+          smooth: 0.3,
           symbol: 'circle',
           symbolSize: 7,
+          showSymbol: true,
           itemStyle: {
             color: activeCurr.color,
             borderColor: '#ffffff',
             borderWidth: 2
           },
           lineStyle: {
-            color: activeCurr.color,
             width: 3,
-            shadowColor: 'rgba(0,0,0,0.08)',
-            shadowBlur: 8,
+            color: activeCurr.color,
+            shadowColor: `${activeCurr.color}40`,
+            shadowBlur: 10,
             shadowOffsetY: 4
           },
           areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: `${activeCurr.color}35` },
-              { offset: 1, color: `${activeCurr.color}00` }
-            ])
-          },
-          markArea: projStartIndex > 0 ? {
-            silent: true,
-            data: [
-              [
-                {
-                  xAxis: xAxisData[projStartIndex],
-                  itemStyle: { color: 'rgba(147, 51, 234, 0.04)' }
-                },
-                {
-                  xAxis: xAxisData[xAxisData.length - 1]
-                }
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: `${activeCurr.color}30` },
+                { offset: 1, color: `${activeCurr.color}02` }
               ]
-            ]
-          } : undefined,
-          markLine: projStartIndex > 0 ? {
-            symbol: ['none', 'none'],
-            silent: true,
-            label: {
-              formatter: 'Inicio Proyecciones',
-              position: 'insideStartTop',
-              color: '#7e22ce',
-              fontSize: 10,
-              fontWeight: 700,
-              backgroundColor: '#faf5ff',
-              padding: [3, 6],
-              borderRadius: 4,
-              borderColor: '#e9d5ff',
-              borderWidth: 1
-            },
-            lineStyle: {
-              color: '#9333ea',
-              type: 'dashed',
-              width: 1.5
-            },
-            data: [{ xAxis: xAxisData[projStartIndex] }]
-          } : undefined
+            }
+          }
         }
       ]
     };
-  }, [filteredData, activeCurrencyObj]);
+  }, [filteredData, activeCurrencyObj, auditLog]);
 
-  // Obtener datos de la tabla para exportar (formato matricial en pantalla y serie cronológica)
+  // Exportar matriz a Excel / CSV
   const getTableExportData = (): ExportData => {
-    // 1. Matriz tal como se visualiza en pantalla (filas = monedas, columnas = meses filtrados)
-    const matrixHeaders = [
-      'Moneda / País',
-      ...filteredData.map(r => `${formatShortPeriod(r.periodo)} (${r.estado || (r.periodo >= '2026-10-01' ? 'PROY' : 'REAL')})`)
-    ];
-
-    const matrixRows = CURRENCIES.map(curr => [
-      `${curr.code} (${curr.label})`,
-      ...filteredData.map(r => {
+    const matrixHeaders = ['Moneda', 'País', ...filteredData.map(r => `${formatShortPeriod(r.periodo)} (${r.estado || 'REAL'})`)];
+    const matrixRows = CURRENCIES.map(curr => {
+      const rowVals = filteredData.map(r => {
         const val = r[curr.key] as number | null;
-        return val !== null && val !== undefined ? val : '';
-      })
-    ]);
+        return val !== null ? val : '';
+      });
+      return [curr.code, curr.label, ...rowVals];
+    });
 
-    // 2. Serie cronológica vertical (filas = períodos, columnas = monedas)
-    const cronoHeaders = [
-      'Periodo',
-      'ARS (Argentina)',
-      'MXN (México)',
-      'PEN (Perú)',
-      'CLP (Chile)',
-      'COP (Colombia)',
-      'Moneda Base',
-      'Estado'
-    ];
-
+    const cronoHeaders = ['Periodo', 'ARS', 'MXN', 'PEN', 'CLP', 'COP', 'Moneda_Base', 'Estado', 'Ultimo_Editor'];
     const cronoRows = filteredData.map(r => [
-      r.periodo.substring(0, 7),
+      r.periodo,
       r.ars ?? '',
       r.mxn ?? '',
       r.pen ?? '',
       r.clp ?? '',
       r.cop ?? '',
-      r.moneda_base || 'USD',
-      r.estado || (r.periodo >= '2026-10-01' ? 'PROYECTADO' : 'REAL')
+      'USD',
+      r.estado || (r.periodo >= '2026-11-01' ? 'PROYECTADO' : 'REAL'),
+      r.updated_by || ''
     ]);
 
     const dateStr = new Date().toISOString().slice(0, 10);
@@ -458,19 +435,50 @@ export default function TipoDeCambioPage() {
       headers: matrixHeaders,
       rows: matrixRows,
       sheets: [
-        {
-          sheetName: 'Matriz en Pantalla',
-          headers: matrixHeaders,
-          rows: matrixRows
-        },
-        {
-          sheetName: 'Serie Cronológica',
-          headers: cronoHeaders,
-          rows: cronoRows
-        }
+        { sheetName: 'Matriz en Pantalla', headers: matrixHeaders, rows: matrixRows },
+        { sheetName: 'Serie Cronológica', headers: cronoHeaders, rows: cronoRows }
       ]
     };
   };
+
+  // Exportar historial de auditoría
+  const getAuditExportData = (): ExportData => {
+    const headers = ['Fecha y Hora (ART)', 'Usuario', 'Período', 'Moneda', 'Valor Anterior', 'Valor Nuevo', 'Variación %'];
+    const rows = filteredAuditLog.map(a => {
+      let varPct = '';
+      if (a.valor_anterior && a.valor_anterior > 0) {
+        const diff = ((a.valor_nuevo - a.valor_anterior) / a.valor_anterior) * 100;
+        varPct = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%`;
+      }
+      return [
+        formatDateTime(a.created_at),
+        a.usuario_email,
+        a.periodo.substring(0, 7),
+        a.moneda,
+        a.valor_anterior ?? '',
+        a.valor_nuevo,
+        varPct
+      ];
+    });
+
+    return {
+      filename: `auditoria_tipos_de_cambio_${new Date().toISOString().slice(0, 10)}`,
+      sheetName: 'Auditoría Tipos de Cambio',
+      headers,
+      rows
+    };
+  };
+
+  // Filtro de auditoría en modal
+  const filteredAuditLog = useMemo(() => {
+    if (!auditFilterTerm.trim()) return auditLog;
+    const term = auditFilterTerm.toLowerCase();
+    return auditLog.filter(a => 
+      a.usuario_email.toLowerCase().includes(term) ||
+      a.periodo.toLowerCase().includes(term) ||
+      a.moneda.toLowerCase().includes(term)
+    );
+  }, [auditLog, auditFilterTerm]);
 
   return (
     <div className="space-y-6 pb-12 w-full select-none">
@@ -489,36 +497,70 @@ export default function TipoDeCambioPage() {
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
                 Moneda Base: USD
               </span>
-              {isLiveFromDb ? (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                  <Database size={11} /> Sincronizado en Vivo
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Sincronizado en Tiempo Real
+              </span>
+              {canEdit ? (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                  <Edit3 size={11} /> Edición Habilitada (Admin)
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  Datos de Archivo Base
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-50 text-slate-600 border border-slate-200 flex items-center gap-1">
+                  <Lock size={11} /> Solo Lectura
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              Cotizaciones mensuales para liquidación, proyección y conversión a USD de todas las cuentas del exterior (Argentina, México, Perú, Chile, Colombia).
+              Cotizaciones mensuales para liquidación, proyección y conversión a USD en toda la app.
+              {canEdit && " Hacé clic o doble clic en cualquier celda para editar el valor en tiempo real."}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 self-end md:self-center">
+        <div className="flex items-center gap-2.5 self-end md:self-center flex-wrap">
+          {/* Botón de Historial de Auditoría */}
           <button
-            onClick={fetchData}
+            onClick={() => setShowAuditModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs cursor-pointer active:scale-95"
+            title="Ver auditoría completa de modificaciones"
+          >
+            <History size={13} />
+            <span>Auditoría de Cambios</span>
+            {auditLog.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-500 text-white">
+                {auditLog.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => refreshRates()}
             disabled={loading}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
           >
-            <RefreshCw size={13} className={loading ? "animate-spin text-blue-600" : ""} />
+            <RefreshCw size={13} className={loading || saving ? "animate-spin text-blue-600" : ""} />
             <span>Actualizar</span>
           </button>
+          
           <TableExportButton getData={getTableExportData} label="Exportar" />
         </div>
       </div>
 
-      {/* 2. Tarjetas KPI de Cotización Vigente (Clickables para cambiar la moneda activa) */}
+      {/* Alerta de Error de Guardado si ocurre */}
+      {saveError && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-600 shrink-0" />
+            <span>{saveError}</span>
+          </div>
+          <button onClick={() => setSaveError(null)} className="text-red-500 hover:text-red-700">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* 2. Tarjetas KPI de Cotización Vigente */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {CURRENCIES.map((curr) => {
           const val = latestRealRow ? (latestRealRow[curr.key] as number | null) : null;
@@ -644,15 +686,22 @@ export default function TipoDeCambioPage() {
         </div>
       </div>
 
-      {/* 4. Tabla Horizontal Pivotada (Filas = Monedas, Columnas = Meses) */}
+      {/* 4. Tabla Horizontal Pivotada (Filas = Monedas, Columnas = Meses) con Edición Inline */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden flex flex-col">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
-            <h2 className="text-sm font-bold text-slate-900">
-              Matriz Mensual de Cotizaciones por Moneda
-            </h2>
-            <p className="text-xs text-slate-500">
-              {filteredData.length} meses en columnas • Haz clic en una fila para seleccionarla y ver su evolución gráfica abajo
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900">
+                Matriz Mensual de Cotizaciones por Moneda
+              </h2>
+              {canEdit && (
+                <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1">
+                  <Edit3 size={11} /> Celdas editables inline
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {filteredData.length} meses en columnas • {canEdit ? "Clic o doble clic en una celda para editar el valor." : "Visualización para analistas."}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -674,7 +723,7 @@ export default function TipoDeCambioPage() {
 
                 {/* Columnas de Períodos */}
                 {filteredData.map((row) => {
-                  const isProj = row.estado === 'PROYECTADO' || row.periodo >= '2026-10-01';
+                  const isProj = row.estado === 'PROYECTADO' || row.periodo >= '2026-11-01';
                   return (
                     <th 
                       key={row.periodo} 
@@ -709,17 +758,19 @@ export default function TipoDeCambioPage() {
                 return (
                   <tr
                     key={curr.key}
-                    onClick={() => setSelectedCurrency(curr.key)}
-                    className={`transition-all cursor-pointer group ${
+                    className={`transition-all group ${
                       isSelected 
                         ? 'bg-blue-50/70 border-l-4 border-blue-600 font-medium' 
                         : 'hover:bg-slate-50/80 bg-white border-l-4 border-transparent'
                     }`}
                   >
-                    {/* Celda Fija de la Moneda */}
-                    <td className={`py-3.5 px-4 sticky left-0 z-20 border-r border-slate-200 backdrop-blur-xs transition-colors shadow-[2px_0_5px_rgba(0,0,0,0.02)] ${
-                      isSelected ? 'bg-blue-50/95 text-blue-950' : 'bg-white group-hover:bg-slate-50'
-                    }`}>
+                    {/* Celda Fija de la Moneda (Selecciona para el gráfico) */}
+                    <td 
+                      onClick={() => setSelectedCurrency(curr.key)}
+                      className={`py-3.5 px-4 sticky left-0 z-20 border-r border-slate-200 backdrop-blur-xs transition-colors shadow-[2px_0_5px_rgba(0,0,0,0.02)] cursor-pointer ${
+                        isSelected ? 'bg-blue-50/95 text-blue-950' : 'bg-white group-hover:bg-slate-50'
+                      }`}
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5">
                           <div 
@@ -751,22 +802,81 @@ export default function TipoDeCambioPage() {
                     {/* Celdas mensuales */}
                     {filteredData.map((row, idx) => {
                       const val = row[curr.key] as number | null;
-                      const isProj = row.estado === 'PROYECTADO' || row.periodo >= '2026-10-01';
+                      const isProj = row.estado === 'PROYECTADO' || row.periodo >= '2026-11-01';
                       const mom = idx > 0 ? getMoMVariation(idx, curr.key) : null;
                       const isUp = mom !== null && mom > 0;
+                      
+                      const cellKey = `${row.periodo}_${curr.key}`;
+                      const isEditing = editingCell?.periodo === row.periodo && editingCell?.currency === curr.key;
+                      const isSavingThis = savingCellKey === cellKey;
+                      const isJustSaved = justSavedKey === cellKey;
+                      const cellAudit = getCellAudit(row.periodo, curr.key);
 
                       return (
                         <td 
                           key={row.periodo} 
-                          className={`py-2.5 px-3 text-right font-mono border-r border-slate-100 whitespace-nowrap ${
+                          onDoubleClick={() => handleStartEdit(row.periodo, curr.key, val)}
+                          className={`py-2 px-2.5 text-right font-mono border-r border-slate-100 whitespace-nowrap relative transition-colors ${
                             isProj ? (isSelected ? 'bg-purple-50/30' : 'bg-purple-50/15') : ''
+                          } ${
+                            isJustSaved ? 'bg-emerald-100/90' : ''
+                          } ${
+                            canEdit && !isEditing ? 'hover:bg-blue-50/80 cursor-cell group/cell' : ''
                           }`}
+                          title={
+                            cellAudit
+                              ? `Última modificación por ${cellAudit.usuario_email}\nFecha: ${formatDateTime(cellAudit.created_at)}\nAnterior: ${cellAudit.valor_anterior ?? '—'} → Nuevo: ${cellAudit.valor_nuevo}`
+                              : canEdit ? "Doble clic para editar cotización" : "Solo lectura"
+                          }
                         >
-                          {val !== null ? (
-                            <div>
-                              <span className={`text-xs ${isSelected ? 'font-bold text-slate-900' : 'font-medium text-slate-800'}`}>
-                                {curr.symbol} {formatVal(val, curr.decimals)}
-                              </span>
+                          {/* Indicador de celda auditada */}
+                          {cellAudit && !isEditing && (
+                            <span 
+                              className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-600 shadow-2xs" 
+                              title={`Editado por ${cellAudit.usuario_email}`}
+                            />
+                          )}
+
+                          {isEditing ? (
+                            <div className="flex items-center gap-1 justify-end">
+                              <span className="text-[10px] text-slate-400 font-sans">{curr.symbol}</span>
+                              <input
+                                ref={editInputRef}
+                                type="text"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, row.periodo, curr.key)}
+                                onBlur={() => handleSaveCell(row.periodo, curr.key)}
+                                className="w-20 px-1.5 py-1 text-xs font-bold font-mono text-right bg-white border-2 border-blue-600 rounded shadow-sm focus:outline-hidden text-slate-900"
+                              />
+                            </div>
+                          ) : isSavingThis ? (
+                            <div className="flex items-center justify-end gap-1 text-blue-600 text-xs">
+                              <RefreshCw size={12} className="animate-spin" />
+                              <span className="text-[10px] font-sans">Guardando...</span>
+                            </div>
+                          ) : isJustSaved ? (
+                            <div className="flex items-center justify-end gap-1 text-emerald-700 text-xs font-bold font-sans">
+                              <Check size={12} />
+                              <span className="text-[10px]">Guardado</span>
+                            </div>
+                          ) : val !== null ? (
+                            <div className="relative">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className={`text-xs ${isSelected ? 'font-bold text-slate-900' : 'font-medium text-slate-800'}`}>
+                                  {curr.symbol} {formatVal(val, curr.decimals)}
+                                </span>
+                                {canEdit && (
+                                  <Edit3 
+                                    size={10} 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartEdit(row.periodo, curr.key, val);
+                                    }}
+                                    className="opacity-0 group-hover/cell:opacity-100 text-blue-600 hover:text-blue-800 transition-opacity cursor-pointer shrink-0" 
+                                  />
+                                )}
+                              </div>
                               {mom !== null && (
                                 <div className="text-[10px] mt-0.5 font-sans leading-none">
                                   <span className={isUp ? 'text-amber-600 font-medium' : 'text-emerald-600 font-medium'}>
@@ -776,7 +886,17 @@ export default function TipoDeCambioPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-slate-300 font-sans text-xs">—</span>
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-slate-300 font-sans text-xs">—</span>
+                              {canEdit && (
+                                <button
+                                  onClick={() => handleStartEdit(row.periodo, curr.key, null)}
+                                  className="opacity-0 group-hover/cell:opacity-100 text-[10px] text-blue-600 underline font-sans"
+                                >
+                                  +Agregar
+                                </button>
+                              )}
+                            </div>
                           )}
                         </td>
                       );
@@ -790,9 +910,15 @@ export default function TipoDeCambioPage() {
 
         {/* Footer de la Tabla */}
         <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-          <span>
-            Mostrando 5 monedas en filas. Desplaza horizontalmente para explorar los meses.
-          </span>
+          <div className="flex items-center gap-3">
+            <span>
+              Mostrando 5 monedas en filas. Desplaza horizontalmente para explorar los meses.
+            </span>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+              <span>Punto azul = Cotización modificada con trazabilidad</span>
+            </div>
+          </div>
           <span className="font-mono text-[11px] text-slate-400">
             Moneda seleccionada para el gráfico: <strong className="text-slate-700">{activeCurrencyObj.code} ({activeCurrencyObj.label})</strong>
           </span>
@@ -866,6 +992,158 @@ export default function TipoDeCambioPage() {
           />
         </div>
       </div>
+
+      {/* 6. MODAL DE AUDITORÍA Y TRAZABILIDAD */}
+      {showAuditModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Header del Modal */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                  <History size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    Registro de Auditoría de Tipos de Cambio
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                      {auditLog.length} registros
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Historial inmutable con usuario responsable (@replylatam.com), fecha y hora exacta (ART) y valores modificados.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <TableExportButton getData={getAuditExportData} label="Exportar Auditoría" variant="compact" />
+                <button
+                  onClick={() => setShowAuditModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Buscador dentro de Auditoría */}
+            <div className="p-4 border-b border-slate-100 bg-white flex items-center justify-between gap-4">
+              <div className="relative w-full max-w-sm">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por usuario o moneda..."
+                  value={auditFilterTerm}
+                  onChange={(e) => setAuditFilterTerm(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <span className="text-xs text-slate-400">
+                Mostrando {filteredAuditLog.length} de {auditLog.length} eventos
+              </span>
+            </div>
+
+            {/* Lista de Registros de Auditoría */}
+            <div className="overflow-y-auto p-4 flex-1">
+              {filteredAuditLog.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                    <History size={24} />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">Sin modificaciones registradas</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                    Todas las cotizaciones se encuentran con sus valores oficiales originales. Cuando un administrador edite una celda, aparecerá aquí inmediatamente.
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Fecha y Hora (ART)</th>
+                        <th className="py-2.5 px-3">Usuario Responsable</th>
+                        <th className="py-2.5 px-3">Período</th>
+                        <th className="py-2.5 px-3">Moneda</th>
+                        <th className="py-2.5 px-3 text-right">Valor Anterior</th>
+                        <th className="py-2.5 px-3 text-right">Valor Nuevo</th>
+                        <th className="py-2.5 px-3 text-right">Variación</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredAuditLog.map((item, idx) => {
+                        const currObj = CURRENCIES.find(c => c.code === item.moneda) || CURRENCIES[0];
+                        let diffPct: number | null = null;
+                        if (item.valor_anterior && item.valor_anterior > 0) {
+                          diffPct = ((item.valor_nuevo - item.valor_anterior) / item.valor_anterior) * 100;
+                        }
+
+                        return (
+                          <tr key={item.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2.5 px-3 text-slate-600 font-mono whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <Clock size={12} className="text-slate-400" />
+                                {formatDateTime(item.created_at)}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-medium text-slate-900 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center">
+                                  {item.usuario_email.substring(0, 2).toUpperCase()}
+                                </div>
+                                <span>{item.usuario_email}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap">
+                              {formatFullPeriod(item.periodo)}
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-800">
+                                <span>{currObj.flag}</span>
+                                <span>{item.moneda}</span>
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                              {item.valor_anterior !== null ? `${currObj.symbol} ${formatVal(item.valor_anterior, currObj.decimals)}` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                              {currObj.symbol} {formatVal(item.valor_nuevo, currObj.decimals)}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
+                              {diffPct !== null ? (
+                                <span className={`font-bold ${diffPct >= 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                  {diffPct >= 0 ? '+' : ''}{diffPct.toFixed(2)}%
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Footer del Modal */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+              <span className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                <ShieldCheck size={14} /> Trazabilidad íntegra almacenada en Supabase DB
+              </span>
+              <button
+                onClick={() => setShowAuditModal(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

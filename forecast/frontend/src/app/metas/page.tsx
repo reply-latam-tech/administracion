@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import TableExportButton from "@/components/TableExportButton";
 import { convertCurrency } from "@/lib/exchangeRates";
+import { useExchangeRates } from "@/context/ExchangeRateContext";
 import { ExportData } from "@/lib/exportUtils";
 
 
@@ -90,6 +91,7 @@ interface InverseResult {
 }
 
 export default function MetasPage() {
+  const { rates } = useExchangeRates();
   const [loading, setLoading] = useState(true);
   const [sellers, setSellers] = useState<any[]>([]);
   const [liquidaciones, setLiquidaciones] = useState<any[]>([]);

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { ExchangeRateProvider } from "@/context/ExchangeRateContext";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
@@ -20,9 +21,11 @@ export default function RootLayout({
     <html lang="es">
       <body className="antialiased bg-slate-50 text-slate-900 flex h-screen overflow-hidden">
         <AuthProvider>
-          <AppShell>
-            {children}
-          </AppShell>
+          <ExchangeRateProvider>
+            <AppShell>
+              {children}
+            </AppShell>
+          </ExchangeRateProvider>
         </AuthProvider>
       </body>
     </html>

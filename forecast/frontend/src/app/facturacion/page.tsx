@@ -32,6 +32,7 @@ import {
   ReferenceLine 
 } from 'recharts';
 import { convertCurrency, formatMoney, getRateToUSD } from '@/lib/exchangeRates';
+import { useExchangeRates } from '@/context/ExchangeRateContext';
 import TableExportButton from '@/components/TableExportButton';
 import { ExportData } from '@/lib/exportUtils';
 
@@ -78,6 +79,7 @@ let facturacionCache: {
 } | null = null;
 
 export default function FacturacionPage() {
+  const { rates } = useExchangeRates();
   // Datos crudos de Supabase (inicializados desde caché si existe para render instantáneo)
   const [rawSellers, setRawSellers] = useState<any[]>(() => facturacionCache?.sellers || []);
   const [rawFacturacion, setRawFacturacion] = useState<any[]>(() => facturacionCache?.facturacion || []);
