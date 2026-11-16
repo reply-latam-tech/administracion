@@ -46,6 +46,8 @@ import TableExportButton from '@/components/TableExportButton';
 import AuditTooltip from '@/components/AuditTooltip';
 import { useAuth } from '@/context/AuthContext';
 import { ExportData } from '@/lib/exportUtils';
+import PeriodFilterSelector from '@/components/PeriodFilterSelector';
+import { PeriodFilterOption, getRolling24MonthsRange, filterPeriodosList } from '@/lib/periodFilterUtils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -321,6 +323,8 @@ export default function FacturacionPage() {
   const [selectedSeller, setSelectedSeller] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [collapsedCountries, setCollapsedCountries] = useState<Record<string, boolean>>({});
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterOption>('24M');
+  const range24M = useMemo(() => getRolling24MonthsRange(), []);
 
   // Estacionalidad
   const [estMensual, setEstMensual] = useState<any[]>(() => facturacionCache?.estMensual || []);
@@ -700,6 +704,10 @@ export default function FacturacionPage() {
     };
   }, [rawSellers, rawFacturacion, currencyView, selectedCountryFilter, searchTerm, selectedSeller]);
 
+  const visiblePeriodos = useMemo(() => {
+    return filterPeriodosList(processedData.sortedPeriodos, periodFilter, range24M);
+  }, [processedData.sortedPeriodos, periodFilter, range24M]);
+
   // Alternar colapsado de país
   const toggleCountryCollapse = (countryCode: string) => {
     setCollapsedCountries(prev => ({
@@ -916,7 +924,7 @@ export default function FacturacionPage() {
 
   // Obtener datos para exportar de la matriz de facturación GMV
   const getFacturacionExportData = (): ExportData => {
-    const periodos = processedData.sortedPeriodos;
+    const periodos = visiblePeriodos;
     const headers = [
       'País',
       'Seller',
@@ -1235,7 +1243,13 @@ export default function FacturacionPage() {
                 : 'Moneda de visualización: ARS (Unificada en Pesos Argentinos).'}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <PeriodFilterSelector
+              selectedFilter={periodFilter}
+              onChangeFilter={setPeriodFilter}
+              range24M={range24M}
+            />
+            <div className="h-4 w-px bg-slate-200 hidden md:block" />
             <span className="text-[11px] text-slate-500 font-medium">
               Mostrando {countriesToDisplay.length} {countriesToDisplay.length === 1 ? 'país' : 'países'}
             </span>
@@ -1250,7 +1264,7 @@ export default function FacturacionPage() {
                 <th scope="col" className="px-4 py-3 font-extrabold min-w-[260px] sticky left-0 top-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-b border-slate-200 text-slate-800">
                   Seller / Cliente
                 </th>
-                {processedData.sortedPeriodos.map((p) => {
+                {visiblePeriodos.map((p) => {
                   const isProj = p >= '2026-11-01';
                   return (
                     <th key={p} scope="col" className={`px-4 py-3 font-bold text-right whitespace-nowrap min-w-[140px] border-l border-b border-slate-200 sticky top-0 z-20 ${isProj ? 'bg-orange-50/95 text-orange-950' : 'bg-slate-100 text-slate-700'}`}>
@@ -1270,7 +1284,7 @@ export default function FacturacionPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={processedData.sortedPeriodos.length + 1} className="px-6 py-16 text-center text-slate-400">
+                  <td colSpan={visiblePeriodos.length + 1} className="px-6 py-16 text-center text-slate-400">
                     <div className="animate-pulse flex flex-col items-center gap-2">
                       <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <span>Cargando matriz de facturación segmentada...</span>
@@ -1279,7 +1293,7 @@ export default function FacturacionPage() {
                 </tr>
               ) : countriesToDisplay.length === 0 ? (
                 <tr>
-                  <td colSpan={processedData.sortedPeriodos.length + 1} className="px-6 py-12 text-center text-slate-400 text-xs">
+                  <td colSpan={visiblePeriodos.length + 1} className="px-6 py-12 text-center text-slate-400 text-xs">
                     No se encontraron clientes para el filtro o término de búsqueda ingresado.
                   </td>
                 </tr>
@@ -1318,7 +1332,7 @@ export default function FacturacionPage() {
                         </td>
 
                         {/* Totales Mensuales del País en el Encabezado */}
-                        {processedData.sortedPeriodos.map(p => {
+                        {visiblePeriodos.map(p => {
                           const subtotalVal = countryGroup.monthlyTotals[p] || 0;
                           const varM = countryGroup.monthlyVarM[p] || 0;
                           const cCur = currencyView === 'ORIGINAL' ? countryGroup.country.defaultCurrency : currencyView;
@@ -1379,7 +1393,7 @@ export default function FacturacionPage() {
                               </div>
                             </td>
                             
-                            {processedData.sortedPeriodos.map((p) => {
+                            {visiblePeriodos.map((p) => {
                               const cellData = row.months[p];
                               const isProjected = cellData?.estado ? cellData.estado === 'PROYECTADO' : p >= '2026-11-01';
                               const cellKey = `${row.sellerId}_${p}`;
@@ -1576,7 +1590,7 @@ export default function FacturacionPage() {
                     </div>
                   </td>
 
-                  {processedData.sortedPeriodos.map(p => {
+                  {visiblePeriodos.map(p => {
                     const totalMonth = processedData.globalMonthlyTotals[p] || 0;
                     const varM = processedData.globalMonthlyVarM[p] || 0;
                     return (

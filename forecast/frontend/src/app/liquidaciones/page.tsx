@@ -37,6 +37,8 @@ import { getRateToUSD, formatMoney, convertCurrency } from '@/lib/exchangeRates'
 import { useExchangeRates } from '@/context/ExchangeRateContext';
 import TableExportButton from '@/components/TableExportButton';
 import { ExportData } from '@/lib/exportUtils';
+import PeriodFilterSelector from '@/components/PeriodFilterSelector';
+import { PeriodFilterOption, getRolling24MonthsRange, filterPeriodosList } from '@/lib/periodFilterUtils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -103,7 +105,8 @@ function MetasFacturacionContent() {
   const [variationMode, setVariationMode] = useState<'mensual' | 'diaria' | 'anual' | 'none'>('mensual');
 
   // Filtro temporal: "LAST_12" (6 reales + 6 proyectados), "2026", "REAL_ONLY", "ALL"
-  const [timelineFilter, setTimelineFilter] = useState<'LAST_12' | '2026' | 'REAL_ONLY' | 'ALL'>('LAST_12');
+  const [timelineFilter, setTimelineFilter] = useState<PeriodFilterOption>('24M');
+  const range24M = useMemo(() => getRolling24MonthsRange(), []);
   
   // Búsqueda de cliente
   const [searchTerm, setSearchTerm] = useState('');
@@ -494,23 +497,13 @@ function MetasFacturacionContent() {
 
   // Filtrado de meses según selector de temporalidad
   const filteredMonths = useMemo(() => {
-    if (timelineFilter === 'REAL_ONLY') {
-      return monthsList.filter(m => !m.isProjected);
-    }
-    if (timelineFilter === '2026') {
-      return monthsList.filter(m => m.key.startsWith('2026'));
-    }
-    if (timelineFilter === 'LAST_12') {
-      // 6 meses reales hacia atrás + 6 meses proyectados hacia adelante
-      const realMonths = monthsList.filter(m => !m.isProjected);
-      const projMonths = monthsList.filter(m => m.isProjected);
-      const recentReal = realMonths.slice(-6);
-      const nextProj = projMonths.slice(0, 6);
-      const combined = [...recentReal, ...nextProj];
-      return combined.length > 0 ? combined : monthsList;
-    }
-    return monthsList;
-  }, [monthsList, timelineFilter]);
+    const periodosKeys = monthsList.map(m => m.periodoDate || (m.key.length === 7 ? `${m.key}-01` : m.key));
+    const filteredSet = new Set(filterPeriodosList(periodosKeys, timelineFilter, range24M));
+    return monthsList.filter(m => {
+      const pDate = m.periodoDate || (m.key.length === 7 ? `${m.key}-01` : m.key);
+      return filteredSet.has(pDate);
+    });
+  }, [monthsList, timelineFilter, range24M]);
 
   // Lista de países únicos detectados (con opción consolidada 'ALL')
   const availableCountries = useMemo(() => {
@@ -2146,41 +2139,12 @@ function MetasFacturacionContent() {
               </div>
 
               {/* Selector Temporal */}
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs">
-                <button
-                  onClick={() => setTimelineFilter('LAST_12')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                    timelineFilter === 'LAST_12' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="6 meses reales hacia atrás + 6 meses proyectados hacia adelante"
-                >
-                  12 Meses (6+6)
-                </button>
-                <button
-                  onClick={() => setTimelineFilter('2026')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                    timelineFilter === '2026' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Año 2026
-                </button>
-                <button
-                  onClick={() => setTimelineFilter('REAL_ONLY')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                    timelineFilter === 'REAL_ONLY' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Solo Reales
-                </button>
-                <button
-                  onClick={() => setTimelineFilter('ALL')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                    timelineFilter === 'ALL' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Todo
-                </button>
-              </div>
+              <PeriodFilterSelector
+                selectedFilter={timelineFilter}
+                onChangeFilter={setTimelineFilter}
+                range24M={range24M}
+              />
+
 
               {/* Selector de Variación % (solo para la pestaña subtotales) */}
               {activeTab === 'subtotales' && (

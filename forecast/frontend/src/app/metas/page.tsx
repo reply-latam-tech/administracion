@@ -24,6 +24,8 @@ import TableExportButton from "@/components/TableExportButton";
 import { convertCurrency } from "@/lib/exchangeRates";
 import { useExchangeRates } from "@/context/ExchangeRateContext";
 import { ExportData } from "@/lib/exportUtils";
+import PeriodFilterSelector from "@/components/PeriodFilterSelector";
+import { PeriodFilterOption, getRolling24MonthsRange, filterPeriodosList } from "@/lib/periodFilterUtils";
 
 
 interface CountryConfig {
@@ -111,6 +113,8 @@ export default function MetasPage() {
 
   // Filtros
   const [searchQuery, setSearchQuery] = useState("");
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterOption>('24M');
+  const range24M = useMemo(() => getRolling24MonthsRange(), []);
   const [selectedSellerFilter, setSelectedSellerFilter] = useState<string>("ALL");
   const [selectedCountryFilter, setSelectedCountryFilter] = useState<string>("ALL");
   const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState<string>("ALL");
@@ -275,6 +279,12 @@ export default function MetasPage() {
       sellersMatrix: matrix
     };
   }, [liquidaciones, sellers, facturacionReal]);
+
+  const visiblePeriodos = useMemo(() => {
+    return filterPeriodosList(allPeriodos, periodFilter, range24M);
+  }, [allPeriodos, periodFilter, range24M]);
+
+  
 
   // Función matemática de resolución inversa con soporte de 2 decimales
   const solveInverseEscala = (
@@ -873,7 +883,7 @@ export default function MetasPage() {
       'ID Seller',
       'País',
       'Moneda',
-      ...allPeriodos.map(p => `${formatMonthStr(p)} (${p >= '2026-09-01' ? 'PROY' : 'REAL'})`)
+      ...visiblePeriodos.map(p => `${formatMonthStr(p)} (${p >= '2026-09-01' ? 'PROY' : 'REAL'})`)
     ];
 
     const rows = filteredMatrix.map(row => [
@@ -881,7 +891,7 @@ export default function MetasPage() {
       row.sellerId,
       row.pais || '',
       row.moneda || 'ARS',
-      ...allPeriodos.map(p => {
+      ...visiblePeriodos.map(p => {
         const cell = row.monthsData[p];
         const key = `${row.sellerId}_${p}`;
         const fee = simulatedFees[key] !== undefined ? simulatedFees[key] : (cell?.originalFee || 0);
@@ -1090,6 +1100,13 @@ export default function MetasPage() {
               ))}
             </select>
 
+            {/* Selector de Período 24M */}
+            <PeriodFilterSelector
+              selectedFilter={periodFilter}
+              onChangeFilter={setPeriodFilter}
+              range24M={range24M}
+            />
+
             {/* Filtro por Moneda Contractual */}
             <select
               value={selectedCurrencyFilter}
@@ -1128,7 +1145,7 @@ export default function MetasPage() {
                 <th scope="col" className="px-5 py-3.5 font-bold text-slate-700 sticky left-0 top-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] min-w-[210px] border-r border-b border-slate-200">
                   Seller / Cliente
                 </th>
-                {allPeriodos.map((p) => {
+                {visiblePeriodos.map((p) => {
                   const isProjected = p >= "2026-09-01";
                   return (
                     <th 
@@ -1157,13 +1174,13 @@ export default function MetasPage() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={allPeriodos.length + 1} className="px-6 py-16 text-center text-slate-400">
+                  <td colSpan={visiblePeriodos.length + 1} className="px-6 py-16 text-center text-slate-400">
                     <div className="animate-pulse">Cargando matrices de liquidación y escalas...</div>
                   </td>
                 </tr>
               ) : filteredMatrix.length === 0 ? (
                 <tr>
-                  <td colSpan={allPeriodos.length + 1} className="px-6 py-16 text-center text-slate-400">
+                  <td colSpan={visiblePeriodos.length + 1} className="px-6 py-16 text-center text-slate-400">
                     No se encontraron clientes con el filtro aplicado.
                   </td>
                 </tr>
@@ -1207,7 +1224,7 @@ export default function MetasPage() {
                     </td>
 
                     {/* Columnas Mensuales */}
-                    {allPeriodos.map((p) => {
+                    {visiblePeriodos.map((p) => {
                       const cell = row.monthsData[p];
                       const isProjected = p >= "2026-09-01";
                       const key = `${row.sellerId}_${p}`;

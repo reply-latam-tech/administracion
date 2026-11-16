@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import PeriodFilterSelector from '@/components/PeriodFilterSelector';
+import { PeriodFilterOption, getRolling24MonthsRange } from '@/lib/periodFilterUtils';
 import {
   ComposedChart,
   Area,
@@ -31,6 +33,37 @@ export default function SimuladorPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
   const [simulatedFacturacion, setSimulatedFacturacion] = useState<number>(0);
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterOption>('24M');
+  const range24M = useMemo(() => getRolling24MonthsRange(), []);
+
+  const parseMonthStringToYMD = (str: string): string => {
+    const clean = str.replace(/\./g, '').trim();
+    const [m, y] = clean.split(' ');
+    const map: Record<string, string> = {
+      'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04', 'May': '05', 'Jun': '06',
+      'Jul': '07', 'Ago': '08', 'Sep': '09', 'Sept': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
+    };
+    const monthNum = map[m] || '01';
+    const fullYear = y && y.length === 2 ? `20${y}` : (y || '2026');
+    return `${fullYear}-${monthNum}-01`;
+  };
+
+  const visibleMonths = useMemo(() => {
+    if (periodFilter === 'TODO') return months;
+    return months.filter(m => {
+      const ymd = parseMonthStringToYMD(m);
+      if (periodFilter === '24M') {
+        return ymd >= range24M.start && ymd <= range24M.end;
+      }
+      return ymd.startsWith(periodFilter);
+    });
+  }, [months, periodFilter, range24M]);
+
+  useEffect(() => {
+    if (visibleMonths.length > 0 && !visibleMonths.includes(selectedMonth)) {
+      setSelectedMonth(visibleMonths[visibleMonths.length - 1]);
+    }
+  }, [visibleMonths, selectedMonth]);
 
   useEffect(() => {
     async function fetchData() {
@@ -264,6 +297,14 @@ export default function SimuladorPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col p-6 gap-6 overflow-y-auto">
         
         {/* Controles */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+          <PeriodFilterSelector
+            selectedFilter={periodFilter}
+            onChangeFilter={setPeriodFilter}
+            range24M={range24M}
+          />
+        </div>
+
         <div className="flex gap-4">
           <div className="w-1/2">
             <label className="block text-xs font-medium text-gray-500 mb-1">Cuenta / Seller</label>
@@ -284,7 +325,7 @@ export default function SimuladorPage() {
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
             >
-              {months.map(m => (
+              {visibleMonths.map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>

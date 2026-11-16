@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { ArrowUpRight, ArrowDownRight, Search, X, Clock, Globe, Sparkles } from "lucide-react";
 import TableExportButton from "@/components/TableExportButton";
 import { ExportData } from "@/lib/exportUtils";
+import PeriodFilterSelector from "@/components/PeriodFilterSelector";
+import { PeriodFilterOption, getRolling24MonthsRange } from "@/lib/periodFilterUtils";
 
 export default function EscalasPage() {
   const [sellersList, setSellersList] = useState<any[]>([]);
@@ -17,6 +19,31 @@ export default function EscalasPage() {
   // Filtros reactivos
   const [selectedCountry, setSelectedCountry] = useState<string>('TODOS');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterOption>('24M');
+  const range24M = useMemo(() => getRolling24MonthsRange(), []);
+
+  const parseMonthStringToYMD = (str: string): string => {
+    const clean = str.replace(/\./g, '').trim();
+    const [m, y] = clean.split(' ');
+    const map: Record<string, string> = {
+      'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04', 'May': '05', 'Jun': '06',
+      'Jul': '07', 'Ago': '08', 'Sep': '09', 'Sept': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
+    };
+    const monthNum = map[m] || '01';
+    const fullYear = y && y.length === 2 ? `20${y}` : (y || '2026');
+    return `${fullYear}-${monthNum}-01`;
+  };
+
+  const visibleMonthsStr = useMemo(() => {
+    if (periodFilter === 'TODO') return monthsStr;
+    return monthsStr.filter(m => {
+      const ymd = parseMonthStringToYMD(m);
+      if (periodFilter === '24M') {
+        return ymd >= range24M.start && ymd <= range24M.end;
+      }
+      return ymd.startsWith(periodFilter);
+    });
+  }, [monthsStr, periodFilter, range24M]);
 
   useEffect(() => {
     async function fetchData() {
@@ -679,17 +706,17 @@ export default function EscalasPage() {
       }
     });
     return rows;
-  }, [filteredSellers, monthsStr, sellersMetaMap, liqMapState]);
+  }, [filteredSellers, visibleMonthsStr, sellersMetaMap, liqMapState]);
 
   // Exportar datos de la matriz de escalas
   const getEscalasExportData = (): ExportData => {
-    const headers = ['Seller', 'ID Seller', 'País', 'Moneda', 'Estado', ...monthsStr];
+    const headers = ['Seller', 'ID Seller', 'País', 'Moneda', 'Estado', ...visibleMonthsStr];
 
     const rows: (string | number)[][] = [];
 
     filteredSellers.forEach(seller => {
       const isBaja = sellersMetaMap[seller.sellerId]?.isBaja || false;
-      const maxTiers = Math.max(...monthsStr.map(m => seller.tiersByMonth[m]?.length || 0), 1);
+      const maxTiers = Math.max(...visibleMonthsStr.map(m => seller.tiersByMonth[m]?.length || 0), 1);
 
       for (let i = 0; i < maxTiers; i++) {
         const rowData = [
@@ -698,7 +725,7 @@ export default function EscalasPage() {
           seller.pais || '',
           seller.moneda || 'ARS',
           isBaja ? 'Baja' : 'Activa',
-          ...monthsStr.map(m => {
+          ...visibleMonthsStr.map(m => {
             const tiers = seller.tiersByMonth[m];
             const t = tiers && tiers[i];
             if (!t) return '';
@@ -762,6 +789,13 @@ export default function EscalasPage() {
             })}
           </div>
 
+          {/* Selector de Período 24M */}
+          <PeriodFilterSelector
+            selectedFilter={periodFilter}
+            onChangeFilter={setPeriodFilter}
+            range24M={range24M}
+          />
+
           {/* Buscador reactivo por cliente y Botón Exportar */}
           <div className="flex items-center gap-2 shrink-0">
             <div className="relative">
@@ -808,7 +842,7 @@ export default function EscalasPage() {
             <thead className="text-xs text-gray-500 uppercase sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
               <tr className="bg-gray-50">
                 <th scope="col" className="px-4 py-3 font-semibold min-w-[180px] sticky left-0 top-0 bg-gray-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-b border-gray-200">Seller</th>
-                {monthsStr.map((m) => (
+                {visibleMonthsStr.map((m) => (
                   <th key={m} scope="col" className="px-4 py-3 font-medium text-center whitespace-nowrap min-w-[160px] border-l border-b border-gray-200 sticky top-0 z-20 bg-gray-50">{m}</th>
                 ))}
               </tr>
@@ -816,13 +850,13 @@ export default function EscalasPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={monthsStr.length + 1} className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan={visibleMonthsStr.length + 1} className="px-6 py-12 text-center text-gray-400">
                     <div className="animate-pulse">Cargando escalas...</div>
                   </td>
                 </tr>
               ) : tableRows.length === 0 ? (
                 <tr>
-                  <td colSpan={monthsStr.length + 1} className="px-6 py-16 text-center text-slate-400">
+                  <td colSpan={visibleMonthsStr.length + 1} className="px-6 py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Search size={28} className="text-slate-300" />
                       <p className="text-sm font-semibold text-slate-700">No se encontraron clientes para los filtros seleccionados</p>
@@ -859,7 +893,7 @@ export default function EscalasPage() {
                       </td>
                     )}
                     
-                    {monthsStr.map((m) => {
+                    {visibleMonthsStr.map((m) => {
                       const cellData = row.months[m];
                       
                       if (!cellData) {

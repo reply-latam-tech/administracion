@@ -28,6 +28,8 @@ import { ExportData } from "@/lib/exportUtils";
 import { useExchangeRates, CurrencyKey, AuditEntry } from "@/context/ExchangeRateContext";
 import { useAuth } from "@/context/AuthContext";
 import { ExchangeRateRow } from "@/lib/exchangeRates";
+import PeriodFilterSelector from "@/components/PeriodFilterSelector";
+import { PeriodFilterOption, getRolling24MonthsRange } from "@/lib/periodFilterUtils";
 
 interface CurrencyConfig {
   key: CurrencyKey;
@@ -53,7 +55,8 @@ export default function TipoDeCambioPage() {
   const { rates, auditLog, loading, saving, canEdit, updateRate, refreshRates, lastSync } = useExchangeRates();
   const { user, role } = useAuth();
 
-  const [selectedYear, setSelectedYear] = useState<string>('ALL');
+  const [selectedYear, setSelectedYear] = useState<string>('24M');
+  const range24M = useMemo(() => getRolling24MonthsRange(), []);
   const [selectedStatus, setSelectedStatus] = useState<'ALL' | 'REAL' | 'PROYECTADO'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyKey>('ars');
@@ -130,7 +133,10 @@ export default function TipoDeCambioPage() {
   const filteredData = useMemo(() => {
     return rates.filter(row => {
       const p = row.periodo;
-      if (selectedYear !== 'ALL') {
+      if (selectedYear === '24M') {
+        const norm = p.length === 7 ? `${p}-01` : p;
+        if (norm < range24M.start || norm > range24M.end) return false;
+      } else if (selectedYear !== 'ALL' && selectedYear !== 'TODO') {
         if (!p.startsWith(selectedYear)) return false;
       }
       if (selectedStatus !== 'ALL') {
@@ -626,25 +632,11 @@ export default function TipoDeCambioPage() {
       {/* 3. Controles de Filtrado de Columnas (Años y Estado) */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
         <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
-              <Calendar size={13} />
-              Año:
-            </span>
-            {['ALL', '2027', '2026', '2025', '2024'].map(year => (
-              <button
-                key={year}
-                onClick={() => setSelectedYear(year)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  selectedYear === year
-                    ? 'bg-blue-600 text-white shadow-2xs font-bold'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                }`}
-              >
-                {year === 'ALL' ? 'Todos los Años' : year}
-              </button>
-            ))}
-          </div>
+          <PeriodFilterSelector
+            selectedFilter={selectedYear === 'ALL' ? 'TODO' : (selectedYear as PeriodFilterOption)}
+            onChangeFilter={(f) => setSelectedYear(f === 'TODO' ? 'ALL' : f)}
+            range24M={range24M}
+          />
 
           <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
