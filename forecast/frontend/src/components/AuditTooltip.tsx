@@ -79,9 +79,8 @@ export default function AuditTooltip({ audit, children, className = "" }: AuditT
     const diff = ((newNum - oldNum) / oldNum) * 100;
     const isPositive = diff > 0;
     diffBadge = (
-      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-        isPositive ? "bg-amber-400/20 text-amber-300 border border-amber-400/30" : "bg-emerald-400/20 text-emerald-300 border border-emerald-400/30"
-      }`}>
+      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isPositive ? "bg-amber-400/20 text-amber-300 border border-amber-400/30" : "bg-emerald-400/20 text-emerald-300 border border-emerald-400/30"
+        }`}>
         {isPositive ? "+" : ""}{diff.toFixed(2)}%
       </span>
     );
@@ -111,7 +110,7 @@ export default function AuditTooltip({ audit, children, className = "" }: AuditT
           className="pointer-events-none animate-in fade-in zoom-in-95 duration-150"
         >
           <div className="w-72 p-3.5 rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 text-white shadow-2xl border border-slate-700/70 backdrop-blur-md">
-            
+
             {/* Header: Usuario y Rol */}
             <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5 mb-2.5">
               <div className="flex items-center gap-2 overflow-hidden">
@@ -144,7 +143,7 @@ export default function AuditTooltip({ audit, children, className = "" }: AuditT
                 <span>{audit.label || "Ajuste de Valor"}</span>
                 {diffBadge}
               </div>
-              
+
               <div className="flex items-center justify-between gap-2 font-mono text-xs">
                 <div className="text-slate-400 truncate">
                   <span className="text-[10px] text-slate-500 block font-sans">Anterior:</span>
@@ -152,7 +151,7 @@ export default function AuditTooltip({ audit, children, className = "" }: AuditT
                     {audit.moneda ? `${audit.moneda} ` : ""}{audit.valor_anterior ?? "—"}
                   </span>
                 </div>
-                
+
                 <ArrowRight size={14} className="text-blue-400 shrink-0" />
 
                 <div className="text-right text-emerald-400 font-bold truncate">

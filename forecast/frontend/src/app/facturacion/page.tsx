@@ -98,6 +98,7 @@ export default function FacturacionPage() {
   const [gmvAuditFilterTerm, setGmvAuditFilterTerm] = useState('');
   const [editingGmvCell, setEditingGmvCell] = useState<{ sellerId: string; periodo: string } | null>(null);
   const [editGmvValue, setEditGmvValue] = useState('');
+  const [editGmvEstado, setEditGmvEstado] = useState<'REAL' | 'PROYECTADO'>('PROYECTADO');
   const [savingGmvKey, setSavingGmvKey] = useState<string | null>(null);
   const [justSavedGmvKey, setJustSavedGmvKey] = useState<string | null>(null);
   const [gmvSaveError, setGmvSaveError] = useState<string | null>(null);
@@ -133,6 +134,7 @@ export default function FacturacionPage() {
           .from('facturacion')
           .select('seller_id, periodo, valor_facturado, estado')
           .order('periodo', { ascending: true })
+          .range(0, 4999)
           .then(({ data }) => {
             if (data) {
               setRawFacturacion(data);
@@ -155,10 +157,12 @@ export default function FacturacionPage() {
   }, []);
 
   // Manejo de edición inline
-  const handleStartEditGmv = (sellerId: string, periodo: string, currentVal: number) => {
+  const handleStartEditGmv = (sellerId: string, periodo: string, currentVal: number, currentEstado?: string) => {
     if (!canEdit) return;
     setEditingGmvCell({ sellerId, periodo });
-    setEditGmvValue(currentVal ? String(currentVal) : '');
+    setEditGmvValue(currentVal !== undefined && currentVal !== null ? String(currentVal) : '');
+    const defaultEstado = currentEstado === 'REAL' ? 'REAL' : (periodo < '2026-11-01' ? 'REAL' : 'PROYECTADO');
+    setEditGmvEstado(defaultEstado);
     setGmvSaveError(null);
   };
 
@@ -167,8 +171,9 @@ export default function FacturacionPage() {
     setEditGmvValue('');
   };
 
-  const handleSaveGmvCell = async (sellerId: string, periodo: string, rowMonedaOrigen: string) => {
+  const handleSaveGmvCell = async (sellerId: string, periodo: string, rowMonedaOrigen: string, forcedEstado?: 'REAL' | 'PROYECTADO') => {
     if (!editingGmvCell) return;
+    const targetEstado = forcedEstado || editGmvEstado;
     const cellKey = `${sellerId}_${periodo}`;
     const cleanStr = editGmvValue.replace(',', '.').trim();
     const numInput = parseFloat(cleanStr);
@@ -197,7 +202,7 @@ export default function FacturacionPage() {
 
     const nextFact = rawFacturacion.map(f => {
       if (f.seller_id === sid && f.periodo.startsWith(periodo.substring(0, 7))) {
-        return { ...f, valor_facturado: rawNewVal, estado: 'PROYECTADO' };
+        return { ...f, valor_facturado: rawNewVal, estado: targetEstado };
       }
       return f;
     });
@@ -209,7 +214,7 @@ export default function FacturacionPage() {
         seller_id: sid,
         periodo: normP,
         valor_facturado: rawNewVal,
-        estado: 'PROYECTADO',
+        estado: targetEstado,
         variacion_mensual: 0
       });
     }
@@ -226,6 +231,7 @@ export default function FacturacionPage() {
           seller_id: sid,
           periodo: normP,
           nuevo_valor: rawNewVal,
+          nuevo_estado: targetEstado,
           usuario_email: userEmail,
           userRole: role || (isPropietario ? 'propietario' : isDirectivo ? 'directivo' : 'administracion')
         })
@@ -235,7 +241,7 @@ export default function FacturacionPage() {
       if (!res.ok || !json.success) {
         setRawFacturacion(prevFact);
         if (facturacionCache) facturacionCache.facturacion = prevFact;
-        setGmvSaveError(json.error || 'Error al persistir la proyección de ventas.');
+        setGmvSaveError(json.error || 'Error al persistir la facturación/proyección de ventas.');
       } else {
         setJustSavedGmvKey(cellKey);
         setTimeout(() => setJustSavedGmvKey(null), 2500);
@@ -295,7 +301,8 @@ export default function FacturacionPage() {
           supabase
             .from('facturacion')
             .select('seller_id, periodo, valor_facturado, estado')
-            .order('periodo', { ascending: true }),
+            .order('periodo', { ascending: true })
+            .range(0, 4999),
           supabase
             .from('estacionalidad_mensual')
             .select('seller_id, mes, indice_peso'),
@@ -666,8 +673,8 @@ export default function FacturacionPage() {
     const { chartDataset, countriesData, globalCurrency } = processedData;
     if (!chartDataset || chartDataset.length === 0) return null;
 
-    // Buscar último mes con facturación real
-    const realMonths = chartDataset.filter(r => r.periodo <= '2026-09-01');
+    // Buscar último mes con facturación real (hasta Octubre 2026 cerrado)
+    const realMonths = chartDataset.filter(r => r.periodo <= '2026-10-01');
     const latestMonth = realMonths.length > 0 ? realMonths[realMonths.length - 1] : chartDataset[chartDataset.length - 1];
 
     // País con mayor facturación acumulada
@@ -878,7 +885,7 @@ export default function FacturacionPage() {
       'Moneda Reportada',
       'Estado',
       'Fecha Alta',
-      ...periodos.map(p => `${formatMonthStr(p)}${p >= '2026-10-01' ? ' (PROY)' : ''}`)
+      ...periodos.map(p => `${formatMonthStr(p)}${p >= '2026-11-01' ? ' (PROY)' : ''}`)
     ];
 
     const rows: (string | number)[][] = [];
@@ -1204,7 +1211,7 @@ export default function FacturacionPage() {
                   Seller / Cliente
                 </th>
                 {processedData.sortedPeriodos.map((p) => {
-                  const isProj = p >= '2026-10-01';
+                  const isProj = p >= '2026-11-01';
                   return (
                     <th key={p} scope="col" className={`px-4 py-3 font-bold text-right whitespace-nowrap min-w-[140px] border-l border-b border-slate-200 sticky top-0 z-20 ${isProj ? 'bg-orange-50/95 text-orange-950' : 'bg-slate-100 text-slate-700'}`}>
                       <div className="flex flex-col items-end">
@@ -1334,7 +1341,7 @@ export default function FacturacionPage() {
                             
                             {processedData.sortedPeriodos.map((p) => {
                               const cellData = row.months[p];
-                              const isProjected = cellData?.estado === 'PROYECTADO' || p >= '2026-10-01';
+                              const isProjected = cellData?.estado ? cellData.estado === 'PROYECTADO' : p >= '2026-11-01';
                               const cellKey = `${row.sellerId}_${p}`;
                               const isEditing = editingGmvCell?.sellerId === row.sellerId && editingGmvCell?.periodo === p;
                               const isSavingThis = savingGmvKey === cellKey;
@@ -1345,16 +1352,19 @@ export default function FacturacionPage() {
                                 a.periodo.startsWith(p.substring(0, 7))
                               );
 
-                              if (!cellData || !cellData.valor) {
+                              const hasNumericVal = cellData && typeof cellData.valor === 'number';
+                              const isZeroExplicit = hasNumericVal && cellData.valor === 0 && (gmvAudit || cellData.estado === 'REAL' || cellData.rawValor !== undefined);
+
+                              if (!cellData || (!hasNumericVal && cellData.valor !== 0) || (cellData.valor === 0 && !isZeroExplicit)) {
                                 return (
                                   <td 
                                     key={p} 
-                                    onDoubleClick={() => isProjected && handleStartEditGmv(row.sellerId, p, 0)}
+                                    onDoubleClick={() => canEdit && (isProjected || p >= '2026-10-01') && handleStartEditGmv(row.sellerId, p, 0, isProjected ? 'PROYECTADO' : 'REAL')}
                                     className={`px-4 py-3 text-right border-l border-b border-slate-100 relative ${isProjected ? 'bg-orange-50/15' : ''}`}
                                   >
-                                    {isProjected && canEdit ? (
+                                    {(isProjected || p >= '2026-10-01') && canEdit ? (
                                       <span 
-                                        onClick={() => handleStartEditGmv(row.sellerId, p, 0)}
+                                        onClick={() => handleStartEditGmv(row.sellerId, p, 0, isProjected ? 'PROYECTADO' : 'REAL')}
                                         className="text-slate-300 hover:text-blue-600 font-mono text-xs cursor-pointer"
                                       >
                                         +Proyectar
@@ -1373,13 +1383,13 @@ export default function FacturacionPage() {
                               return (
                                 <td 
                                   key={p} 
-                                  onDoubleClick={() => isProjected && handleStartEditGmv(row.sellerId, p, val)}
+                                  onDoubleClick={() => canEdit && (isProjected || p >= '2026-10-01') && handleStartEditGmv(row.sellerId, p, val, cellData?.estado)}
                                   className={`px-4 py-3 text-right border-l border-b border-slate-100 relative group/cell transition-colors ${
                                     isProjected ? 'bg-orange-50/25' : ''
                                   } ${
                                     isJustSaved ? 'bg-emerald-100/90' : ''
                                   } ${
-                                    isProjected && canEdit && !isEditing ? 'hover:bg-orange-100/40 cursor-cell' : ''
+                                    canEdit && !isEditing ? 'hover:bg-blue-50/40 cursor-cell' : ''
                                   }`}
                                 >
                                   <AuditTooltip
@@ -1395,7 +1405,7 @@ export default function FacturacionPage() {
                                         row.monedaDisplay
                                       ),
                                       moneda: row.monedaDisplay,
-                                      label: `Proyección GMV • ${row.sellerName}`
+                                      label: `Ventas ${cellData?.estado === 'REAL' ? 'Reales (Cerrado)' : 'Proyectadas'} • ${row.sellerName}`
                                     } : null}
                                   >
                                     {/* Indicador de edición con auditoría (punto azul) */}
@@ -1416,7 +1426,34 @@ export default function FacturacionPage() {
                                     )}
 
                                     {isEditing ? (
-                                      <div className="flex items-center gap-1 justify-end py-1">
+                                      <div className="flex flex-col items-end py-0.5 relative">
+                                        {/* Floating Selector de Tipo de Dato */}
+                                        <div className="absolute -top-9 right-0 z-50 bg-slate-900/95 text-white px-2 py-1 rounded-xl shadow-2xl border border-slate-700/80 flex items-center gap-1.5 text-[10px] animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md whitespace-nowrap">
+                                          <span className="text-slate-400 font-medium">Estado:</span>
+                                          <button
+                                            type="button"
+                                            onMouseDown={(e) => { e.preventDefault(); setEditGmvEstado('REAL'); }}
+                                            className={`px-1.5 py-0.5 rounded-lg font-bold text-[10px] transition-all flex items-center gap-1 ${
+                                              editGmvEstado === 'REAL' 
+                                                ? 'bg-blue-600 text-white shadow-xs' 
+                                                : 'bg-slate-800 text-slate-400 hover:text-white'
+                                            }`}
+                                          >
+                                            🔵 Real (Cerrado)
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onMouseDown={(e) => { e.preventDefault(); setEditGmvEstado('PROYECTADO'); }}
+                                            className={`px-1.5 py-0.5 rounded-lg font-bold text-[10px] transition-all flex items-center gap-1 ${
+                                              editGmvEstado === 'PROYECTADO' 
+                                                ? 'bg-orange-500 text-white shadow-xs' 
+                                                : 'bg-slate-800 text-slate-400 hover:text-white'
+                                            }`}
+                                          >
+                                            🟠 Proyectado
+                                          </button>
+                                        </div>
+
                                         <input
                                           ref={editGmvInputRef}
                                           type="text"
@@ -1424,7 +1461,9 @@ export default function FacturacionPage() {
                                           onChange={(e) => setEditGmvValue(e.target.value)}
                                           onKeyDown={(e) => handleKeyDownGmv(e, row.sellerId, p, row.monedaOrigen)}
                                           onBlur={() => handleSaveGmvCell(row.sellerId, p, row.monedaOrigen)}
-                                          className="w-24 px-1.5 py-1 text-xs font-bold font-mono text-right bg-white border-2 border-orange-500 rounded shadow-sm focus:outline-none text-slate-900"
+                                          className={`w-24 px-1.5 py-1 text-xs font-bold font-mono text-right bg-white border-2 rounded shadow-sm focus:outline-none text-slate-900 ${
+                                            editGmvEstado === 'REAL' ? 'border-blue-500 focus:ring-1 focus:ring-blue-400' : 'border-orange-500 focus:ring-1 focus:ring-orange-400'
+                                          }`}
                                         />
                                       </div>
                                     ) : isSavingThis ? (
@@ -1448,14 +1487,14 @@ export default function FacturacionPage() {
                                               *PROY
                                             </span>
                                           )}
-                                          {isProjected && canEdit && (
+                                          {canEdit && (isProjected || p >= '2026-10-01') && (
                                             <Edit3 
                                               size={10} 
                                               onClick={(e: React.MouseEvent) => {
                                                 e.stopPropagation();
-                                                handleStartEditGmv(row.sellerId, p, val);
+                                                handleStartEditGmv(row.sellerId, p, val, cellData?.estado);
                                               }}
-                                              className="opacity-0 group-hover/cell:opacity-100 text-orange-600 hover:text-orange-800 transition-opacity cursor-pointer shrink-0" 
+                                              className="opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-600 transition-opacity cursor-pointer shrink-0" 
                                             />
                                           )}
                                         </div>

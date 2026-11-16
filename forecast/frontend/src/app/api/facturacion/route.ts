@@ -58,7 +58,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { seller_id, periodo, nuevo_valor, usuario_email, userRole } = body;
+    const { seller_id, periodo, nuevo_valor, nuevo_estado, usuario_email, userRole } = body;
 
     // 1. Validaciones básicas
     if (!seller_id || !periodo || nuevo_valor === undefined || nuevo_valor === null) {
@@ -87,15 +87,17 @@ export async function POST(request: Request) {
     const normalizedPeriod = periodo.length === 7 ? `${periodo}-01` : periodo;
     const nowIso = new Date().toISOString();
     const sid = typeof seller_id === 'number' ? seller_id : parseInt(String(seller_id), 10);
+    const targetEstado = (nuevo_estado === 'REAL' || nuevo_estado === 'real') ? 'REAL' : 'PROYECTADO';
 
-    // 3. Buscar valor anterior en public.facturacion
+    // 3. Buscar valor y estado anterior en public.facturacion
     let previousVal: number | null = null;
+    let previousEstado: string = 'PROYECTADO';
     let existingRowId: number | null = null;
 
     try {
       const { data: existing } = await supabaseAdmin
         .from('facturacion')
-        .select('id, valor_facturado')
+        .select('id, valor_facturado, estado')
         .eq('seller_id', sid)
         .eq('periodo', normalizedPeriod)
         .maybeSingle();
@@ -103,6 +105,7 @@ export async function POST(request: Request) {
       if (existing) {
         existingRowId = existing.id;
         previousVal = existing.valor_facturado !== null ? Number(existing.valor_facturado) : null;
+        previousEstado = existing.estado || 'PROYECTADO';
       }
     } catch (e) {
       console.warn('Error buscando valor anterior en facturacion:', e);
@@ -114,7 +117,7 @@ export async function POST(request: Request) {
         .from('facturacion')
         .update({
           valor_facturado: numericVal,
-          estado: 'PROYECTADO'
+          estado: targetEstado
         })
         .eq('id', existingRowId);
 
@@ -129,7 +132,7 @@ export async function POST(request: Request) {
           seller_id: sid,
           periodo: normalizedPeriod,
           valor_facturado: numericVal,
-          estado: 'PROYECTADO',
+          estado: targetEstado,
           variacion_mensual: 0
         }]);
 
@@ -152,6 +155,8 @@ export async function POST(request: Request) {
             usuario_email: emailLower,
             valor_anterior: previousVal,
             valor_nuevo: numericVal,
+            estado_anterior: previousEstado,
+            estado_nuevo: targetEstado,
             timestamp: nowIso
           })
         }]);
