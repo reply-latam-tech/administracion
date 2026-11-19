@@ -42,7 +42,7 @@ export const EXCHANGE_RATES: ExchangeRateRow[] = [
   { periodo: '2025-07-01', ars: 1330.0, cop: 4097.38,clp: 964.28, mxn: 18.80, pen: 3.56, usd: 1.0, estado: 'REAL' },
   { periodo: '2025-08-01', ars: 1330.0, cop: 4016.0, clp: 965.28, mxn: 18.65, pen: 3.54, usd: 1.0, estado: 'REAL' },
   { periodo: '2025-09-01', ars: 1450.0, cop: 3897.0, clp: 959.19, mxn: 18.35, pen: 3.50, usd: 1.0, estado: 'REAL' },
-  { periodo: '2025-10-01', ars: 1480.0, cop: 1.0,    clp: 940.53, mxn: 18.54, pen: 3.43, usd: 1.0, estado: 'REAL' },
+  { periodo: '2025-10-01', ars: 1480.0, cop: 3885.0,    clp: 940.53, mxn: 18.54, pen: 3.43, usd: 1.0, estado: 'REAL' },
   { periodo: '2025-11-01', ars: 1420.0, cop: 3784.0, clp: 928.00, mxn: 18.35, pen: 3.37, usd: 1.0, estado: 'REAL' },
   { periodo: '2025-12-01', ars: 1450.0, cop: 3790.77,clp: 911.18, mxn: 18.00, pen: 3.37, usd: 1.0, estado: 'REAL' },
 

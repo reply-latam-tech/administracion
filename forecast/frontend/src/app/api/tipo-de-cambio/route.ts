@@ -51,7 +51,7 @@ const BASE_RATES: TipoCambioRow[] = [
   { periodo: '2025-07-01', ars: 1330.00, mxn: 18.80, pen: 3.56, clp: 964.28, cop: 4097.38, moneda_base: 'USD', estado: 'REAL' },
   { periodo: '2025-08-01', ars: 1330.00, mxn: 18.65, pen: 3.54, clp: 965.28, cop: 4016.00, moneda_base: 'USD', estado: 'REAL' },
   { periodo: '2025-09-01', ars: 1450.00, mxn: 18.35, pen: 3.50, clp: 959.19, cop: 3897.00, moneda_base: 'USD', estado: 'REAL' },
-  { periodo: '2025-10-01', ars: 1480.00, mxn: 18.54, pen: 3.43, clp: 940.53, cop: 1.00,    moneda_base: 'USD', estado: 'REAL' },
+  { periodo: '2025-10-01', ars: 1480.00, mxn: 18.54, pen: 3.43, clp: 940.53, cop: 3885.00,    moneda_base: 'USD', estado: 'REAL' },
   { periodo: '2025-11-01', ars: 1420.00, mxn: 18.35, pen: 3.37, clp: 928.00, cop: 3784.00, moneda_base: 'USD', estado: 'REAL' },
   { periodo: '2025-12-01', ars: 1450.00, mxn: 18.00, pen: 3.37, clp: 911.18, cop: 3790.77, moneda_base: 'USD', estado: 'REAL' },
   // 2026 Reales

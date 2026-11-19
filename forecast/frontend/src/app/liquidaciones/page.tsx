@@ -1222,10 +1222,10 @@ function MetasFacturacionContent() {
           }
         }
 
-        // Subtotal (Ingreso Reply) = Honorarios netos de gestión Reply (Monto Servicio - Descuento)
-        subtotalVal = Math.round((montoServicio - descuentoVal) * 100) / 100;
+        // Subtotal (Ingreso Reply) = Monto Servicio - Descuento + Botmaker
+        subtotalVal = Math.round(((montoServicio - descuentoVal) + botmakerVal) * 100) / 100;
         ivaVal = 0; // Cuentas del exterior no pagan IVA argentino (exportación de servicios)
-        totalVal = Math.round((subtotalVal + botmakerVal) * 100) / 100;
+        totalVal = subtotalVal;
       } else {
         // Cuentas locales de Argentina (ARS):
         if (mKey === '2026-10') {
@@ -1253,9 +1253,10 @@ function MetasFacturacionContent() {
           descuentoVal = Math.round(montoServicio * 0.20 * 100) / 100;
         }
 
-        subtotalVal = Math.round((montoServicio - descuentoVal) * 100) / 100;
-        ivaVal = Math.round((subtotalVal + botmakerVal) * 0.21 * 100) / 100;
-        totalVal = Math.round((subtotalVal + botmakerVal + ivaVal) * 100) / 100;
+        // Subtotal (Ingreso Reply) = Monto Servicio - Descuento + Botmaker
+        subtotalVal = Math.round(((montoServicio - descuentoVal) + botmakerVal) * 100) / 100;
+        ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+        totalVal = Math.round((subtotalVal + ivaVal) * 100) / 100;
       }
 
       // 3. Reglas comerciales oficiales para Café Martínez:
@@ -1314,9 +1315,9 @@ function MetasFacturacionContent() {
         if (discountRate > 0) {
           const subtotalBruto = montoServicio;
           descuentoVal = Math.round(subtotalBruto * discountRate * 100) / 100;
-          subtotalVal = subtotalBruto - descuentoVal;
-          ivaVal = Math.round((subtotalVal + botmakerVal) * 0.21 * 100) / 100;
-          totalVal = Math.round((subtotalVal + botmakerVal + ivaVal) * 100) / 100;
+          subtotalVal = Math.round(((subtotalBruto - descuentoVal) + botmakerVal) * 100) / 100;
+          ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+          totalVal = Math.round((subtotalVal + ivaVal) * 100) / 100;
         }
       }
 
@@ -5182,23 +5183,6 @@ function MetasFacturacionContent() {
                           </tr>
                         )}
 
-                        {/* Fila Subtotal (Ingreso Reply) */}
-                        <tr className="bg-blue-50/50 hover:bg-blue-50 transition-colors border-b border-blue-100 font-bold">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-bold border-r border-blue-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
-                            Subtotal (Ingreso Reply)
-                          </td>
-                          {filteredMonths.map(m => {
-                            const mData = seller.months[m.key];
-                            const isProj = mData?.isProjected;
-                            const cur = mData?.moneda || executiveKPIs?.currency;
-                            return (
-                              <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right font-bold border-l ${isProj ? 'bg-orange-100/50 border-orange-200 text-orange-950' : 'border-blue-100 text-blue-900'}`}>
-                                {mData ? formatCurrency(mData.subtotal, cur) : '-'}
-                              </td>
-                            );
-                          })}
-                        </tr>
-
                         {/* Fila Botmaker (fila aparte después de Subtotal) */}
                         {Object.values(seller.months).some(m => (m.botmaker || 0) > 0) && (
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
@@ -5222,6 +5206,23 @@ function MetasFacturacionContent() {
                             })}
                           </tr>
                         )}
+
+                        {/* Fila Subtotal (Ingreso Reply) */}
+                        <tr className="bg-blue-50/50 hover:bg-blue-50 transition-colors border-b border-blue-100 font-bold">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-bold border-r border-blue-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                            Subtotal (Ingreso Reply)
+                          </td>
+                          {filteredMonths.map(m => {
+                            const mData = seller.months[m.key];
+                            const isProj = mData?.isProjected;
+                            const cur = mData?.moneda || executiveKPIs?.currency;
+                            return (
+                              <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right font-bold border-l ${isProj ? 'bg-orange-100/50 border-orange-200 text-orange-950' : 'border-blue-100 text-blue-900'}`}>
+                                {mData ? formatCurrency(mData.subtotal, cur) : '-'}
+                              </td>
+                            );
+                          })}
+                        </tr>
 
                         {/* Fila IVA */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-500">
@@ -5288,6 +5289,20 @@ function MetasFacturacionContent() {
                     ))}
                   </tr>
 
+                  {/* Fila Total Botmaker (si hay en el país) - ubicado después del Subtotal Reply */}
+                  {Object.values(detailedCountryTotals).some(t => t.botmaker > 0) && (
+                    <tr className="bg-slate-50 text-slate-700 font-medium text-xs border-b border-slate-200">
+                      <td className="px-6 py-2.5 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
+                        TOTAL BOTMAKER (LICENCIAS)
+                      </td>
+                      {filteredMonths.map(m => (
+                        <td key={m.key} className="px-6 py-2.5 text-right font-mono border-l border-slate-200 whitespace-nowrap text-indigo-700 font-semibold">
+                          {detailedCountryTotals[m.key]?.botmaker > 0 ? formatCurrency(detailedCountryTotals[m.key]?.botmaker, executiveKPIs?.currency) : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
+
                   {/* Fila Total Subtotal (Ingreso Genuino Reply) */}
                   <tr className="bg-blue-900 text-white font-black text-xs shadow-md">
                     <td className="px-6 py-3.5 sticky left-0 bg-blue-900 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)] border-r border-blue-800">
@@ -5302,20 +5317,6 @@ function MetasFacturacionContent() {
                       </td>
                     ))}
                   </tr>
-
-                  {/* Fila Total Botmaker (si hay en el país) - ubicado después del Subtotal Reply */}
-                  {Object.values(detailedCountryTotals).some(t => t.botmaker > 0) && (
-                    <tr className="bg-slate-50 text-slate-700 font-medium text-xs border-b border-slate-200">
-                      <td className="px-6 py-2.5 sticky left-0 bg-slate-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-slate-200">
-                        TOTAL BOTMAKER (LICENCIAS)
-                      </td>
-                      {filteredMonths.map(m => (
-                        <td key={m.key} className="px-6 py-2.5 text-right font-mono border-l border-slate-200 whitespace-nowrap text-indigo-700 font-semibold">
-                          {detailedCountryTotals[m.key]?.botmaker > 0 ? formatCurrency(detailedCountryTotals[m.key]?.botmaker, executiveKPIs?.currency) : '-'}
-                        </td>
-                      ))}
-                    </tr>
-                  )}
 
                   {/* Fila Total IVA */}
                   <tr className="bg-slate-100 text-slate-600 font-semibold text-xs border-b border-slate-200">
