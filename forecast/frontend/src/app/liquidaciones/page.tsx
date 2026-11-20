@@ -183,6 +183,8 @@ function MetasFacturacionContent() {
   const [monthsList, setMonthsList] = useState<MonthMeta[]>([]);
   const [newsanSubAccounts, setNewsanSubAccounts] = useState<Record<string, Record<string, number>>>({});
   const [newsanMetricas, setNewsanMetricas] = useState<Record<string, { sesiones: number; horas: number }>>({});
+  const [sodaEscalas, setSodaEscalas] = useState<any[]>([]);
+  const [sodaMetricas, setSodaMetricas] = useState<Record<string, number>>({});
   const [axoCredits, setAxoCredits] = useState<Record<string, number>>({});
   const [newsanChileExpanded, setNewsanChileExpanded] = useState<boolean>(true);
   const [evacolExpanded, setEvacolExpanded] = useState<boolean>(true);
@@ -224,7 +226,7 @@ function MetasFacturacionContent() {
         return { data: allLiqs, error: liqError };
       };
 
-      const [liqsRes, sellersRes, metricasRes, facturacionSubRes, escalasNewsanRes, metricasAxoRes] = await Promise.all([
+      const [liqsRes, sellersRes, metricasRes, facturacionSubRes, escalasNewsanRes, metricasAxoRes, sodaMetricasRes, sodaEscalasRes] = await Promise.all([
         fetchAllLiquidaciones(),
         supabase
           .from('dim_sellers')
@@ -249,7 +251,17 @@ function MetasFacturacionContent() {
           .from('fact_metricas_operativas')
           .select('*')
           .eq('id_cliente', 18)
-          .eq('tipo_metrica', 'CREDITOS')
+          .eq('tipo_metrica', 'CREDITOS'),
+        supabase
+          .from('fact_metricas_operativas')
+          .select('*')
+          .eq('seller_id', 978681369)
+          .eq('tipo_metrica', 'SESIONES'),
+        supabase
+          .from('dim_escalas')
+          .select('*')
+          .eq('seller_id', 978681369)
+          .order('alicuota', { ascending: false })
       ]);
 
       if (escalasNewsanRes?.data) {
@@ -288,6 +300,24 @@ function MetasFacturacionContent() {
         });
       }
       setAxoCredits(axoCredMap);
+
+      // Parsear métricas de Soda Stream Web (Sesiones) y Escalas
+      const sodaMetMap: Record<string, number> = {};
+      if (sodaMetricasRes?.data) {
+        sodaMetricasRes.data.forEach((m: any) => {
+          const d = new Date(m.periodo + 'T12:00:00');
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const key = `${yyyy}-${mm}`;
+          sodaMetMap[key] = Number(m.cantidad) || 0;
+          sodaMetMap[m.periodo] = Number(m.cantidad) || 0;
+        });
+      }
+      setSodaMetricas(sodaMetMap);
+
+      if (sodaEscalasRes?.data) {
+        setSodaEscalas(sodaEscalasRes.data);
+      }
 
       // Parsear facturación individual de subcuentas ML y México Axo
       const subMap: Record<string, Record<string, number>> = {};
@@ -456,6 +486,36 @@ function MetasFacturacionContent() {
     return { valorSesion: 0, minGarantizado: 1945372.20, valorHora: 4266.53 };
   };
 
+  // Función para obtener tarifa por volumen de sesiones de Soda Stream Web
+  const getSodaWebFee = (monthKey: string, sesiones: number) => {
+    const periodStr = `${monthKey}-01`;
+    const periodEscalas = sodaEscalas
+      .filter((e: any) => e.periodo === periodStr)
+      .sort((a: any, b: any) => Number(b.alicuota) - Number(a.alicuota));
+
+    let fee = 0;
+    let appliedCargo = 'MINIMO';
+    let appliedAlic: number = 0;
+
+    for (const t of periodEscalas) {
+      if (t.tipo_cargo === 'SESIONES' && sesiones >= Number(t.alicuota)) {
+        fee = Number(t.monto_objetivo);
+        appliedCargo = 'SESIONES';
+        appliedAlic = Number(t.alicuota);
+        break;
+      }
+    }
+
+    if (!fee) {
+      const minTier = periodEscalas.find((t: any) => t.tipo_cargo === 'MINIMO');
+      fee = Number(minTier?.monto_objetivo) || 0;
+      appliedCargo = 'MINIMO';
+      appliedAlic = 0;
+    }
+
+    return { fee, appliedCargo, appliedAlic };
+  };
+
   // Formateadores de moneda
   const formatCurrency = (val: number, currency = 'ARS') => {
     if (val === 0 || !val) return '$ 0';
@@ -567,6 +627,7 @@ function MetasFacturacionContent() {
           tc?: number;
           factUsd?: number;
           feeUsd?: number;
+          sodaDetails?: any;
         }>;
         totalRow: number;
       }>;
@@ -655,7 +716,10 @@ function MetasFacturacionContent() {
 
     rawLiquidaciones.forEach((row: any) => {
       const sId = String(row.seller_id);
-      const sName = row.nombre_seller;
+      let sName = row.nombre_seller;
+      if (sId === '430009374') {
+        sName = 'Soda Stream';
+      }
       const meta = sellersMap[sId] || {
         code: 'AR',
         name: 'Argentina',
@@ -1321,6 +1385,39 @@ function MetasFacturacionContent() {
         }
       }
 
+      // 7. Regla comercial oficial para Soda Stream Argentina (seller_id 430009374 - Soda Stream ML + Web + Botmaker):
+      // Factura unificada Reply: 50% Fee ML + Fee Atención Web (por sesiones) + Botmaker
+      const isSodaStream = sId === '430009374' || sName.toLowerCase().includes('soda stream');
+      let sodaDetailsData: any = null;
+      if (isSodaStream) {
+        const feeML = Number(row.subtotal_mercado_libre) || 0;
+        const montoAtencionML = Math.round((feeML / 2) * 100) / 100;
+
+        const qSes = sodaMetricas[mKey] ?? (sodaMetricas[`${mKey}-01`] || 0);
+        const webTar = getSodaWebFee(mKey, qSes);
+        const montoWeb = webTar.fee;
+
+        let bm = sellerOctBotmaker[sId] !== undefined ? sellerOctBotmaker[sId] : (Number(row.botmaker) || 0);
+        if (mKey >= '2026-10') bm = 410000;
+
+        botmakerVal = bm;
+        descuentoVal = 0;
+        montoServicio = montoAtencionML + montoWeb;
+        subtotalVal = Math.round((montoServicio + botmakerVal) * 100) / 100;
+        ivaVal = Math.round(subtotalVal * 0.21 * 100) / 100;
+        totalVal = Math.round((subtotalVal + ivaVal) * 100) / 100;
+
+        sodaDetailsData = {
+          montoAtencionML,
+          feeML,
+          sesiones: qSes,
+          montoWeb,
+          appliedWebCargo: webTar.appliedCargo,
+          appliedWebAlic: webTar.appliedAlic,
+          botmaker: botmakerVal
+        };
+      }
+
       const isProj = row.estado === 'PROYECTADO';
 
       // Conversión dinámica de visualización según currencyView para TODOS los conceptos
@@ -1375,7 +1472,8 @@ function MetasFacturacionContent() {
         originalTotal: totalVal,
         tc: extraTc,
         factUsd: extraFactUsd,
-        feeUsd: extraFeeUsd
+        feeUsd: extraFeeUsd,
+        sodaDetails: sodaDetailsData
       };
 
       countriesMap[cCode].sellersMap[sId].totalRow += displaySubtotal;
@@ -1571,7 +1669,7 @@ function MetasFacturacionContent() {
     };
 
     return countriesMap;
-  }, [rawLiquidaciones, sellersMap, currencyView, newsanSubAccounts, newsanEscalas, monthsList, axoCredits]);
+  }, [rawLiquidaciones, sellersMap, currencyView, newsanSubAccounts, newsanEscalas, monthsList, axoCredits, sodaEscalas, sodaMetricas]);
 
   // Obtener el cliente seleccionado si existe
   const selectedSellerObj = useMemo(() => {
@@ -3238,6 +3336,7 @@ function MetasFacturacionContent() {
                   let hasRenderedAxo = false;
                   let hasRenderedEvacol = false;
                   let hasRenderedNaturaMX = false;
+                  let hasRenderedSodaStream = false;
                   const allSellers = Object.values(groupedData[selectedCountry]?.sellersMap || {})
                     .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
                     .sort((a, b) => a.name.localeCompare(b.name));
@@ -3533,6 +3632,227 @@ function MetasFacturacionContent() {
                               return (
                                 <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-300 font-black text-emerald-950 font-mono text-xs">
                                   US$ {feeConsolidado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+                      );
+                    }
+
+                    // =====================================================================
+                    // SODA STREAM ARGENTINA (CONSOLIDADO ML + WEB + BOTMAKER)
+                    // =====================================================================
+                    const isSodaStreamAccount = seller.id === '430009374' || seller.name.toLowerCase().includes('soda stream');
+                    if (isSodaStreamAccount) {
+                      if (hasRenderedSodaStream) return null;
+                      hasRenderedSodaStream = true;
+
+                      return (
+                        <tbody key="sodastream_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
+                          {/* 1. CABECERA GENERAL DE SODA STREAM */}
+                          <tr className="bg-sky-100/80 border-b border-sky-200">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-sky-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-sky-950 border-r border-sky-200">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-sky-600"></span>
+                                  <span className="text-xs uppercase tracking-wide font-black">Soda Stream (Argentina)</span>
+                                </div>
+                                <span className="text-[10px] bg-sky-700 text-white font-bold px-2 py-0.5 rounded shadow-xs">
+                                  Consolidado Oficial
+                                </span>
+                              </div>
+                            </td>
+                            {filteredMonths.map(m => (
+                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-sky-950 border-l border-sky-200/80 bg-sky-100/60">
+                                Soda Stream Total
+                              </td>
+                            ))}
+                          </tr>
+
+                          {/* 2. SECCIÓN MERCADO LIBRE */}
+                          <tr className="bg-slate-100/80 border-b border-slate-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10">
+                              Mercado Libre (Atención al Cliente)
+                            </td>
+                          </tr>
+
+                          {/* Ventas del Cliente (GMV ML) */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
+                              Ventas del Cliente (GMV ML)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const gmvVal = seller.months[m.key]?.facturacion || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-800 font-mono text-[11px]">
+                                  {gmvVal > 0 ? formatCurrency(gmvVal, executiveKPIs?.currency) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Fee ML Aplicado */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-600">
+                            <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium pl-9 border-r border-slate-100 text-xs">
+                              Fee ML Aplicado
+                            </td>
+                            {filteredMonths.map(m => {
+                              const feeAlic = seller.months[m.key]?.fee;
+                              return (
+                                <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px]">
+                                  {typeof feeAlic === 'number' ? formatPercent(feeAlic) : (feeAlic || '-')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Monto Servicio ML (100%) */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-500 text-xs">
+                            <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium pl-9 border-r border-slate-100">
+                              Monto Servicio ML (100%)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const fee100 = (seller.months[m.key] as any)?.sodaDetails?.feeML || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-600">
+                                  {fee100 > 0 ? formatCurrency(fee100, executiveKPIs?.currency) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Subtotal Atención al Cliente (50% Fee ML) */}
+                          <tr className="bg-sky-50/40 hover:bg-sky-50/60 transition-colors border-b border-slate-200 font-bold">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-sky-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-sky-950 font-bold border-r border-sky-200 pl-9">
+                              Subtotal Atención al Cliente (Fee ML / 2)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const atML = (seller.months[m.key] as any)?.sodaDetails?.montoAtencionML || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-bold text-sky-950 font-mono text-[11px]">
+                                  {atML > 0 ? formatCurrency(atML, executiveKPIs?.currency) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* 3. SECCIÓN ATENCIÓN OPERATIVA WEB */}
+                          <tr className="bg-slate-100/80 border-b border-slate-200">
+                            <td colSpan={filteredMonths.length + 1} className="px-6 py-1.5 font-bold text-[10px] uppercase tracking-wider text-slate-700 sticky left-0 bg-slate-100 z-10">
+                              Soda Stream Web (Atención Operativa por Sesiones)
+                            </td>
+                          </tr>
+
+                          {/* Sesiones del Mes */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-700 font-medium pl-9 border-r border-slate-100">
+                              Sesiones Mensuales
+                            </td>
+                            {filteredMonths.map(m => {
+                              const q = (seller.months[m.key] as any)?.sodaDetails?.sesiones || sodaMetricas[m.key] || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 text-slate-800 font-mono text-[11px]">
+                                  {q > 0 ? `${q.toLocaleString('es-AR')} ses` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Tramo de Escala Web Aplicado */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-600">
+                            <td className="px-6 py-1.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium pl-9 border-r border-slate-100 text-xs">
+                              Escala Web Aplicada
+                            </td>
+                            {filteredMonths.map(m => {
+                              const cargo = (seller.months[m.key] as any)?.sodaDetails?.appliedWebCargo;
+                              const alic = (seller.months[m.key] as any)?.sodaDetails?.appliedWebAlic;
+                              return (
+                                <td key={m.key} className="px-6 py-1.5 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px]">
+                                  {cargo === 'MINIMO' ? 'MÍNIMO' : alic ? `Tramo ${alic.toLocaleString('es-AR')} ses` : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Subtotal Atención Web */}
+                          <tr className="bg-sky-50/40 hover:bg-sky-50/60 transition-colors border-b border-slate-200 font-bold">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-sky-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-sky-950 font-bold border-r border-sky-200 pl-9">
+                              Subtotal Atención Web
+                            </td>
+                            {filteredMonths.map(m => {
+                              const atWeb = (seller.months[m.key] as any)?.sodaDetails?.montoWeb || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-bold text-sky-950 font-mono text-[11px]">
+                                  {atWeb > 0 ? formatCurrency(atWeb, executiveKPIs?.currency) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Botmaker */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-600">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium border-r border-slate-100">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                  <span>Botmaker</span>
+                                </div>
+                                <span className="text-[10px] bg-slate-100 text-slate-500 font-medium px-1.5 py-0.5 rounded border border-slate-200">
+                                  Licencia
+                                </span>
+                              </div>
+                            </td>
+                            {filteredMonths.map(m => {
+                              const bm = seller.months[m.key]?.botmaker || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-mono text-[11px] text-slate-700">
+                                  {bm > 0 ? formatCurrency(bm, executiveKPIs?.currency) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Subtotal (Ingreso Reply) */}
+                          <tr className="bg-blue-100/70 hover:bg-blue-100 transition-colors border-b border-blue-200 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black border-r border-blue-200">
+                              Subtotal (Ingreso Reply)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const sub = seller.months[m.key]?.subtotal || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 font-mono text-[11px]">
+                                  {sub > 0 ? formatCurrency(sub, executiveKPIs?.currency) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* IVA (21% Débito Fiscal) */}
+                          <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-600">
+                            <td className="px-6 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] font-medium border-r border-slate-100">
+                              IVA (21% Débito Fiscal)
+                            </td>
+                            {filteredMonths.map(m => {
+                              const ivaVal = seller.months[m.key]?.iva || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l border-slate-100 font-medium text-slate-700 font-mono text-[11px]">
+                                  {ivaVal > 0 ? formatCurrency(ivaVal, executiveKPIs?.currency) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+
+                          {/* Total Factura */}
+                          <tr className="bg-emerald-50/60 hover:bg-emerald-50/80 transition-colors border-b-2 border-emerald-300 font-black">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
+                              Total Factura + IVA
+                            </td>
+                            {filteredMonths.map(m => {
+                              const tot = seller.months[m.key]?.total || 0;
+                              return (
+                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-200 font-black text-emerald-950 text-xs font-mono">
+                                  {tot > 0 ? formatCurrency(tot, executiveKPIs?.currency) : '-'}
                                 </td>
                               );
                             })}

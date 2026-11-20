@@ -129,11 +129,12 @@ export default function EscalasPage() {
         return { data: allLiqs };
       };
 
-      // Fetch liquidaciones to highlight applied tiers y facturación consolidada de Newsan ML y Grupo Axo
-      const [{ data: liqData }, { data: factNewsanData }, { data: metricasAxoData }] = await Promise.all([
+      // Fetch liquidaciones to highlight applied tiers y facturación consolidada de Newsan ML, Grupo Axo y Soda Stream Web
+      const [{ data: liqData }, { data: factNewsanData }, { data: metricasAxoData }, { data: metricasSodaData }] = await Promise.all([
         fetchAllLiquidaciones(),
         supabase.from('facturacion').select('seller_id, periodo, valor_facturado').in('seller_id', [256189964, 308973138, 256324891, 765606810, 938333830, 550082876, 998163061]),
-        supabase.from('fact_metricas_operativas').select('*').eq('id_cliente', 18).eq('tipo_metrica', 'CREDITOS')
+        supabase.from('fact_metricas_operativas').select('*').eq('id_cliente', 18).eq('tipo_metrica', 'CREDITOS'),
+        supabase.from('fact_metricas_operativas').select('*').eq('seller_id', 978681369).eq('tipo_metrica', 'SESIONES')
       ]);
 
       const newsanTotalMap: Record<string, number> = {};
@@ -529,6 +530,42 @@ export default function EscalasPage() {
           estado: period <= '2026-10-01' ? 'REAL' : 'PROYECTADO'
         };
       });
+
+      // Soporte para resaltar el tramo aplicado de Soda Stream Web por Sesiones
+      if (metricasSodaData) {
+        if (!liqMap['978681369']) liqMap['978681369'] = {};
+        metricasSodaData.forEach((m: any) => {
+          const mStr = formatMonthKey(m.periodo);
+          const q = Number(m.cantidad) || 0;
+          const periodEscalas = allEscalas
+            .filter((e: any) => String(e.seller_id) === '978681369' && e.periodo === m.periodo)
+            .sort((a: any, b: any) => Number(b.alicuota) - Number(a.alicuota));
+
+          let appliedCargo = 'MINIMO';
+          let appliedAlic = 0;
+          let montoObj = 0;
+          for (const esc of periodEscalas) {
+            if (esc.tipo_cargo === 'SESIONES' && q >= Number(esc.alicuota)) {
+              appliedCargo = 'SESIONES';
+              appliedAlic = Number(esc.alicuota);
+              montoObj = Number(esc.monto_objetivo);
+              break;
+            }
+          }
+          if (appliedCargo === 'MINIMO') {
+            const minEsc = periodEscalas.find((e: any) => e.tipo_cargo === 'MINIMO');
+            montoObj = Number(minEsc?.monto_objetivo) || 0;
+          }
+
+          liqMap['978681369'][mStr] = {
+            tipo_cargo: appliedCargo,
+            alicuota: appliedAlic,
+            subtotal_mercado_libre: montoObj,
+            valor_facturado: q,
+            estado: m.periodo <= '2026-10-01' ? 'REAL' : 'PROYECTADO'
+          };
+        });
+      }
 
       const sellersGroups: Record<string, any> = {};
       const globalMonthsSet = new Set<string>();
