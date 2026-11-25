@@ -88,6 +88,7 @@ let facturacionCache: {
   facturacion: any[];
   estMensual: any[];
   estDiaria: any[];
+  seguimientoDiarioMap?: Record<string, any>;
   timestamp: number;
 } | null = null;
 
@@ -326,9 +327,10 @@ export default function FacturacionPage() {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilterOption>('24M');
   const range24M = useMemo(() => getRolling24MonthsRange(), []);
 
-  // Estacionalidad
+  // Estacionalidad y Proyecciones Dinámicas ML
   const [estMensual, setEstMensual] = useState<any[]>(() => facturacionCache?.estMensual || []);
   const [estDiaria, setEstDiaria] = useState<any[]>(() => facturacionCache?.estDiaria || []);
+  const [seguimientoDiarioMap, setSeguimientoDiarioMap] = useState<Record<string, any>>(() => facturacionCache?.seguimientoDiarioMap || {});
 
   useEffect(() => {
     async function fetchData() {
@@ -338,7 +340,7 @@ export default function FacturacionPage() {
       }
       try {
         // Ejecución concurrente en paralelo (Promise.all) con selección de columnas optimizada
-        const [sellersRes, factRes, estMensualRes, estDiariaRes] = await Promise.all([
+        const [sellersRes, factRes, estMensualRes, estDiariaRes, segDiarioRes] = await Promise.all([
           supabase
             .from('dim_sellers')
             .select('*'),
@@ -352,7 +354,12 @@ export default function FacturacionPage() {
             .select('seller_id, mes, indice_peso'),
           supabase
             .from('estacionalidad_diaria')
-            .select('seller_id, tipo, llave, indice_peso')
+            .select('seller_id, tipo, llave, indice_peso'),
+          supabase
+            .from('seguimiento_diario_proyecciones')
+            .select('seller_id, fecha, facturacion_acumulada_mes, promedio_diario, proyeccion_fin_mes, dias_transcurridos')
+            .gte('fecha', '2026-11-01')
+            .order('fecha', { ascending: false })
         ]);
 
         if (sellersRes.error) console.error('Error sellers:', sellersRes.error);
@@ -363,12 +370,22 @@ export default function FacturacionPage() {
         const estMensualData = estMensualRes.data || [];
         const estDiariaData = estDiariaRes.data || [];
 
+        // Armar mapa de proyecciones dinámicas diarias indexado por seller_id
+        const segMap: Record<string, any> = {};
+        (segDiarioRes.data || []).forEach((row: any) => {
+          const sid = String(row.seller_id);
+          if (!segMap[sid]) {
+            segMap[sid] = row;
+          }
+        });
+
         // Guardar en cache en memoria
         facturacionCache = {
           sellers: sellersData,
           facturacion: factData,
           estMensual: estMensualData,
           estDiaria: estDiariaData,
+          seguimientoDiarioMap: segMap,
           timestamp: Date.now()
         };
 
@@ -376,6 +393,7 @@ export default function FacturacionPage() {
         setRawFacturacion(factData);
         setEstMensual(estMensualData);
         setEstDiaria(estDiariaData);
+        setSeguimientoDiarioMap(segMap);
       } catch (err) {
         console.error('Error global cargando datos:', err);
       } finally {
@@ -433,6 +451,21 @@ export default function FacturacionPage() {
       if (!rawStateMap[sId]) rawStateMap[sId] = {};
       rawMap[sId][row.periodo] = Number(row.valor_facturado) || 0;
       rawStateMap[sId][row.periodo] = row.estado || 'REAL';
+    });
+
+    // Dinamización en vivo del mes corriente con seguimiento diario de Mercado Libre
+    const currentPeriodoMes = '2026-11-01';
+    Object.keys(seguimientoDiarioMap).forEach(sId => {
+      const segItem = seguimientoDiarioMap[sId];
+      if (segItem && segItem.proyeccion_fin_mes != null) {
+        if (!rawMap[sId]) rawMap[sId] = {};
+        if (!rawStateMap[sId]) rawStateMap[sId] = {};
+        // Solo aplicar si el mes no está cerrado como REAL
+        if (rawStateMap[sId][currentPeriodoMes] !== 'REAL') {
+          rawMap[sId][currentPeriodoMes] = Math.round(Number(segItem.proyeccion_fin_mes));
+          rawStateMap[sId][currentPeriodoMes] = 'PROYECTADO';
+        }
+      }
     });
 
     const sortedPeriodos = Array.from(periodosSet).sort();
@@ -496,13 +529,17 @@ export default function FacturacionPage() {
             varA = displayPrevYearVal > 0 ? (displayVal - displayPrevYearVal) / displayPrevYearVal : 0;
           }
 
+          const isCurrentProyMonth = p.startsWith('2026-11');
+          const segInfo = isCurrentProyMonth ? seguimientoDiarioMap[sId] : null;
+
           sObj.months[p] = {
             rawValor: rawVal,
             valor: displayVal,
             variacion_mensual: varM,
             variacion_anual: varA,
             estado: rawStateMap[sId]?.[p] || 'REAL',
-            moneda: targetCur
+            moneda: targetCur,
+            seguimientoDiario: segInfo
           };
 
           prevVal = displayVal;
@@ -1529,8 +1566,17 @@ export default function FacturacionPage() {
                                         }`}>
                                           <span>{formatMoney(val, row.monedaDisplay)}</span>
                                           {isProjected && (
-                                            <span className="text-[8px] text-orange-600 font-bold uppercase">
-                                              *PROY
+                                            <span className="text-[8px] font-bold uppercase shrink-0">
+                                              {cellData?.seguimientoDiario ? (
+                                                <span
+                                                  title={`⚡ Proyección Dinámica en Vivo (API Mercado Libre)\n• Ritmo real al día ${cellData.seguimientoDiario.dias_transcurridos} de 30: ${formatMoney(convertCurrency(cellData.seguimientoDiario.facturacion_acumulada_mes, row.monedaOrigen, row.monedaDisplay, p), row.monedaDisplay)}\n• Promedio diario: ${formatMoney(convertCurrency(cellData.seguimientoDiario.promedio_diario, row.monedaOrigen, row.monedaDisplay, p), row.monedaDisplay)} / día\n• Proyección extrapolada a fin de mes: ${formatMoney(val, row.monedaDisplay)}`}
+                                                  className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-orange-100 text-orange-800 border border-orange-200 cursor-help hover:bg-orange-200 transition-colors"
+                                                >
+                                                  ⚡*PROY
+                                                </span>
+                                              ) : (
+                                                <span className="text-orange-600">*PROY</span>
+                                              )}
                                             </span>
                                           )}
                                           {canEdit && (isProjected || p >= '2026-10-01') && (
