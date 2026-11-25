@@ -66,7 +66,7 @@ interface EscalaRow {
   id: number;
   seller_id: number | string;
   periodo: string;
-  tipo_cargo: "MINIMO" | "PORCENTUAL";
+  tipo_cargo: "MINIMO" | "PORCENTUAL" | "SESIONES" | string;
   monto_objetivo: number;
   alicuota: number;
   moneda?: string;
@@ -82,6 +82,9 @@ interface InverseOption {
   rangoMax: number | null;
   variacionVsAnterior: number | null;
   esfuerzo: "menor_volumen" | "mayor_volumen";
+  metricaTipo?: "MONTO" | "SESIONES";
+  metricaLabel?: string;
+  formulaExplicativa?: string;
 }
 
 interface InverseResult {
@@ -99,6 +102,7 @@ export default function MetasPage() {
   const [liquidaciones, setLiquidaciones] = useState<any[]>([]);
   const [escalas, setEscalas] = useState<EscalaRow[]>([]);
   const [facturacionReal, setFacturacionReal] = useState<any[]>([]);
+  const [sodaMetricas, setSodaMetricas] = useState<Record<string, number>>({});
   
   // Mapa de fees simulados por el usuario: { "sellerId_periodo": number }
   const [simulatedFees, setSimulatedFees] = useState<Record<string, number>>({});
@@ -127,37 +131,80 @@ export default function MetasPage() {
       // 1. Sellers
       const { data: sellersData } = await supabase.from("dim_sellers").select("*").order("nombre_seller");
       
-      // 2. Liquidaciones
-      const { data: liqData } = await supabase
-        .from("liquidaciones")
-        .select("*")
-        .order("periodo", { ascending: true });
-
-      // 3. Escalas completas (paginadas)
-      let allEscalas: EscalaRow[] = [];
-      let page = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const { data: escPage } = await supabase
-          .from("dim_escalas")
+      // 2. Liquidaciones completas paginadas
+      let allLiqs: any[] = [];
+      let pageLiq = 0;
+      let hasMoreLiq = true;
+      while (hasMoreLiq) {
+        const { data: liqPage } = await supabase
+          .from("liquidaciones")
           .select("*")
-          .range(page * 1000, (page + 1) * 1000 - 1);
-        if (escPage && escPage.length > 0) {
-          allEscalas = allEscalas.concat(escPage);
-          if (escPage.length < 1000) hasMore = false;
-          else page++;
+          .order("periodo", { ascending: true })
+          .range(pageLiq * 1000, (pageLiq + 1) * 1000 - 1);
+        if (liqPage && liqPage.length > 0) {
+          allLiqs = allLiqs.concat(liqPage);
+          if (liqPage.length < 1000) hasMoreLiq = false;
+          else pageLiq++;
         } else {
-          hasMore = false;
+          hasMoreLiq = false;
         }
       }
 
-      // 4. Facturación histórica de ventas brutas (para calcular variación vs mes anterior)
-      const { data: factData } = await supabase.from("facturacion").select("*");
+      // 3. Escalas completas paginadas
+      let allEscalas: EscalaRow[] = [];
+      let pageEsc = 0;
+      let hasMoreEsc = true;
+      while (hasMoreEsc) {
+        const { data: escPage } = await supabase
+          .from("dim_escalas")
+          .select("*")
+          .range(pageEsc * 1000, (pageEsc + 1) * 1000 - 1);
+        if (escPage && escPage.length > 0) {
+          allEscalas = allEscalas.concat(escPage);
+          if (escPage.length < 1000) hasMoreEsc = false;
+          else pageEsc++;
+        } else {
+          hasMoreEsc = false;
+        }
+      }
+
+      // 4. Facturación histórica de ventas brutas completa paginada
+      let allFacts: any[] = [];
+      let pageFact = 0;
+      let hasMoreFact = true;
+      while (hasMoreFact) {
+        const { data: factPage } = await supabase
+          .from("facturacion")
+          .select("*")
+          .range(pageFact * 1000, (pageFact + 1) * 1000 - 1);
+        if (factPage && factPage.length > 0) {
+          allFacts = allFacts.concat(factPage);
+          if (factPage.length < 1000) hasMoreFact = false;
+          else pageFact++;
+        } else {
+          hasMoreFact = false;
+        }
+      }
+
+      // 5. Métricas operativas de Soda Stream Web (sesiones)
+      const { data: sodaMetricasData } = await supabase
+        .from("fact_metricas_operativas")
+        .select("*")
+        .eq("seller_id", 978681369)
+        .eq("tipo_metrica", "SESIONES");
+      
+      const sodaMetMap: Record<string, number> = {};
+      if (sodaMetricasData) {
+        sodaMetricasData.forEach((m: any) => {
+          sodaMetMap[m.periodo] = Number(m.cantidad) || 0;
+        });
+        setSodaMetricas(sodaMetMap);
+      }
 
       if (sellersData) setSellers(sellersData);
-      if (liqData) setLiquidaciones(liqData);
+      setLiquidaciones(allLiqs);
       setEscalas(allEscalas);
-      if (factData) setFacturacionReal(factData);
+      setFacturacionReal(allFacts);
 
       setLoading(false);
     }
@@ -214,7 +261,6 @@ export default function MetasPage() {
 
     liquidaciones.forEach((l) => {
       pSet.add(l.periodo);
-      // Si algún seller lo tiene como PROYECTADO o el registro lo marca
       if (l.estado) {
         pStatusMap[l.periodo] = l.estado;
       }
@@ -242,15 +288,59 @@ export default function MetasPage() {
 
       sortedP.forEach((p, idx) => {
         const found = liqsOfSeller.find((l) => l.periodo === p);
-        const estado = (found?.estado as any) || (p >= "2026-09-01" ? "PROYECTADO" : "REAL");
-        const originalFee = found?.subtotal_mercado_libre 
-          ? Number(Number(found.subtotal_mercado_libre).toFixed(2)) 
-          : 0;
-        const currentVenta = ventaBrutaMap[`${sId}_${p}`] || found?.valor_facturado || 0;
+        const isProjectedPeriod = p >= "2026-11-01";
+        const estado = (found?.estado as any) || (isProjectedPeriod ? "PROYECTADO" : "REAL");
         
-        // Venta del mes anterior
+        let originalFee = 0;
+        let currentVenta = 0;
+
+        if (sId === "430009374") {
+          // Soda Stream ML: Reply factura el 50% de atención al cliente sobre el fee de Mercado Libre
+          originalFee = found?.subtotal_mercado_libre
+            ? Number((Number(found.subtotal_mercado_libre) / 2).toFixed(2))
+            : 0;
+          currentVenta = ventaBrutaMap[`${sId}_${p}`] || found?.valor_facturado || 0;
+        } else if (sId === "978681369") {
+          // Soda Stream Web: Honorario según sesiones web
+          const sesPeriodo = sodaMetricas[p] || 0;
+          currentVenta = sesPeriodo;
+
+          if (found?.subtotal_mercado_libre && Number(found.subtotal_mercado_libre) > 0) {
+            originalFee = Number(Number(found.subtotal_mercado_libre).toFixed(2));
+          } else {
+            // Calcular según escala de sesiones web
+            const webEscalas = escalas
+              .filter((e) => String(e.seller_id) === "978681369" && e.periodo === p)
+              .sort((a, b) => Number(a.alicuota) - Number(b.alicuota));
+            
+            const minEsc = webEscalas.find((e) => e.tipo_cargo === "MINIMO");
+            const sesTiers = webEscalas.filter((e) => e.tipo_cargo === "SESIONES");
+            let applied = minEsc;
+            for (let i = sesTiers.length - 1; i >= 0; i--) {
+              if (sesPeriodo >= Number(sesTiers[i].alicuota)) {
+                applied = sesTiers[i];
+                break;
+              }
+            }
+            originalFee = applied ? Number(Number(applied.monto_objetivo).toFixed(2)) : 0;
+          }
+        } else {
+          originalFee = found?.subtotal_mercado_libre 
+            ? Number(Number(found.subtotal_mercado_libre).toFixed(2)) 
+            : 0;
+          currentVenta = ventaBrutaMap[`${sId}_${p}`] || found?.valor_facturado || 0;
+        }
+        
+        // Venta / Métrica del mes anterior
         const prevPeriodo = idx > 0 ? sortedP[idx - 1] : null;
-        const previousVentaBruta = prevPeriodo ? (ventaBrutaMap[`${sId}_${prevPeriodo}`] || 0) : 0;
+        let previousVentaBruta = 0;
+        if (prevPeriodo) {
+          if (sId === "978681369") {
+            previousVentaBruta = sodaMetricas[prevPeriodo] || 0;
+          } else {
+            previousVentaBruta = ventaBrutaMap[`${sId}_${prevPeriodo}`] || 0;
+          }
+        }
 
         monthsData[p] = {
           estado,
@@ -278,7 +368,7 @@ export default function MetasPage() {
       periodosMap: pStatusMap,
       sellersMatrix: matrix
     };
-  }, [liquidaciones, sellers, facturacionReal]);
+  }, [liquidaciones, sellers, facturacionReal, sodaMetricas, escalas]);
 
   const visiblePeriodos = useMemo(() => {
     return filterPeriodosList(allPeriodos, periodFilter, range24M);
@@ -286,14 +376,19 @@ export default function MetasPage() {
 
   
 
-  // Función matemática de resolución inversa con soporte de 2 decimales
+  // Función matemática de resolución inversa con soporte de 2 decimales y escalas compuestas
   const solveInverseEscala = (
     sellerId: string,
     periodo: string,
     targetFeeRaw: number,
     previousVenta: number
   ): InverseResult => {
-    const targetFee = Number(Number(targetFeeRaw).toFixed(2));
+    const isSodaML = String(sellerId) === "430009374";
+    const isSodaWeb = String(sellerId) === "978681369";
+
+    // Para Soda Stream ML, Reply factura el 50% de atención al cliente sobre el fee de Mercado Libre.
+    // Por ende, la escala comercial de ML debe generar el doble del fee de Reply:
+    const targetFee = Number(Number(isSodaML ? targetFeeRaw * 2 : targetFeeRaw).toFixed(2));
 
     // Filtrar escalas de ese seller y período
     const sellerEscalas = escalas.filter(
@@ -305,8 +400,112 @@ export default function MetasPage() {
     }
 
     const minimoRow = sellerEscalas.find((e) => e.tipo_cargo === "MINIMO");
-    const minimoValor = minimoRow ? Number(Number(minimoRow.monto_objetivo).toFixed(2)) : 0;
+    const minimoValorOriginal = minimoRow ? Number(Number(minimoRow.monto_objetivo).toFixed(2)) : 0;
+    const minimoValor = isSodaML ? Number((minimoValorOriginal / 2).toFixed(2)) : minimoValorOriginal;
 
+    // Caso de Soda Stream Web (escalas basadas en volumen de sesiones web):
+    const sessionEscalas = sellerEscalas
+      .filter((e) => e.tipo_cargo === "SESIONES")
+      .sort((a, b) => Number(a.alicuota) - Number(b.alicuota));
+
+    if (sessionEscalas.length > 0) {
+      const primerUmbralSesiones = Number(sessionEscalas[0].alicuota);
+      const minFeeWeb = minimoValorOriginal;
+
+      if (targetFeeRaw < minFeeWeb - 0.5) {
+        return {
+          status: "BELOW_MINIMUM",
+          solutions: [],
+          minimoValor: minFeeWeb,
+          primerUmbral: primerUmbralSesiones,
+          mensaje: `El fee deseado (${formatCurrency2(targetFeeRaw)}) es inferior al piso contractual mínimo (${formatCurrency2(minFeeWeb)}).`
+        };
+      }
+
+      if (Math.abs(targetFeeRaw - minFeeWeb) < 1 || targetFeeRaw <= sessionEscalas[0].monto_objetivo) {
+        return {
+          status: "MINIMO",
+          solutions: [{
+            tramoIndex: 0,
+            ventaBruta: Math.round(primerUmbralSesiones * 0.5),
+            alicuota: 0,
+            alicuotaStr: "MÍNIMO",
+            rangoMin: 0,
+            rangoMax: primerUmbralSesiones,
+            variacionVsAnterior: previousVenta > 0 ? (((primerUmbralSesiones * 0.5) - previousVenta) / previousVenta) * 100 : null,
+            esfuerzo: "menor_volumen",
+            metricaTipo: "SESIONES",
+            metricaLabel: "Sesiones Web",
+            formulaExplicativa: `Tarifa mínima de ${formatCurrency2(minFeeWeb)} para hasta ${primerUmbralSesiones.toLocaleString("es-AR")} sesiones web.`
+          }],
+          minimoValor: minFeeWeb,
+          primerUmbral: primerUmbralSesiones,
+          mensaje: `Cualquier volumen entre 0 y ${primerUmbralSesiones.toLocaleString("es-AR")} sesiones web abona el cargo mínimo de ${formatCurrency2(minFeeWeb)}.`
+        };
+      }
+
+      const validSolutions: InverseOption[] = [];
+      for (let i = 0; i < sessionEscalas.length; i++) {
+        const cur = sessionEscalas[i];
+        const next = i < sessionEscalas.length - 1 ? sessionEscalas[i + 1] : null;
+        const sesMin = Number(cur.alicuota);
+        const sesMax = next ? Number(next.alicuota) - 1 : null;
+        const feeTier = Number(cur.monto_objetivo);
+
+        if (targetFeeRaw >= feeTier * 0.95 && (next ? targetFeeRaw < Number(next.monto_objetivo) * 1.05 : true)) {
+          const variacion = previousVenta > 0 ? ((sesMin - previousVenta) / previousVenta) * 100 : null;
+          validSolutions.push({
+            tramoIndex: i + 1,
+            ventaBruta: sesMin,
+            alicuota: 0,
+            alicuotaStr: `Tramo ${sesMin.toLocaleString("es-AR")} sesiones`,
+            rangoMin: sesMin,
+            rangoMax: sesMax,
+            variacionVsAnterior: variacion,
+            esfuerzo: validSolutions.length === 0 ? "menor_volumen" : "mayor_volumen",
+            metricaTipo: "SESIONES",
+            metricaLabel: "Sesiones Web",
+            formulaExplicativa: `Tramo de ${sesMin.toLocaleString("es-AR")} ${sesMax ? `a ${sesMax.toLocaleString("es-AR")}` : "en adelante"} sesiones web genera un fee de ${formatCurrency2(feeTier)}.`
+          });
+        }
+      }
+
+      if (validSolutions.length === 0) {
+        for (let i = 0; i < sessionEscalas.length; i++) {
+          const cur = sessionEscalas[i];
+          const next = i < sessionEscalas.length - 1 ? sessionEscalas[i + 1] : null;
+          const feeTier = Number(cur.monto_objetivo);
+          if (feeTier >= targetFeeRaw) {
+            const sesMin = Number(cur.alicuota);
+            const sesMax = next ? Number(next.alicuota) - 1 : null;
+            const variacion = previousVenta > 0 ? ((sesMin - previousVenta) / previousVenta) * 100 : null;
+            validSolutions.push({
+              tramoIndex: i + 1,
+              ventaBruta: sesMin,
+              alicuota: 0,
+              alicuotaStr: `Tramo ${sesMin.toLocaleString("es-AR")} sesiones`,
+              rangoMin: sesMin,
+              rangoMax: sesMax,
+              variacionVsAnterior: variacion,
+              esfuerzo: "menor_volumen",
+              metricaTipo: "SESIONES",
+              metricaLabel: "Sesiones Web",
+              formulaExplicativa: `Para alcanzar ${formatCurrency2(targetFeeRaw)}, se requiere el tramo de ${sesMin.toLocaleString("es-AR")} sesiones (${formatCurrency2(feeTier)}).`
+            });
+            break;
+          }
+        }
+      }
+
+      return {
+        status: validSolutions.length > 0 ? "OK" : "NO_ESCALAS",
+        solutions: validSolutions,
+        minimoValor: minFeeWeb,
+        primerUmbral: primerUmbralSesiones
+      };
+    }
+
+    // Caso Escalas Porcentuales estándar sobre GMV:
     const porcentuales = sellerEscalas
       .filter((e) => e.tipo_cargo === "PORCENTUAL")
       .sort((a, b) => Number(a.monto_objetivo) - Number(b.monto_objetivo));
@@ -314,18 +513,18 @@ export default function MetasPage() {
     const primerUmbral = porcentuales.length > 0 ? Number(Number(porcentuales[0].monto_objetivo).toFixed(2)) : 0;
 
     // Caso A: Menor al mínimo contractual
-    if (targetFee < minimoValor - 0.5) {
+    if (targetFee < minimoValorOriginal - 0.5) {
       return {
         status: "BELOW_MINIMUM",
         solutions: [],
         minimoValor,
         primerUmbral,
-        mensaje: `El fee deseado (${formatCurrency2(targetFee)}) es inferior al piso contractual mínimo (${formatCurrency2(minimoValor)}).`
+        mensaje: `El fee deseado (${formatCurrency2(targetFeeRaw)}) es inferior al piso contractual mínimo (${formatCurrency2(minimoValor)}).`
       };
     }
 
     // Caso B: Igual al mínimo (o dentro del rango mínimo)
-    if (Math.abs(targetFee - minimoValor) < 1) {
+    if (Math.abs(targetFee - minimoValorOriginal) < 1) {
       return {
         status: "MINIMO",
         solutions: [{
@@ -336,7 +535,12 @@ export default function MetasPage() {
           rangoMin: 0,
           rangoMax: primerUmbral,
           variacionVsAnterior: previousVenta > 0 ? ((primerUmbral * 0.5 - previousVenta) / previousVenta) * 100 : null,
-          esfuerzo: "menor_volumen"
+          esfuerzo: "menor_volumen",
+          metricaTipo: "MONTO",
+          metricaLabel: "Facturación Bruta ML",
+          formulaExplicativa: isSodaML
+            ? `Aplica mínimo contractual de ${formatCurrency2(minimoValorOriginal)} en ML ÷ 2 = ${formatCurrency2(minimoValor)} atención Reply.`
+            : `Cualquier venta bruta entre $0,00 y ${formatCurrency2(primerUmbral)} pagará el mínimo contractual de ${formatCurrency2(minimoValor)}.`
         }],
         minimoValor,
         primerUmbral,
@@ -370,6 +574,10 @@ export default function MetasPage() {
           ? ((ventaCon2Dec - previousVenta) / previousVenta) * 100 
           : null;
 
+        const formulaText = isSodaML
+          ? `${formatCurrency2(ventaCon2Dec)} × ${(rate * 100).toFixed(2)}% = ${formatCurrency2(targetFee)} (Fee ML) ÷ 2 = ${formatCurrency2(targetFeeRaw)}`
+          : `${formatCurrency2(ventaCon2Dec)} × ${(rate * 100).toFixed(2)}%`;
+
         validSolutions.push({
           tramoIndex: i + 1,
           ventaBruta: ventaCon2Dec,
@@ -378,7 +586,10 @@ export default function MetasPage() {
           rangoMin: V_min,
           rangoMax: V_max,
           variacionVsAnterior: variacion,
-          esfuerzo: validSolutions.length === 0 ? "menor_volumen" : "mayor_volumen"
+          esfuerzo: validSolutions.length === 0 ? "menor_volumen" : "mayor_volumen",
+          metricaTipo: "MONTO",
+          metricaLabel: "Facturación Bruta ML",
+          formulaExplicativa: formulaText
         });
       }
     }
@@ -434,7 +645,7 @@ export default function MetasPage() {
   }, [sellersMatrix]);
 
   const handleSelectSellerRow = (sellerId: string, sellerName: string) => {
-    const currentPeriodo = selectedCell?.periodo || allPeriodos.find((p) => p >= "2026-09-01") || allPeriodos[allPeriodos.length - 1];
+    const currentPeriodo = selectedCell?.periodo || allPeriodos.find((p) => p >= "2026-11-01") || allPeriodos[allPeriodos.length - 1];
     setSelectedCell({
       sellerId,
       periodo: currentPeriodo,
@@ -457,8 +668,8 @@ export default function MetasPage() {
   // Selección automática de celda por defecto si no hay ninguna seleccionada
   useEffect(() => {
     if (!selectedCell && filteredMatrix.length > 0) {
-      // Buscar el primer mes proyectado (ej. 2026-09-01 o 2026-10-01)
-      const firstProy = allPeriodos.find((p) => p >= "2026-09-01") || allPeriodos[allPeriodos.length - 1];
+      // Buscar el primer mes proyectado (2026-11-01)
+      const firstProy = allPeriodos.find((p) => p >= "2026-11-01") || allPeriodos[allPeriodos.length - 1];
       if (firstProy) {
         setSelectedCell({
           sellerId: filteredMatrix[0].sellerId,
@@ -522,7 +733,7 @@ export default function MetasPage() {
 
     // 1. Obtener períodos reales cerrados previos al período proyectado
     const realPeriodsBefore = allPeriodos.filter((p) => {
-      const isProj = periodosMap[p] === "PROYECTADO" || p >= "2026-09-01";
+      const isProj = periodosMap[p] === "PROYECTADO" || p >= "2026-11-01";
       return !isProj && p < periodo;
     });
 
@@ -812,7 +1023,7 @@ export default function MetasPage() {
     let simulatedTotal = 0;
     let modifiedCount = 0;
 
-    const targetPeriodo = selectedCell?.periodo || "2026-09-01";
+    const targetPeriodo = selectedCell?.periodo || allPeriodos.find((p) => p >= "2026-11-01") || "2026-11-01";
 
     sellersMatrix.forEach((s) => {
       if (selectedCountryFilter !== "ALL" && s.countryCode !== selectedCountryFilter) return;
@@ -883,7 +1094,7 @@ export default function MetasPage() {
       'ID Seller',
       'País',
       'Moneda',
-      ...visiblePeriodos.map(p => `${formatMonthStr(p)} (${p >= '2026-09-01' ? 'PROY' : 'REAL'})`)
+      ...visiblePeriodos.map(p => `${formatMonthStr(p)} (${p >= '2026-11-01' ? 'PROY' : 'REAL'})`)
     ];
 
     const rows = filteredMatrix.map(row => [
@@ -1146,7 +1357,7 @@ export default function MetasPage() {
                   Seller / Cliente
                 </th>
                 {visiblePeriodos.map((p) => {
-                  const isProjected = p >= "2026-09-01";
+                  const isProjected = p >= "2026-11-01";
                   return (
                     <th 
                       key={p} 
@@ -1226,7 +1437,7 @@ export default function MetasPage() {
                     {/* Columnas Mensuales */}
                     {visiblePeriodos.map((p) => {
                       const cell = row.monthsData[p];
-                      const isProjected = p >= "2026-09-01";
+                      const isProjected = p >= "2026-11-01";
                       const key = `${row.sellerId}_${p}`;
                       const isSimulated = simulatedFees[key] !== undefined;
                       const currentFee = isSimulated ? simulatedFees[key] : (cell?.originalFee || 0);
@@ -1334,11 +1545,12 @@ export default function MetasPage() {
                                   onMouseEnter={(e) => handleTriggerTooltip(e, row.sellerName, p, currentFee, cell?.previousVentaBruta || 0, inverseResult)}
                                   onMouseLeave={() => setHoveredTooltip(null)}
                                 >
-                                  <span>Aplica mínimo (Venta &lt; {formatCurrency2(inverseResult.primerUmbral)})</span>
+                                  <span>Aplica mínimo ({row.sellerId === "978681369" ? `< ${inverseResult.primerUmbral.toLocaleString("es-AR")} ses.` : `Venta < ${formatCurrency2(inverseResult.primerUmbral)}`})</span>
                                 </div>
                               ) : inverseResult.solutions.length === 1 ? (
                                 (() => {
                                   const sol = inverseResult.solutions[0];
+                                  const isSes = sol.metricaTipo === "SESIONES";
                                   return (
                                     <div 
                                       className="flex flex-col text-right cursor-help p-1 -m-1 rounded hover:bg-slate-100/70 transition-colors"
@@ -1346,7 +1558,7 @@ export default function MetasPage() {
                                       onMouseLeave={() => setHoveredTooltip(null)}
                                     >
                                       <div className="font-bold text-slate-800 font-mono">
-                                        ML: {formatCurrency2(sol.ventaBruta)}
+                                        {isSes ? `${sol.ventaBruta.toLocaleString("es-AR")} ses.` : `ML: ${formatCurrency2(sol.ventaBruta)}`}
                                       </div>
                                       <div className="flex items-center justify-end gap-1 text-[9px]">
                                         <span className="text-slate-400 font-mono">@{sol.alicuotaStr}</span>
@@ -1373,7 +1585,11 @@ export default function MetasPage() {
                                   </div>
                                   <div className="text-[9px] text-slate-600 font-mono font-medium flex items-center justify-end gap-1">
                                     <span>Desde</span>
-                                    <span className="font-bold text-slate-800">{formatCurrency2(inverseResult.solutions[0].ventaBruta)}</span>
+                                    <span className="font-bold text-slate-800">
+                                      {inverseResult.solutions[0].metricaTipo === "SESIONES"
+                                        ? `${inverseResult.solutions[0].ventaBruta.toLocaleString("es-AR")} ses.`
+                                        : formatCurrency2(inverseResult.solutions[0].ventaBruta)}
+                                    </span>
                                   </div>
                                 </div>
                               ) : (
@@ -1476,9 +1692,13 @@ export default function MetasPage() {
                       </div>
 
                       <div className="mb-3">
-                        <p className="text-[11px] font-semibold text-slate-400 uppercase">Facturación Bruta Requerida</p>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase">
+                          {sol.metricaLabel ? `${sol.metricaLabel} Requerida` : "Facturación Bruta Requerida"}
+                        </p>
                         <p className="text-xl font-black text-slate-900 mt-0.5 font-mono">
-                          {formatCurrency2(sol.ventaBruta)}
+                          {sol.metricaTipo === "SESIONES"
+                            ? `${sol.ventaBruta.toLocaleString("es-AR")} sesiones`
+                            : formatCurrency2(sol.ventaBruta, inspectionData.currency)}
                         </p>
                       </div>
 
@@ -1486,13 +1706,15 @@ export default function MetasPage() {
                         <div className="flex justify-between text-slate-600">
                           <span>Tramo de Escala:</span>
                           <span className="font-semibold text-slate-800">
-                            {formatCurrency2(sol.rangoMin)} {sol.rangoMax ? `a ${formatCurrency2(sol.rangoMax)}` : "en adelante"}
+                            {sol.metricaTipo === "SESIONES"
+                              ? `${sol.rangoMin.toLocaleString("es-AR")} ${sol.rangoMax ? `a ${sol.rangoMax.toLocaleString("es-AR")}` : "en adelante"} sesiones`
+                              : `${formatCurrency2(sol.rangoMin, inspectionData.currency)} ${sol.rangoMax ? `a ${formatCurrency2(sol.rangoMax, inspectionData.currency)}` : "en adelante"}`}
                           </span>
                         </div>
                         <div className="flex justify-between text-slate-600">
                           <span>Cálculo:</span>
                           <span className="font-mono text-slate-700">
-                            {formatCurrency2(sol.ventaBruta)} × {sol.alicuotaStr}
+                            {sol.formulaExplicativa || `${formatCurrency2(sol.ventaBruta, inspectionData.currency)} × ${sol.alicuotaStr}`}
                           </span>
                         </div>
                       </div>
@@ -1642,11 +1864,13 @@ export default function MetasPage() {
             <div className="my-2.5">
               {hoveredTooltip.inverseResult.solutions.length > 1 ? (
                 <p className="text-[11px] text-slate-600 leading-snug">
-                  Debido a los tramos de la escala, este fee neto se puede alcanzar con <strong className="text-[#ff5100] font-bold">{hoveredTooltip.inverseResult.solutions.length} niveles de ventas brutas</strong> en Mercado Libre:
+                  Debido a los tramos de la escala, este fee neto se puede alcanzar con <strong className="text-[#ff5100] font-bold">{hoveredTooltip.inverseResult.solutions.length} alternativas</strong> de volumen:
                 </p>
               ) : hoveredTooltip.inverseResult.solutions.length === 1 ? (
                 <p className="text-[11px] text-slate-600 leading-snug">
-                  Venta bruta requerida en Mercado Libre para alcanzar esta meta:
+                  {hoveredTooltip.inverseResult.solutions[0].metricaTipo === "SESIONES"
+                    ? "Sesiones web requeridas para alcanzar esta meta:"
+                    : "Venta bruta requerida en Mercado Libre para alcanzar esta meta:"}
                 </p>
               ) : hoveredTooltip.inverseResult.status === "MINIMO" ? (
                 <p className="text-[11px] text-[#275ec9] leading-snug font-medium">
@@ -1664,6 +1888,7 @@ export default function MetasPage() {
               <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-0.5">
                 {hoveredTooltip.inverseResult.solutions.map((sol, sIdx) => {
                   const isMinVolume = sIdx === 0;
+                  const isSes = sol.metricaTipo === "SESIONES";
                   return (
                     <div 
                       key={sIdx}
@@ -1685,18 +1910,20 @@ export default function MetasPage() {
                           </span>
                           {isMinVolume && (
                             <span className="text-[9px] font-bold text-[#ff5100]">
-                              ★ Menor Venta
+                              ★ Menor Volumen
                             </span>
                           )}
                         </div>
                         <div className="text-[9.5px] text-slate-500 font-mono mt-0.5 truncate">
-                          Tramo: {formatCurrency2(sol.rangoMin)} {sol.rangoMax ? `a ${formatCurrency2(sol.rangoMax)}` : "en adelante"}
+                          Tramo: {isSes
+                            ? `${sol.rangoMin.toLocaleString("es-AR")} ${sol.rangoMax ? `a ${sol.rangoMax.toLocaleString("es-AR")}` : "en adelante"} sesiones`
+                            : `${formatCurrency2(sol.rangoMin)} ${sol.rangoMax ? `a ${formatCurrency2(sol.rangoMax)}` : "en adelante"}`}
                         </div>
                       </div>
 
                       <div className="text-right shrink-0">
                         <div className="font-mono font-black text-slate-900 text-xs">
-                          {formatCurrency2(sol.ventaBruta)}
+                          {isSes ? `${sol.ventaBruta.toLocaleString("es-AR")} ses.` : formatCurrency2(sol.ventaBruta)}
                         </div>
                         {sol.variacionVsAnterior !== null ? (
                           <div className={`text-[9.5px] font-extrabold flex items-center justify-end gap-0.5 ${
