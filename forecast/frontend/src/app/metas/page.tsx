@@ -1349,7 +1349,7 @@ export default function MetasPage() {
 
       {/* 3. Tabla Matricial Interactiva de Metas */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col flex-1 min-h-[380px]">
-        <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-210px)] min-h-[720px] flex-1 relative border-t border-slate-100 transition-all duration-200">
           <table className="w-full text-xs text-left text-slate-600 border-separate border-spacing-0">
             <thead className="text-[11px] uppercase tracking-wider sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
               <tr className="bg-slate-100">

@@ -20,7 +20,9 @@ import {
   DollarSign,
   Percent,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -110,6 +112,9 @@ function MetasFacturacionContent() {
   
   // Búsqueda de cliente
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Altura maximizada/expandida de tabla principal
+  const [isTableExpanded, setIsTableExpanded] = useState<boolean>(false);
 
   // Si cambia el país, sincronizar con URL y resetear cliente seleccionado
   const handleCountryChange = (countryCode: string) => {
@@ -2484,13 +2489,26 @@ function MetasFacturacionContent() {
                   }
                 </p>
               </div>
-              <div className="flex items-center gap-3 self-start sm:self-auto">
+              <div className="flex items-center gap-2.5 self-start sm:self-auto">
                 <span className="text-xs text-slate-400 font-medium">
                   {selectedCountry === 'ALL'
                     ? `${Object.keys(groupedData['ALL']?.sellersMap || {}).length} cuentas en todos los mercados`
                     : `${Object.keys(groupedData[selectedCountry]?.sellersMap || {}).length} cuentas listadas`
                   }
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setIsTableExpanded(!isTableExpanded)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                    isTableExpanded 
+                      ? 'bg-blue-50 border-blue-200 text-blue-700' 
+                      : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                  title={isTableExpanded ? "Volver a altura adaptativa estándar" : "Expandir tabla al alto máximo"}
+                >
+                  {isTableExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                  <span className="hidden sm:inline">{isTableExpanded ? "Compactar" : "Maximizar"}</span>
+                </button>
                 <TableExportButton getData={getLiquidacionesResumenExportData} label="Exportar" variant="compact" />
               </div>
             </div>
@@ -2526,7 +2544,11 @@ function MetasFacturacionContent() {
               </div>
             )}
 
-            <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">
+            <div className={`overflow-x-auto overflow-y-auto ${
+              isTableExpanded 
+                ? 'max-h-[calc(100vh-140px)] min-h-[850px]' 
+                : 'max-h-[calc(100vh-210px)] min-h-[720px]'
+            } flex-1 relative border-t border-slate-100 transition-all duration-200`}>
               <table className="w-full text-xs text-left text-slate-600 border-separate border-spacing-0">
                 <thead className="text-[11px] text-slate-500 uppercase sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
                   <tr className="bg-slate-100">
@@ -3300,15 +3322,32 @@ function MetasFacturacionContent() {
                       Matriz vertical granular por cuenta para validación tributaria y contable
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 self-start sm:self-auto">
+                  <div className="flex items-center gap-2.5 self-start sm:self-auto">
                     <span className="text-xs text-slate-400 font-medium">
                       {allSellers.length} cuentas listadas en {groupedData[selectedCountry]?.country.name}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsTableExpanded(!isTableExpanded)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                        isTableExpanded 
+                          ? 'bg-blue-50 border-blue-200 text-blue-700' 
+                          : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      }`}
+                      title={isTableExpanded ? "Volver a altura adaptativa estándar" : "Expandir tabla al alto máximo"}
+                    >
+                      {isTableExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                      <span className="hidden sm:inline">{isTableExpanded ? "Compactar" : "Maximizar"}</span>
+                    </button>
                     <TableExportButton getData={getLiquidacionesConceptosExportData} label="Exportar" variant="compact" />
                   </div>
                 </div>
 
-            <div className="overflow-x-auto overflow-y-auto max-h-[680px] flex-1 relative border-t border-slate-100">
+            <div className={`overflow-x-auto overflow-y-auto ${
+              isTableExpanded 
+                ? 'max-h-[calc(100vh-140px)] min-h-[900px]' 
+                : 'max-h-[calc(100vh-210px)] min-h-[750px]'
+            } flex-1 relative border-t border-slate-100 transition-all duration-200`}>
               <table className="w-full text-xs text-left text-slate-600 border-separate border-spacing-0">
                 <thead className="text-[11px] text-slate-500 uppercase sticky top-0 z-20 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]">
                   <tr className="bg-slate-100">
