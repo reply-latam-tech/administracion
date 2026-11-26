@@ -48,6 +48,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ExportData } from '@/lib/exportUtils';
 import PeriodFilterSelector from '@/components/PeriodFilterSelector';
 import { PeriodFilterOption, getRolling24MonthsRange, filterPeriodosList } from '@/lib/periodFilterUtils';
+import CountryFlag from '@/components/CountryFlag';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -763,10 +764,10 @@ export default function FacturacionPage() {
     const latestMonth = realMonths.length > 0 ? realMonths[realMonths.length - 1] : chartDataset[chartDataset.length - 1];
 
     // País con mayor facturación acumulada
-    let topCountry = { name: 'Argentina', flag: '🇦🇷', total: 0 };
+    let topCountry = { code: 'AR', name: 'Argentina', total: 0 };
     Object.values(countriesData).forEach(c => {
       if (c.grandTotal > topCountry.total) {
-        topCountry = { name: c.country.name, flag: c.country.flag, total: c.grandTotal };
+        topCountry = { code: c.country.code, name: c.country.name, total: c.grandTotal };
       }
     });
 
@@ -1053,7 +1054,8 @@ export default function FacturacionPage() {
               }`}
               title="Unificar todas las cuentas a dólares estadounidenses según el tipo de cambio oficial de cada mes"
             >
-              <span>💵 USD (Unificado)</span>
+              <DollarSign size={14} className="text-emerald-600 shrink-0" />
+              <span>USD (Unificado)</span>
             </button>
             <button
               onClick={() => setCurrencyView('ORIGINAL')}
@@ -1064,18 +1066,20 @@ export default function FacturacionPage() {
               }`}
               title="Visualizar cada cliente en su moneda nativa (ARS, COP, CLP, MXN, USD)"
             >
-              <span>🪙 Moneda Origen</span>
+              <Coins size={14} className="text-amber-500 shrink-0" />
+              <span>Moneda Origen</span>
             </button>
             <button
               onClick={() => setCurrencyView('ARS')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
                 currencyView === 'ARS'
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60 font-bold'
+                  ? 'bg-white text-blue-700 shadow-xs border border-blue-100 font-extrabold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
               title="Unificar todas las cuentas a pesos argentinos"
             >
-              <span>🇦🇷 ARS</span>
+              <CountryFlag code="AR" size="sm" />
+              <span>ARS (Unificado)</span>
             </button>
           </div>
 
@@ -1154,8 +1158,8 @@ export default function FacturacionPage() {
               <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 País Líder en Ventas
               </p>
-              <p className="text-xl font-black text-slate-900 mt-0.5 flex items-center gap-1.5">
-                <span>{kpiHighlights.topCountry.flag}</span>
+              <p className="text-xl font-black text-slate-900 mt-0.5 flex items-center gap-2">
+                <CountryFlag code={kpiHighlights.topCountry.code} size="md" />
                 <span>{kpiHighlights.topCountry.name}</span>
               </p>
               <p className="text-[11px] text-slate-500 mt-1">
@@ -1215,7 +1219,8 @@ export default function FacturacionPage() {
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
-            <span>🌐 Todos los Países ({Object.keys(processedData.sellersGroups).length})</span>
+            <CountryFlag code="ALL" size="sm" />
+            <span>Todos los Países ({Object.keys(processedData.sellersGroups).length})</span>
           </button>
           {Object.values(COUNTRY_CONFIG).map(c => {
             const count = processedData.countriesData[c.code]?.sellers.length || 0;
@@ -1230,7 +1235,7 @@ export default function FacturacionPage() {
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <span>{c.flag}</span>
+                <CountryFlag code={c.code} size="sm" />
                 <span>{c.name}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-blue-700 text-white' : 'bg-slate-200/70 text-slate-600'}`}>
                   {count}
@@ -1354,7 +1359,7 @@ export default function FacturacionPage() {
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               {isCollapsed ? <ChevronRight size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-                              <span className="text-base">{countryGroup.country.flag}</span>
+                              <CountryFlag code={cCode} size="md" />
                               <span className="text-sm font-extrabold text-slate-900 tracking-tight">
                                 {countryGroup.country.name}
                               </span>

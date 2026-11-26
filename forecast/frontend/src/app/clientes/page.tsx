@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import TableExportButton from '@/components/TableExportButton';
 import { ExportData } from '@/lib/exportUtils';
+import CountryFlag from '@/components/CountryFlag';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -635,19 +636,20 @@ export default function DirectorioClientesPage() {
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/70 text-xs font-semibold">
             {[
               { id: 'TODOS', label: 'Todas' },
-              { id: 'ACTIVAS', label: '🟢 Activas' },
-              { id: 'BAJAS', label: '🔴 Bajas / Egresos' }
+              { id: 'ACTIVAS', label: 'Activas', dot: 'bg-emerald-500' },
+              { id: 'BAJAS', label: 'Bajas / Egresos', dot: 'bg-rose-500' }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setSelectedStatus(tab.id as any)}
-                className={`px-2.5 py-1 rounded-md transition-all text-xs ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all text-xs ${
                   selectedStatus === tab.id
                     ? 'bg-white text-slate-900 shadow-xs font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
               >
-                {tab.label}
+                {tab.dot && <span className={`w-2 h-2 rounded-full ${tab.dot} shrink-0`} />}
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -655,23 +657,24 @@ export default function DirectorioClientesPage() {
           {/* País pills */}
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/70 text-xs font-semibold">
             {[
-              { id: 'TODOS', label: '🌍 Todos' },
-              { id: 'AR', label: '🇦🇷 AR' },
-              { id: 'CO', label: '🇨🇴 CO' },
-              { id: 'MX', label: '🇲🇽 MX' },
-              { id: 'CL', label: '🇨🇱 CL' },
-              { id: 'US', label: '🇺🇸 US' }
+              { id: 'TODOS', label: 'Todos' },
+              { id: 'AR', label: 'AR' },
+              { id: 'CO', label: 'CO' },
+              { id: 'MX', label: 'MX' },
+              { id: 'CL', label: 'CL' },
+              { id: 'US', label: 'US' }
             ].map(pill => (
               <button
                 key={pill.id}
                 onClick={() => setSelectedCountry(pill.id)}
-                className={`px-2 py-1 rounded-md transition-all text-xs ${
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all text-xs ${
                   selectedCountry === pill.id
                     ? 'bg-white text-slate-900 shadow-xs font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
               >
-                {pill.label}
+                <CountryFlag code={pill.id} size="xs" />
+                <span>{pill.label}</span>
               </button>
             ))}
           </div>
@@ -778,7 +781,7 @@ export default function DirectorioClientesPage() {
                       {/* 2. País */}
                       <td className="px-4 py-3.5 whitespace-nowrap text-center">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200/60">
-                          <span>{s.bandera_emoji || '🌐'}</span>
+                          <CountryFlag code={s.codigo_pais || s.pais} size="xs" />
                           <span>{s.codigo_pais || s.pais}</span>
                         </span>
                       </td>
@@ -932,8 +935,8 @@ export default function DirectorioClientesPage() {
             {/* Header del Modal */}
             <div className="p-6 bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 text-white flex items-start justify-between shrink-0 relative overflow-hidden">
               <div className="relative z-10 flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-3xl shadow-inner shrink-0">
-                  {selectedSeller.bandera_emoji || '🌐'}
+                <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center p-2 shadow-inner shrink-0">
+                  <CountryFlag code={selectedSeller.codigo_pais || selectedSeller.pais} size="lg" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2.5 flex-wrap">

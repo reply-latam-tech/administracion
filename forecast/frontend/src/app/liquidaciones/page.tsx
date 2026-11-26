@@ -18,12 +18,14 @@ import {
   ArrowDownRight,
   Search,
   DollarSign,
+  Coins,
   Percent,
   ChevronDown,
   ChevronRight,
   Maximize2,
   Minimize2
 } from 'lucide-react';
+import CountryFlag from '@/components/CountryFlag';
 import { 
   ResponsiveContainer, 
   BarChart, 
@@ -2179,7 +2181,7 @@ function MetasFacturacionContent() {
                           : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80'
                       }`}
                     >
-                      <span>{c.flag}</span>
+                      <CountryFlag code={c.code} size="sm" />
                       <span>{c.label}</span>
                     </button>
                   );
@@ -2194,36 +2196,39 @@ function MetasFacturacionContent() {
                 </span>
                 <button
                   onClick={() => setCurrencyView('ORIGINAL')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                     currencyView === 'ORIGINAL'
                       ? 'bg-white text-slate-900 shadow-2xs font-bold'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                   title="Visualizar cada cliente en su moneda nativa contractual (moneda corriente)"
                 >
-                  <span>🪙 Moneda Origen</span>
+                  <Coins size={14} className="text-amber-500 shrink-0" />
+                  <span>Moneda Origen</span>
                 </button>
                 <button
                   onClick={() => setCurrencyView('USD')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                     currencyView === 'USD'
                       ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                   title="Unificar todas las cuentas a dólares estadounidenses (USD) usando cotizaciones oficiales mensuales"
                 >
-                  <span>💵 USD (Unificado)</span>
+                  <DollarSign size={14} className="text-emerald-600 shrink-0" />
+                  <span>USD (Unificado)</span>
                 </button>
                 <button
                   onClick={() => setCurrencyView('ARS')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                     currencyView === 'ARS'
                       ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                   title="Unificar todas las cuentas a pesos argentinos (ARS)"
                 >
-                  <span>🇦🇷 ARS (Unificado)</span>
+                  <CountryFlag code="AR" size="sm" />
+                  <span>ARS (Unificado)</span>
                 </button>
               </div>
             </div>
@@ -2517,7 +2522,9 @@ function MetasFacturacionContent() {
             {selectedCountry === 'CL' && (
               <div className="mx-4 my-3 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-sm border border-blue-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
-                  <div className="p-2.5 bg-blue-800/60 rounded-xl text-2xl flex items-center justify-center shadow-inner">🇨🇱</div>
+                  <div className="p-2 bg-blue-800/60 rounded-xl flex items-center justify-center shadow-inner shrink-0">
+                    <CountryFlag code="CL" size="lg" />
+                  </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-sm font-black tracking-wide text-white">Newsan Chile • Facturación Consolidada Multi-Canal</h4>
@@ -3003,7 +3010,7 @@ function MetasFacturacionContent() {
                                     <div className="flex items-center justify-between gap-2">
                                       <div className="flex items-center gap-2">
                                         {isCollapsed ? <ChevronRight size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
-                                        <span className="text-base">{cGroup.country.flag}</span>
+                                        <CountryFlag code={cCode} size="md" />
                                         <span className="text-xs font-black text-slate-900 tracking-tight uppercase">
                                           {cGroup.country.name}
                                         </span>
@@ -3144,7 +3151,7 @@ function MetasFacturacionContent() {
                         <tr className="bg-blue-50/90 border-t-2 border-b-2 border-blue-200 text-blue-950 font-bold sticky bottom-0 z-20 shadow-xs">
                           <td className="px-5 py-3.5 sticky left-0 bg-blue-50 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-blue-200 whitespace-nowrap">
                             <div className="flex items-center gap-2">
-                              <span>{activeGroup?.country.flag}</span>
+                              <CountryFlag code={selectedCountry} size="sm" />
                               <span className="text-xs uppercase tracking-wider font-extrabold">
                                 Subtotal {activeGroup?.country.name} ({activeCur})
                               </span>
@@ -3218,8 +3225,10 @@ function MetasFacturacionContent() {
                       Evolución Mensual de Ingresos Reply — <span className="text-blue-600 font-extrabold">Latam Consolidado</span> ({executiveKPIs?.currency})
                     </span>
                   ) : (
-                    <span>
-                      Evolución Mensual de Ingresos Reply (Subtotal Neto) — {groupedData[selectedCountry]?.country.flag} {groupedData[selectedCountry]?.country.name} ({executiveKPIs?.currency})
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                      <span>Evolución Mensual de Ingresos Reply (Subtotal Neto) —</span>
+                      <CountryFlag code={selectedCountry} size="sm" />
+                      <span>{groupedData[selectedCountry]?.country.name} ({executiveKPIs?.currency})</span>
                     </span>
                   )}
                 </h2>
@@ -3285,7 +3294,9 @@ function MetasFacturacionContent() {
               {selectedCountry === 'CL' && (
                 <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-sm border border-blue-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start gap-3">
-                    <div className="p-2.5 bg-blue-800/60 rounded-xl text-2xl flex items-center justify-center shadow-inner">🇨🇱</div>
+                    <div className="p-2 bg-blue-800/60 rounded-xl flex items-center justify-center shadow-inner shrink-0">
+                      <CountryFlag code="CL" size="lg" />
+                    </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="text-sm font-black tracking-wide text-white">Newsan Chile • Facturación Consolidada Multi-Canal</h4>
@@ -3316,7 +3327,8 @@ function MetasFacturacionContent() {
                 <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                      <span>Desglose Detallado por Cliente — {groupedData[selectedCountry]?.country.flag} {groupedData[selectedCountry]?.country.name} ({groupedData[selectedCountry]?.country.currency})</span>
+                      <CountryFlag code={selectedCountry} size="sm" />
+                      <span>Desglose Detallado por Cliente — {groupedData[selectedCountry]?.country.name} ({groupedData[selectedCountry]?.country.currency})</span>
                     </h2>
                     <p className="text-xs text-slate-500">
                       Matriz vertical granular por cuenta para validación tributaria y contable

@@ -18,8 +18,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Globe,
-  DollarSign
+  DollarSign,
+  Coins
 } from "lucide-react";
+import CountryFlag from "@/components/CountryFlag";
 import TableExportButton from "@/components/TableExportButton";
 import { convertCurrency } from "@/lib/exchangeRates";
 import { useExchangeRates } from "@/context/ExchangeRateContext";
@@ -1211,7 +1213,7 @@ export default function MetasPage() {
                       : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/80"
                   }`}
                 >
-                  <span>{c.flag}</span>
+                  <CountryFlag code={c.code} size="sm" />
                   <span>{c.name}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                     isSelected ? "bg-blue-700 text-white" : "bg-slate-200/80 text-slate-600"
@@ -1231,36 +1233,39 @@ export default function MetasPage() {
             </span>
             <button
               onClick={() => setCurrencyView("ORIGINAL")}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currencyView === "ORIGINAL"
                   ? "bg-white text-slate-900 shadow-2xs font-bold"
                   : "text-slate-600 hover:text-slate-900"
               }`}
               title="Visualizar cada cliente en su moneda nativa contractual"
             >
-              <span>🪙 Moneda Origen</span>
+              <Coins size={14} className="text-amber-500 shrink-0" />
+              <span>Moneda Origen</span>
             </button>
             <button
               onClick={() => setCurrencyView("USD")}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currencyView === "USD"
                   ? "bg-white text-blue-700 shadow-2xs font-extrabold"
                   : "text-slate-600 hover:text-slate-900"
               }`}
               title="Unificar a dólares estadounidenses (USD) usando cotizaciones oficiales"
             >
-              <span>💵 USD (Unificado)</span>
+              <DollarSign size={14} className="text-emerald-600 shrink-0" />
+              <span>USD (Unificado)</span>
             </button>
             <button
               onClick={() => setCurrencyView("ARS")}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currencyView === "ARS"
                   ? "bg-white text-blue-700 shadow-2xs font-extrabold"
                   : "text-slate-600 hover:text-slate-900"
               }`}
               title="Unificar a pesos argentinos (ARS)"
             >
-              <span>🇦🇷 ARS (Unificado)</span>
+              <CountryFlag code="AR" size="sm" />
+              <span>ARS (Unificado)</span>
             </button>
           </div>
         </div>
@@ -1306,7 +1311,7 @@ export default function MetasPage() {
               <option value="ALL">Todos los clientes ({sellersMatrix.length})</option>
               {sellersMatrix.map((s) => (
                 <option key={s.sellerId} value={s.sellerId}>
-                  {s.sellerName} ({COUNTRY_CONFIG[s.countryCode]?.flag || ""} {s.moneda})
+                  {s.sellerName} ({s.countryCode} · {s.moneda})
                 </option>
               ))}
             </select>
@@ -1425,8 +1430,9 @@ export default function MetasPage() {
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1">
-                            <span>{COUNTRY_CONFIG[row.countryCode]?.flag || "🌐"} {row.countryCode}</span>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                            <CountryFlag code={row.countryCode} size="xs" />
+                            <span className="font-semibold text-slate-500">{row.countryCode}</span>
                             <span>•</span>
                             <span className="font-bold text-slate-600">{row.moneda}</span>
                           </div>

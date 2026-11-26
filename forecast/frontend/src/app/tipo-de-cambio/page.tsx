@@ -30,6 +30,7 @@ import { useAuth } from "@/context/AuthContext";
 import { ExchangeRateRow } from "@/lib/exchangeRates";
 import PeriodFilterSelector from "@/components/PeriodFilterSelector";
 import { PeriodFilterOption, getRolling24MonthsRange } from "@/lib/periodFilterUtils";
+import CountryFlag from "@/components/CountryFlag";
 
 interface CurrencyConfig {
   key: CurrencyKey;
@@ -1097,8 +1098,8 @@ export default function TipoDeCambioPage() {
                               {formatFullPeriod(item.periodo)}
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-800">
-                                <span>{currObj.flag}</span>
+                              <span className="inline-flex items-center gap-1.5 font-bold px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-800">
+                                <CountryFlag code={currObj.country} size="xs" />
                                 <span>{item.moneda}</span>
                               </span>
                             </td>

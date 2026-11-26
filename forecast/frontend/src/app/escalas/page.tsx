@@ -7,6 +7,7 @@ import TableExportButton from "@/components/TableExportButton";
 import { ExportData } from "@/lib/exportUtils";
 import PeriodFilterSelector from "@/components/PeriodFilterSelector";
 import { PeriodFilterOption, getRolling24MonthsRange } from "@/lib/periodFilterUtils";
+import CountryFlag from "@/components/CountryFlag";
 
 export default function EscalasPage() {
   const [sellersList, setSellersList] = useState<any[]>([]);
@@ -814,7 +815,7 @@ export default function EscalasPage() {
                       : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
                   }`}
                 >
-                  <span>{c.flag}</span>
+                  <CountryFlag code={c.id} size="sm" />
                   <span>{c.label}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                     isActive ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-600'

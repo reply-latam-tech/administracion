@@ -31,6 +31,7 @@ import * as echarts from "echarts";
 import TableExportButton from "@/components/TableExportButton";
 import { ExportData } from "@/lib/exportUtils";
 import { useAuth, OWNER_EMAIL } from "@/context/AuthContext";
+import CountryFlag from "@/components/CountryFlag";
 
 interface ConvergencePoint {
   day: number;
@@ -750,7 +751,7 @@ export default function AuditoriaProyeccionesPage() {
                       : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200"
                   }`}
                 >
-                  <span>{c.flag}</span>
+                  <CountryFlag code={c.code} size="sm" />
                   <span>{c.label}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                     isSelected ? "bg-slate-800 text-slate-200" : "bg-slate-100 text-slate-500"
@@ -842,7 +843,7 @@ export default function AuditoriaProyeccionesPage() {
                       <td className="sticky left-0 z-20 bg-white group-hover:bg-slate-50 transition-colors border-r border-slate-100 w-[190px] min-w-[190px] max-w-[190px] px-3.5 py-2.5 font-sans font-bold text-slate-900">
                         <div className="flex flex-col truncate" title={`${s.nombre} (${s.moneda})`}>
                           <div className="flex items-center gap-1.5 truncate">
-                            <span className="text-xs shrink-0">{COUNTRY_FLAGS[s.pais] || "🌐"}</span>
+                            <CountryFlag code={s.pais} size="xs" />
                             <span className="truncate">{s.nombre}</span>
                           </div>
                           <div className="flex items-center gap-1 text-[10px] font-mono font-normal text-slate-400 mt-0.5">
