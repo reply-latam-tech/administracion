@@ -23,7 +23,9 @@ import {
   ChevronDown,
   ChevronRight,
   Maximize2,
-  Minimize2
+  Minimize2,
+  LayoutGrid,
+  Minus
 } from 'lucide-react';
 import CountryFlag from '@/components/CountryFlag';
 import { 
@@ -117,6 +119,10 @@ function MetasFacturacionContent() {
 
   // Altura maximizada/expandida de tabla principal
   const [isTableExpanded, setIsTableExpanded] = useState<boolean>(false);
+
+  // Sub-vista de Detalle por Concepto: 'historico' (tabla matriz general) | 'cards' (tarjetas por cliente mensual)
+  const [conceptSubView, setConceptSubView] = useState<'historico' | 'cards'>('historico');
+  const [selectedCardMonth, setSelectedCardMonth] = useState<string>('');
 
   // Si cambia el país, sincronizar con URL y resetear cliente seleccionado
   const handleCountryChange = (countryCode: string) => {
@@ -571,6 +577,25 @@ function MetasFacturacionContent() {
       return filteredSet.has(pDate);
     });
   }, [monthsList, timelineFilter, range24M]);
+
+  // Último mes con valores reales (no proyectados) por defecto para la vista en Cards
+  const lastRealMonthKey = useMemo(() => {
+    const real = monthsList.filter(m => !m.isProjected);
+    return real.length > 0 ? real[real.length - 1].key : (monthsList[monthsList.length - 1]?.key || '2026-10');
+  }, [monthsList]);
+
+  // Mes activo para la vista en Cards
+  const activeCardMonthKey = selectedCardMonth || lastRealMonthKey;
+
+  // Mes de comparación para la vista en Cards (mes anterior real más próximo)
+  const prevRealMonthKey = useMemo(() => {
+    const curIdx = monthsList.findIndex(m => m.key === activeCardMonthKey);
+    if (curIdx <= 0) return null;
+    for (let i = curIdx - 1; i >= 0; i--) {
+      if (!monthsList[i].isProjected) return monthsList[i].key;
+    }
+    return monthsList[curIdx - 1]?.key || null;
+  }, [monthsList, activeCardMonthKey]);
 
   // Lista de países únicos detectados (con opción consolidada 'ALL')
   const availableCountries = useMemo(() => {
@@ -2072,6 +2097,299 @@ function MetasFacturacionContent() {
     };
   };
 
+  // Helper para resolver los conceptos y valores de un cliente en un mes específico para la vista en Cards
+  const getSellerMonthConcepts = (seller: any, k: string) => {
+    const isNewsan = seller.name.toLowerCase().includes('newsan');
+    const isNewsanAR = isNewsan && (selectedCountry === 'AR' || seller.name.toLowerCase().includes('argentina') || seller.id === '256189964' || seller.id === '989595440');
+    const isNewsanCL = isNewsan && (selectedCountry === 'CL' || seller.name.toLowerCase().includes('chile'));
+    const isSodaStream = seller.id === '430009374' || seller.name.toLowerCase().includes('soda stream');
+    const isAxo = seller.name.toLowerCase().includes('axo') || seller.id === 'axo_ck' || seller.id === 'axo_th' || seller.id === '550082876' || seller.id === '765606810' || seller.id === '938333830' || seller.id === '998163061';
+    const isEvacol = seller.name.toLowerCase().includes('evacol');
+    const isEvacolCO = (isEvacol && !seller.name.includes('USA') && !seller.name.includes('México') && !seller.name.includes('Mexico')) || ['2219963574', '928666257', '928424062', '928424063'].includes(seller.id);
+    const isNaturaMX = (seller.name.toLowerCase().includes('natura') && (selectedCountry === 'MX' || seller.name.toLowerCase().includes('méxico') || seller.name.toLowerCase().includes('mexico') || seller.id === '2539005925' || seller.id === '2539005926'));
+
+    // 1. Newsan Chile
+    if (isNewsanCL) {
+      const CHILE_CHANNELS = [
+        { id: '977559914', name: 'Falabella' },
+        { id: '942368053', name: 'Mercado Libre' },
+        { id: '978106559', name: 'Paris' },
+        { id: '919428720', name: 'Walmart' },
+        { id: '962651791', name: 'Ripley' },
+        { id: '936492429', name: 'Kitchen Center' },
+      ];
+      const totalCLP = CHILE_CHANNELS.reduce((sum, ch) => sum + (newsanSubAccounts[ch.id]?.[k] || 0), 0);
+      const tc = getRateToUSD('CLP', k) || 950.0;
+      const totalUSD = totalCLP / tc;
+      const feeConsolidado = Math.max(4000.0, totalUSD * 0.01);
+      return {
+        type: 'newsan_cl',
+        title: 'Newsan Total (Chile)',
+        subtitle: 'Consolidado Oficial • 6 Canales',
+        currency: 'USD',
+        gmv: totalUSD,
+        subtotal: feeConsolidado,
+        total: feeConsolidado,
+        iva: 0,
+        rows: [
+          { label: 'Facturación Bruta (CLP)', val: totalCLP > 0 ? `$ ${Math.round(totalCLP).toLocaleString('es-CL')} CLP` : '-' },
+          { label: 'Tipo de Cambio CLP/USD', val: tc.toLocaleString('es-CL', { minimumFractionDigits: 2 }) },
+          { label: 'Ventas Consolidada (USD)', val: totalUSD > 0 ? `US$ ${totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-' },
+          { label: 'Alícuota Aplicada', val: totalUSD * 0.01 < 4000 ? 'MÍNIMO (US$ 4.000)' : '1,00%' }
+        ]
+      };
+    }
+
+    // 2. Soda Stream Argentina
+    if (isSodaStream) {
+      const gmvVal = seller.months[k]?.facturacion || 0;
+      const feeAlic = seller.months[k]?.fee;
+      const fee100 = (seller.months[k] as any)?.sodaDetails?.feeML || 0;
+      const atML = (seller.months[k] as any)?.sodaDetails?.montoAtencionML || (fee100 / 2);
+      const sub = seller.months[k]?.subtotal || 0;
+      const ivaVal = seller.months[k]?.iva || 0;
+      const tot = seller.months[k]?.total || 0;
+      const bm = seller.months[k]?.botmaker || 0;
+      const cur = executiveKPIs?.currency || 'ARS';
+      return {
+        type: 'sodastream',
+        title: 'Soda Stream (Argentina)',
+        subtitle: 'Consolidado Oficial (ML + Web + Botmaker)',
+        currency: cur,
+        gmv: gmvVal,
+        subtotal: sub,
+        total: tot,
+        iva: ivaVal,
+        rows: [
+          { label: 'Ventas del Cliente (GMV ML)', val: gmvVal > 0 ? formatCurrency(gmvVal, cur) : '-' },
+          { label: 'Fee ML Aplicado', val: typeof feeAlic === 'number' ? formatPercent(feeAlic) : (feeAlic || '-') },
+          { label: 'Atención MELI (50% Fee)', val: atML > 0 ? formatCurrency(atML, cur) : '-' },
+          ...(bm > 0 ? [{ label: 'Botmaker (Licencias)', val: formatCurrency(bm, cur) }] : [])
+        ]
+      };
+    }
+
+    // 3. Newsan Argentina
+    if (isNewsanAR) {
+      const mlSeller = allSellers.find(s => s.name.toLowerCase().includes('mercado libre') || s.id === '256189964');
+      const newsanPropio = newsanSubAccounts['256189964']?.[k] || 0;
+      const motoML = newsanSubAccounts['308973138']?.[k] || 0;
+      const piliML = newsanSubAccounts['256324891']?.[k] || 0;
+      const totML = newsanPropio + motoML + piliML;
+      const montoML = mlSeller?.months[k]?.montoServicio || 0;
+      const q = newsanMetricas[k]?.sesiones || 0;
+      const hs = newsanMetricas[k]?.horas || 0;
+      const tar = getNewsanWebTarifas(k);
+      const montoSes = Math.max(q * tar.valorSesion, tar.minGarantizado);
+      const montoHs = hs * tar.valorHora;
+      const montoWeb = montoSes + montoHs;
+      const subtotalNewsan = montoML + montoWeb;
+      const ivaNewsan = subtotalNewsan * 0.21;
+      const totalConIVA = subtotalNewsan * 1.21;
+      const cur = executiveKPIs?.currency || 'ARS';
+      return {
+        type: 'newsan_ar',
+        title: 'Newsan Total (Argentina)',
+        subtitle: 'Consolidado Oficial (MELI + Tienda Web)',
+        currency: cur,
+        gmv: totML,
+        subtotal: subtotalNewsan,
+        total: totalConIVA,
+        iva: ivaNewsan,
+        rows: [
+          { label: 'Newsan Propia MELI', val: newsanPropio > 0 ? formatCurrency(newsanPropio, cur) : '-' },
+          { label: 'Newsan Motorola MELI', val: motoML > 0 ? formatCurrency(motoML, cur) : '-' },
+          { label: 'Pilisar MELI', val: piliML > 0 ? formatCurrency(piliML, cur) : '-' },
+          { label: 'Total Ventas MELI', val: totML > 0 ? formatCurrency(totML, cur) : '-' },
+          { label: 'Monto Servicio MELI', val: montoML > 0 ? formatCurrency(montoML, cur) : '-' },
+          { label: 'Tienda Web (Sesiones + Hs Extra)', val: montoWeb > 0 ? formatCurrency(montoWeb, cur) : '-' }
+        ]
+      };
+    }
+
+    // 4. Grupo Axo México
+    if (isAxo) {
+      const AXO_CHANNELS = [
+        { id: '765606810', name: 'Calvin Klein MELI' },
+        { id: '938333830', name: 'Calvin Klein Liverpool' },
+        { id: '550082876', name: 'Tommy Hilfiger MELI' },
+        { id: '998163061', name: 'Tommy Hilfiger Liverpool' },
+      ];
+      const tot = AXO_CHANNELS.reduce((acc, c) => acc + (newsanSubAccounts[c.id]?.[k] || 0), 0);
+      const cr = axoCredits[k] ?? (k >= '2026-10' ? 1306 : 1156);
+      const minFee = cr <= 1650 ? 120000 : 140000;
+      let bestAlic = 0;
+      if (tot >= 20000000) bestAlic = 0.0080;
+      else if (tot >= 17000000) bestAlic = 0.0090;
+      else if (tot >= 15000000) bestAlic = 0.0100;
+      else if (tot >= 13500000) bestAlic = 0.0110;
+      else if (tot >= 12000000) bestAlic = 0.0120;
+      else if (tot >= 11000000) bestAlic = 0.0130;
+      else if (tot >= 9500000) bestAlic = 0.0150;
+      else if (tot >= 8000000) bestAlic = 0.0175;
+      const feeMXN = (bestAlic > 0 && tot * bestAlic > minFee) ? (tot * bestAlic) : minFee;
+      const tc = getRateToUSD('MXN', k) || 18.0;
+      const feeUSD = tc > 0 ? (feeMXN / tc) : 0;
+      const totalAxo = feeUSD + 340;
+      return {
+        type: 'axo',
+        title: 'Grupo Axo México',
+        subtitle: 'Consolidado Oficial (Tommy + Calvin Klein)',
+        currency: 'USD',
+        gmv: tot / (tc || 18),
+        subtotal: totalAxo,
+        total: totalAxo,
+        iva: 0,
+        rows: [
+          { label: 'Facturación Total MXN', val: tot > 0 ? `$ ${Math.round(tot).toLocaleString('es-MX')} MXN` : '-' },
+          { label: 'Ventas en USD', val: `US$ ${Math.round(tot / (tc || 18)).toLocaleString('en-US')}` },
+          { label: 'Fee Escalonado Reply', val: bestAlic > 0 ? formatPercent(bestAlic) : 'MÍNIMO' },
+          { label: 'Botmaker Consolidado', val: 'US$ 340' }
+        ]
+      };
+    }
+
+    // 5. Evacol Colombia
+    if (isEvacolCO) {
+      const coSellers = groupedData['CO']?.sellersMap || groupedData[selectedCountry]?.sellersMap || {};
+      const mlSeller = coSellers['2219963574'] || coSellers['928666257'] || Object.values(coSellers).find((s: any) => s.name.toLowerCase().includes('evacol') && s.name.toLowerCase().includes('ml'));
+      const addiSeller = coSellers['928424062'] || Object.values(coSellers).find((s: any) => s.name.toLowerCase().includes('evacol') && s.name.toLowerCase().includes('addi'));
+      const dafSeller = coSellers['928424063'] || Object.values(coSellers).find((s: any) => s.name.toLowerCase().includes('evacol') && (s.name.toLowerCase().includes('dafitti') || s.name.toLowerCase().includes('dafiti')));
+      const tc = mlSeller?.months[k]?.tc || addiSeller?.months[k]?.tc || getRateToUSD('COP', k) || 3182.99;
+      const fML = mlSeller?.months[k]?.feeUsd || (k >= '2026-10' ? 1500 : 1000);
+      const fADDI = addiSeller?.months[k]?.feeUsd || (k >= '2026-10' ? 500 : 1000);
+      const fDAF = dafSeller?.months[k]?.feeUsd || (k >= '2026-10' ? 500 : 1000);
+      const totFeeUSD = fML + fADDI + fDAF;
+      const subCop = Math.round(totFeeUSD * tc);
+      const gmvTot = ((mlSeller?.months[k]?.facturacion || 0) + (addiSeller?.months[k]?.facturacion || 0) + (dafSeller?.months[k]?.facturacion || 0));
+      return {
+        type: 'evacol',
+        title: 'Evacol Colombia',
+        subtitle: 'Consolidado Oficial (MELI + Addi + Dafiti)',
+        currency: 'COP',
+        gmv: gmvTot,
+        subtotal: subCop,
+        total: subCop,
+        iva: 0,
+        rows: [
+          { label: 'Ventas Totales Canales', val: gmvTot > 0 ? formatCurrency(gmvTot, 'COP') : '-' },
+          { label: 'Fee MELI', val: `US$ ${fML.toLocaleString('en-US')}` },
+          { label: 'Fee Addi / Dafiti', val: `US$ ${(fADDI + fDAF).toLocaleString('en-US')}` },
+          { label: 'Tipo de Cambio (COP/USD)', val: tc.toLocaleString('es-CO', { minimumFractionDigits: 2 }) }
+        ]
+      };
+    }
+
+    // 6. Natura México
+    if (isNaturaMX) {
+      const mxSellers = groupedData['MX']?.sellersMap || groupedData[selectedCountry]?.sellersMap || {};
+      const mlSeller = mxSellers['2539005925'] || Object.values(mxSellers).find((s: any) => s.name.toLowerCase().includes('natura') && (s.name.toLowerCase().includes('ml') || s.name.toLowerCase().includes('mercado libre')));
+      const amzSeller = mxSellers['2539005926'] || Object.values(mxSellers).find((s: any) => s.name.toLowerCase().includes('natura') && s.name.toLowerCase().includes('amazon'));
+      const tot = (mlSeller?.months[k]?.facturacion || 0) + (amzSeller?.months[k]?.facturacion || 0);
+      let alicVal = 0.0450;
+      if (tot >= 8000000) alicVal = 0.0200;
+      else if (tot >= 6000000) alicVal = 0.0250;
+      else if (tot >= 4500000) alicVal = 0.0275;
+      else if (tot >= 3500000) alicVal = 0.0300;
+      else if (tot >= 2500000) alicVal = 0.0325;
+      else if (tot >= 1800000) alicVal = 0.0350;
+      else if (tot >= 1250000) alicVal = 0.0375;
+      else if (tot >= 800000) alicVal = 0.0425;
+      else if (tot >= 700000) alicVal = 0.0450;
+      const fML = (mlSeller?.months[k]?.facturacion || 0);
+      const fAmz = (amzSeller?.months[k]?.facturacion || 0);
+      const feeML = Math.max(30000, fML * alicVal);
+      const feeAmz = Math.max(24000, fAmz * alicVal);
+      const tc = getRateToUSD('MXN', k) || 18.0;
+      const totUSD = tc > 0 ? (feeML + feeAmz) / tc : 0;
+      const finalFactura = totUSD + 200.0;
+      return {
+        type: 'natura_mx',
+        title: 'Natura México',
+        subtitle: 'Consolidado Oficial (MELI + Amazon)',
+        currency: 'USD',
+        gmv: tot / (tc || 18),
+        subtotal: finalFactura,
+        total: finalFactura,
+        iva: 0,
+        rows: [
+          { label: 'Facturación MELI (MXN)', val: fML > 0 ? `$ ${Math.round(fML).toLocaleString('es-MX')} MXN` : '-' },
+          { label: 'Facturación Amazon (MXN)', val: fAmz > 0 ? `$ ${Math.round(fAmz).toLocaleString('es-MX')} MXN` : '-' },
+          { label: 'Fee Escalonado', val: formatPercent(alicVal) },
+          { label: 'Botmaker (Costo Fijo)', val: 'US$ 200.00' }
+        ]
+      };
+    }
+
+    // 7. Seller Estándar
+    const mData = seller.months[k];
+    const cur = mData?.moneda || executiveKPIs?.currency || 'ARS';
+    const gmv = mData?.facturacion || 0;
+    const srv = mData?.montoServicio || 0;
+    const desc = (mData as any)?.descuento || 0;
+    const bm = mData?.botmaker || 0;
+    const sub = mData?.subtotal || 0;
+    const iva = mData?.iva || 0;
+    const tot = mData?.total || 0;
+    const fee = mData?.fee;
+
+    return {
+      type: 'standard',
+      title: seller.name,
+      subtitle: null,
+      currency: cur,
+      gmv,
+      subtotal: sub,
+      total: tot,
+      iva,
+      rows: [
+        { label: 'Ventas del Cliente (GMV)', val: gmv > 0 ? formatCurrency(gmv, cur) : '-' },
+        { label: 'Fee Aplicado', val: typeof fee === 'number' ? formatPercent(fee) : (fee || '-') },
+        { label: 'Monto Servicio', val: srv > 0 ? formatCurrency(srv, cur) : '-' },
+        ...(desc > 0 ? [{ label: 'Descuento Comercial', val: `-${formatCurrency(desc, cur)}` }] : []),
+        ...(bm > 0 ? [{ label: 'Botmaker (Licencia)', val: formatCurrency(bm, cur) }] : [])
+      ]
+    };
+  };
+
+  // Helper para renderizar los badges de variación MoM en Cards
+  const renderMoMBadge = (pct: number | null, label: string) => {
+    if (pct === null || isNaN(pct)) {
+      return (
+        <div className="bg-slate-100/70 rounded-lg p-1.5 text-center border border-slate-200/80">
+          <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-tight truncate">{label}</span>
+          <div className="flex items-center justify-center gap-0.5 text-slate-400 text-xs font-semibold mt-0.5">
+            <Minus size={10} />
+            <span>N/A</span>
+          </div>
+        </div>
+      );
+    }
+    const isPos = pct > 0;
+    const isZero = Math.abs(pct) < 0.05;
+    return (
+      <div className={`rounded-lg p-1.5 text-center border ${
+        isZero
+          ? 'bg-slate-50 text-slate-600 border-slate-200'
+          : isPos
+          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+          : 'bg-rose-50 text-rose-800 border-rose-200'
+      }`}>
+        <span className="text-[9px] uppercase font-bold text-slate-500 block tracking-tight truncate">{label}</span>
+        <div className="flex items-center justify-center gap-0.5 text-xs font-black mt-0.5">
+          {isZero ? (
+            <Minus size={10} />
+          ) : isPos ? (
+            <ArrowUpRight size={12} className="text-emerald-600 stroke-[2.5]" />
+          ) : (
+            <ArrowDownRight size={12} className="text-rose-600 stroke-[2.5]" />
+          )}
+          <span>{isPos ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 pb-12 w-full h-full flex flex-col">
       {/* 1. Header con Títulos y Tabs de Navegación */}
@@ -3324,7 +3642,7 @@ function MetasFacturacionContent() {
               )}
 
               <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex-1 flex flex-col">
-                <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                   <div>
                     <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                       <CountryFlag code={selectedCountry} size="sm" />
@@ -3334,27 +3652,85 @@ function MetasFacturacionContent() {
                       Matriz vertical granular por cuenta para validación tributaria y contable
                     </p>
                   </div>
-                  <div className="flex items-center gap-2.5 self-start sm:self-auto">
-                    <span className="text-xs text-slate-400 font-medium">
-                      {allSellers.length} cuentas listadas en {groupedData[selectedCountry]?.country.name}
+
+                  <div className="flex flex-wrap items-center gap-2.5 self-start xl:self-auto">
+                    {/* Selector de Sub-vista: Histórico vs Mensual Cards */}
+                    <div className="flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setConceptSubView('historico')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                          conceptSubView === 'historico'
+                            ? 'bg-white text-slate-900 shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        <Table size={13} />
+                        <span>Histórico Completo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConceptSubView('cards')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                          conceptSubView === 'cards'
+                            ? 'bg-[#ff5100] text-white shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        <LayoutGrid size={13} />
+                        <span>Vista Mensual (Cards)</span>
+                      </button>
+                    </div>
+
+                    {/* Selector Desplegable de Mes (cuando está en Vista Cards) */}
+                    {conceptSubView === 'cards' && (
+                      <div className="flex items-center gap-1.5 bg-orange-50/90 border border-orange-200 px-2.5 py-1 rounded-lg">
+                        <Calendar size={13} className="text-[#ff5100]" />
+                        <span className="text-xs font-bold text-orange-950">Mes:</span>
+                        <select
+                          value={activeCardMonthKey}
+                          onChange={(e) => setSelectedCardMonth(e.target.value)}
+                          className="text-xs font-bold bg-white border border-orange-300 rounded-md px-2 py-0.5 text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-orange-500 cursor-pointer shadow-2xs"
+                        >
+                          {monthsList.map(m => (
+                            <option key={m.key} value={m.key}>
+                              {m.label} {m.isProjected ? '(Proyectado)' : '(Real)'}
+                            </option>
+                          ))}
+                        </select>
+                        {prevRealMonthKey && (
+                          <span className="text-[10px] text-orange-800 font-semibold hidden 2xl:inline">
+                            vs. {monthsList.find(x => x.key === prevRealMonthKey)?.shortLabel || prevRealMonthKey} (anterior real)
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+                      {allSellers.length} cuentas
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsTableExpanded(!isTableExpanded)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
-                        isTableExpanded 
-                          ? 'bg-blue-50 border-blue-200 text-blue-700' 
-                          : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                      }`}
-                      title={isTableExpanded ? "Volver a altura adaptativa estándar" : "Expandir tabla al alto máximo"}
-                    >
-                      {isTableExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                      <span className="hidden sm:inline">{isTableExpanded ? "Compactar" : "Maximizar"}</span>
-                    </button>
+
+                    {conceptSubView === 'historico' && (
+                      <button
+                        type="button"
+                        onClick={() => setIsTableExpanded(!isTableExpanded)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                          isTableExpanded 
+                            ? 'bg-blue-50 border-blue-200 text-blue-700' 
+                            : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                        }`}
+                        title={isTableExpanded ? "Volver a altura adaptativa estándar" : "Expandir tabla al alto máximo"}
+                      >
+                        {isTableExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                        <span className="hidden sm:inline">{isTableExpanded ? "Compactar" : "Maximizar"}</span>
+                      </button>
+                    )}
+
                     <TableExportButton getData={getLiquidacionesConceptosExportData} label="Exportar" variant="compact" />
                   </div>
                 </div>
 
+            {conceptSubView === 'historico' ? (
             <div className={`overflow-x-auto overflow-y-auto ${
               isTableExpanded 
                 ? 'max-h-[calc(100vh-140px)] min-h-[900px]' 
@@ -3420,20 +3796,20 @@ function MetasFacturacionContent() {
                       return (
                         <tbody key="newsan_chile_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                           {/* 1. CABECERA GENERAL DE NEWSAN CHILE */}
-                          <tr className="bg-blue-100/80 border-b border-blue-200">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-blue-950 border-r border-blue-200">
+                          <tr className="border-t-2 border-slate-900 bg-[#ff5100] text-white">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] font-black text-white border-t-2 border-r border-slate-900 border-r-orange-600/30 text-xs uppercase tracking-wide">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                                  <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
                                   <span className="text-xs uppercase tracking-wide font-black">Newsan Total (Chile)</span>
                                 </div>
-                                <span className="text-[10px] bg-blue-800 text-white font-bold px-2 py-0.5 rounded shadow-xs">
+                                <span className="text-[10px] bg-black/25 text-white font-bold px-2 py-0.5 rounded shadow-xs">
                                   Consolidado Oficial • 6 Canales
                                 </span>
                               </div>
                             </td>
                             {filteredMonths.map(m => (
-                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-blue-950 border-l border-blue-200/80 bg-blue-100/60">
+                              <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right font-black text-white border-t-2 border-l border-slate-900 border-l-orange-600/30 bg-[#ff5100]">
                                 Newsan Chile Total
                               </td>
                             ))}
@@ -3641,8 +4017,8 @@ function MetasFacturacionContent() {
                           ))}
 
                           {/* Subtotal Honorarios Reply */}
-                          <tr className="bg-blue-100/70 hover:bg-blue-100 transition-colors border-b border-blue-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black border-r border-blue-200">
+                          <tr className="bg-blue-100 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black border-r border-blue-200 border-t-2 border-b-2 border-slate-900">
                               Subtotal Honorarios Reply (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3651,7 +4027,7 @@ function MetasFacturacionContent() {
                               const totalUSD = totalCLP / tc;
                               const feeConsolidado = Math.max(4000.0, totalUSD * 0.01);
                               return (
-                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 font-mono text-[11px]">
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 font-mono text-[11px] border-t-2 border-b-2 border-slate-900 bg-blue-50/90">
                                   US$ {feeConsolidado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                               );
@@ -3671,8 +4047,8 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Total Factura en USD */}
-                          <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors border-b-2 border-emerald-300 font-black">
-                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
+                          <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors font-black">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200 border-b-2 border-slate-900">
                               Total Factura a Cobrar (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -3681,7 +4057,7 @@ function MetasFacturacionContent() {
                               const totalUSD = totalCLP / tc;
                               const feeConsolidado = Math.max(4000.0, totalUSD * 0.01);
                               return (
-                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-300 font-black text-emerald-950 font-mono text-xs">
+                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-300 font-black text-emerald-950 font-mono text-xs border-b-2 border-slate-900 bg-emerald-50/60">
                                   US$ {feeConsolidado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                               );
@@ -3702,20 +4078,20 @@ function MetasFacturacionContent() {
                       return (
                         <tbody key="sodastream_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                           {/* 1. CABECERA GENERAL DE SODA STREAM */}
-                          <tr className="bg-sky-100/80 border-b border-sky-200">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-sky-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-sky-950 border-r border-sky-200">
+                          <tr className="border-t-2 border-slate-900 bg-[#ff5100] text-white">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] font-black text-white border-t-2 border-r border-slate-900 border-r-orange-600/30 text-xs uppercase tracking-wide">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-sky-600"></span>
+                                  <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
                                   <span className="text-xs uppercase tracking-wide font-black">Soda Stream (Argentina)</span>
                                 </div>
-                                <span className="text-[10px] bg-sky-700 text-white font-bold px-2 py-0.5 rounded shadow-xs">
+                                <span className="text-[10px] bg-black/25 text-white font-bold px-2 py-0.5 rounded shadow-xs">
                                   Consolidado Oficial
                                 </span>
                               </div>
                             </td>
                             {filteredMonths.map(m => (
-                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-sky-950 border-l border-sky-200/80 bg-sky-100/60">
+                              <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right font-black text-white border-t-2 border-l border-slate-900 border-l-orange-600/30 bg-[#ff5100]">
                                 Soda Stream Total
                               </td>
                             ))}
@@ -3865,14 +4241,14 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Subtotal (Ingreso Reply) */}
-                          <tr className="bg-blue-100/70 hover:bg-blue-100 transition-colors border-b border-blue-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black border-r border-blue-200">
+                          <tr className="bg-blue-100 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs font-black border-r border-blue-200 border-t-2 border-b-2 border-slate-900">
                               Subtotal (Ingreso Reply)
                             </td>
                             {filteredMonths.map(m => {
                               const sub = seller.months[m.key]?.subtotal || 0;
                               return (
-                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 font-mono text-[11px]">
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 font-mono text-[11px] border-t-2 border-b-2 border-slate-900 bg-blue-50/90">
                                   {sub > 0 ? formatCurrency(sub, executiveKPIs?.currency) : '-'}
                                 </td>
                               );
@@ -3895,14 +4271,14 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Total Factura */}
-                          <tr className="bg-emerald-50/60 hover:bg-emerald-50/80 transition-colors border-b-2 border-emerald-300 font-black">
-                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
+                          <tr className="bg-emerald-50/60 hover:bg-emerald-50/80 transition-colors font-black">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200 border-b-2 border-slate-900">
                               Total Factura + IVA
                             </td>
                             {filteredMonths.map(m => {
                               const tot = seller.months[m.key]?.total || 0;
                               return (
-                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-200 font-black text-emerald-950 text-xs font-mono">
+                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-200 font-black text-emerald-950 text-xs font-mono border-b-2 border-slate-900 bg-emerald-50/50">
                                   {tot > 0 ? formatCurrency(tot, executiveKPIs?.currency) : '-'}
                                 </td>
                               );
@@ -3927,20 +4303,20 @@ function MetasFacturacionContent() {
                           {/* ========================================================= */}
                           {/* 1. CABECERA GENERAL DE NEWSAN ARGENTINA                   */}
                           {/* ========================================================= */}
-                          <tr className="bg-emerald-100/70 border-b border-emerald-200">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-emerald-950 border-r border-emerald-200">
+                          <tr className="border-t-2 border-slate-900 bg-[#ff5100] text-white">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] font-black text-white border-t-2 border-r border-slate-900 border-r-orange-600/30 text-xs uppercase tracking-wide">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                                  <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
                                   <span className="text-xs uppercase tracking-wide font-black">Newsan Total (Argentina)</span>
                                 </div>
-                                <span className="text-[10px] bg-emerald-700 text-white font-bold px-2 py-0.5 rounded shadow-xs">
+                                <span className="text-[10px] bg-black/25 text-white font-bold px-2 py-0.5 rounded shadow-xs">
                                   Consolidado Oficial
                                 </span>
                               </div>
                             </td>
                             {filteredMonths.map(m => (
-                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-emerald-950 border-l border-emerald-200/80 bg-emerald-100/60">
+                              <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right font-black text-white border-t-2 border-l border-slate-900 border-l-orange-600/30 bg-[#ff5100]">
                                 Newsan Total
                               </td>
                             ))}
@@ -4234,8 +4610,8 @@ function MetasFacturacionContent() {
                           {/* 6. CONSOLIDADO FINAL REPLY                                 */}
                           {/* ========================================================= */}
                           {/* Subtotal Reply */}
-                          <tr className="bg-blue-100/80 hover:bg-blue-100 transition-colors border-b border-blue-200 font-black">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 text-xs border-r border-blue-200">
+                          <tr className="bg-blue-100 font-bold">
+                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-black text-xs border-r border-blue-200 border-t-2 border-b-2 border-slate-900">
                               Total (Subtotal Ingreso Reply)
                             </td>
                             {filteredMonths.map(m => {
@@ -4247,7 +4623,7 @@ function MetasFacturacionContent() {
                               const montoHs = hs * tar.valorHora;
                               const subtotalNewsan = montoML + montoSes + montoHs;
                               return (
-                                <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 text-xs">
+                                <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l border-blue-200 font-black text-blue-950 text-xs border-t-2 border-b-2 border-slate-900 bg-blue-50/90">
                                   {formatCurrency(subtotalNewsan, executiveKPIs?.currency)}
                                 </td>
                               );
@@ -4277,8 +4653,8 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Total Factura + IVA */}
-                          <tr className="bg-emerald-50/60 hover:bg-emerald-50/80 transition-colors border-b-2 border-emerald-300 font-black">
-                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
+                          <tr className="bg-emerald-50/60 hover:bg-emerald-50/80 transition-colors font-black">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200 border-b-2 border-slate-900">
                               Total Factura + IVA
                             </td>
                             {filteredMonths.map(m => {
@@ -4291,7 +4667,7 @@ function MetasFacturacionContent() {
                               const subtotalNewsan = montoML + montoSes + montoHs;
                               const totalConIVA = subtotalNewsan * 1.21;
                               return (
-                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-200 font-black text-emerald-950 text-xs">
+                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-200 font-black text-emerald-950 text-xs border-b-2 border-slate-900 bg-emerald-50/50">
                                   {formatCurrency(totalConIVA, executiveKPIs?.currency)}
                                 </td>
                               );
@@ -4318,20 +4694,20 @@ function MetasFacturacionContent() {
                       return (
                         <tbody key="grupo_axo_mexico_consolidado_group" className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                           {/* 1. CABECERA GENERAL DE GRUPO AXO */}
-                          <tr className="bg-purple-100/80 border-b border-purple-200">
-                            <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-purple-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-extrabold text-purple-950 border-r border-purple-200">
+                          <tr className="border-t-2 border-slate-900 bg-[#ff5100] text-white">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] font-black text-white border-t-2 border-r border-slate-900 border-r-orange-600/30 text-xs uppercase tracking-wide">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                                  <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
                                   <span className="text-xs uppercase tracking-wide font-black">Grupo Axo (México)</span>
                                 </div>
-                                <span className="text-[10px] bg-purple-800 text-white font-bold px-2 py-0.5 rounded shadow-xs">
+                                <span className="text-[10px] bg-black/25 text-white font-bold px-2 py-0.5 rounded shadow-xs">
                                   Consolidado Oficial • CK & TH (ML & LVP)
                                 </span>
                               </div>
                             </td>
                             {filteredMonths.map(m => (
-                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-purple-950 border-l border-purple-200/80 bg-purple-100/60">
+                              <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right font-black text-white border-t-2 border-l border-slate-900 border-l-orange-600/30 bg-[#ff5100]">
                                 Grupo Axo Total
                               </td>
                             ))}
@@ -4711,8 +5087,8 @@ function MetasFacturacionContent() {
 
                           {/* 5. SECCIÓN CONSOLIDADO FINAL GRUPO AXO */}
                           {/* Subtotal Fee Reply USD */}
-                          <tr className="bg-purple-50/50 hover:bg-purple-50/70 transition-colors border-b border-purple-200 font-bold">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold border-r border-purple-200">
+                          <tr className="bg-purple-100 font-bold">
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-purple-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-purple-950 font-bold border-r border-purple-200 border-t-2 border-b-2 border-slate-900">
                               Subtotal Total Fee Reply (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -4733,7 +5109,7 @@ function MetasFacturacionContent() {
                               const tc = getRateToUSD('MXN', m.key) || 18.0;
                               const feeUSD = tc > 0 ? (feeMXN / tc) : 0;
                               return (
-                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-purple-200 font-bold text-purple-900 font-mono text-[11px]">
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l border-purple-200 font-bold text-purple-950 font-mono text-[11px] border-t-2 border-b-2 border-slate-900 bg-purple-50/80">
                                   US$ {Math.round(feeUSD).toLocaleString('en-US')}
                                 </td>
                               );
@@ -4753,8 +5129,8 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Total Liquidación Grupo Axo USD */}
-                          <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors border-b-2 border-emerald-300 font-black">
-                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200">
+                          <tr className="bg-emerald-100/80 hover:bg-emerald-100 transition-colors font-black">
+                            <td className="px-6 py-3.5 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black text-xs border-r border-emerald-200 border-b-2 border-slate-900">
                               Total Factura Grupo Axo (USD) — 0% IVA
                             </td>
                             {filteredMonths.map(m => {
@@ -4776,7 +5152,7 @@ function MetasFacturacionContent() {
                               const feeUSD = tc > 0 ? (feeMXN / tc) : 0;
                               const totalAxo = feeUSD + 340;
                               return (
-                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-300 font-black text-emerald-950 text-xs font-mono">
+                                <td key={m.key} className="px-6 py-3.5 whitespace-nowrap text-right border-l border-emerald-300 font-black text-emerald-950 text-xs font-mono border-b-2 border-slate-900 bg-emerald-50/60">
                                   US$ {Math.round(totalAxo).toLocaleString('en-US')}
                                 </td>
                               );
@@ -4801,22 +5177,22 @@ function MetasFacturacionContent() {
                       return (
                         <tbody key="evacol-colombia-consolidado-group" className={`${sIdx > 0 ? 'border-t-8 border-slate-200' : ''}`}>
                           {/* 1. CABECERA GENERAL DE EVACOL COLOMBIA */}
-                          <tr className="bg-amber-100 border-b border-amber-300">
-                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-amber-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] border-r border-amber-300">
+                          <tr className="border-t-2 border-slate-900 bg-[#ff5100] text-white">
+                            <td className="px-5 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] w-[280px] min-w-[280px] max-w-[280px] border-t-2 border-r border-slate-900 border-r-orange-600/30 text-xs uppercase tracking-wide">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600 shrink-0"></span>
-                                  <span className="font-extrabold text-amber-950 text-xs tracking-tight truncate">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-white shrink-0"></span>
+                                  <span className="font-extrabold text-white text-xs tracking-tight truncate">
                                     Evacol Colombia Consolidado
                                   </span>
                                 </div>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 border border-amber-300 shrink-0">
+                                <span className="text-[10px] bg-black/25 text-white font-bold px-2 py-0.5 rounded shadow-xs shrink-0">
                                   3 Canales
                                 </span>
                               </div>
                             </td>
                             {filteredMonths.map(m => (
-                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-amber-950 border-l border-amber-200 bg-amber-100 text-xs">
+                              <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right font-black text-white border-t-2 border-l border-slate-900 border-l-orange-600/30 bg-[#ff5100] text-xs">
                                 Factura Única COP
                               </td>
                             ))}
@@ -5008,8 +5384,8 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Subtotal Facturado COP */}
-                          <tr className="bg-amber-100 hover:bg-amber-100/80 transition-colors border-b border-amber-300 font-bold">
-                            <td className="px-5 py-2.5 whitespace-nowrap sticky left-0 bg-amber-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-amber-950 font-extrabold border-r border-amber-300 truncate">
+                          <tr className="bg-amber-100 font-bold">
+                            <td className="px-5 py-2.5 whitespace-nowrap sticky left-0 bg-amber-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-amber-950 font-extrabold border-r border-amber-300 border-t-2 border-b-2 border-slate-900 truncate">
                               Subtotal Facturado (Fee USD × TC en COP)
                             </td>
                             {filteredMonths.map(m => {
@@ -5020,7 +5396,7 @@ function MetasFacturacionContent() {
                               const totFeeUSD = fML + fADDI + fDAF;
                               const subCop = Math.round(totFeeUSD * tc);
                               return (
-                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-amber-950 bg-amber-100">
+                                <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right border-l font-mono text-[11px] font-black text-amber-950 bg-amber-100/90 border-t-2 border-b-2 border-slate-900">
                                   {formatCurrency(subCop, 'COP')}
                                 </td>
                               );
@@ -5040,8 +5416,8 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Total Factura Final COP */}
-                          <tr className="bg-emerald-100 hover:bg-emerald-100/90 transition-colors border-b-2 border-emerald-400">
-                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-emerald-950 font-black border-r border-emerald-400 text-xs uppercase tracking-wide truncate">
+                          <tr className="bg-emerald-100 font-black">
+                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-emerald-950 font-black border-r border-emerald-400 border-b-2 border-slate-900 text-xs uppercase tracking-wide truncate">
                               TOTAL FACTURA FINAL COLOMBIA (COP)
                             </td>
                             {filteredMonths.map(m => {
@@ -5052,7 +5428,7 @@ function MetasFacturacionContent() {
                               const totFeeUSD = fML + fADDI + fDAF;
                               const totCop = Math.round(totFeeUSD * tc);
                               return (
-                                <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l font-mono text-xs font-black text-emerald-950 bg-emerald-100">
+                                <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l font-mono text-xs font-black text-emerald-950 bg-emerald-100 border-b-2 border-slate-900">
                                   {formatCurrency(totCop, 'COP')}
                                 </td>
                               );
@@ -5076,22 +5452,22 @@ function MetasFacturacionContent() {
                       return (
                         <tbody key="natura-mexico-consolidado-group" className={`${sIdx > 0 ? 'border-t-8 border-slate-200' : ''}`}>
                           {/* 1. CABECERA GENERAL DE NATURA MÉXICO */}
-                          <tr className="bg-emerald-100 border-b border-emerald-300">
-                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] border-r border-emerald-300">
+                          <tr className="border-t-2 border-slate-900 bg-[#ff5100] text-white">
+                            <td className="px-5 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] w-[280px] min-w-[280px] max-w-[280px] border-t-2 border-r border-slate-900 border-r-orange-600/30 text-xs uppercase tracking-wide">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0"></span>
-                                  <span className="font-extrabold text-emerald-950 text-xs tracking-tight truncate">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-white shrink-0"></span>
+                                  <span className="font-extrabold text-white text-xs tracking-tight truncate">
                                     Natura México Consolidado
                                   </span>
                                 </div>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 border border-emerald-300 shrink-0">
+                                <span className="text-[10px] bg-black/25 text-white font-bold px-2 py-0.5 rounded shadow-xs shrink-0">
                                   2 Canales (MELI + Amazon)
                                 </span>
                               </div>
                             </td>
                             {filteredMonths.map(m => (
-                              <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right font-black text-emerald-950 border-l border-emerald-200 bg-emerald-100 text-xs">
+                              <td key={m.key} className="px-6 py-2.5 whitespace-nowrap text-right font-black text-white border-t-2 border-l border-slate-900 border-l-orange-600/30 bg-[#ff5100] text-xs">
                                 Factura Única USD
                               </td>
                             ))}
@@ -5414,8 +5790,8 @@ function MetasFacturacionContent() {
                           </tr>
 
                           {/* Total Factura Final USD */}
-                          <tr className="bg-emerald-100 hover:bg-emerald-100/90 transition-colors border-b-2 border-emerald-400">
-                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-emerald-950 font-black border-r border-emerald-400 text-xs uppercase tracking-wide truncate">
+                          <tr className="bg-emerald-100 hover:bg-emerald-100/90 transition-colors font-black">
+                            <td className="px-5 py-3 whitespace-nowrap sticky left-0 bg-emerald-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-[280px] min-w-[280px] max-w-[280px] text-emerald-950 font-black border-r border-emerald-400 border-b-2 border-slate-900 text-xs uppercase tracking-wide truncate">
                               TOTAL FACTURA FINAL NATURA MÉXICO (USD)
                             </td>
                             {filteredMonths.map(m => {
@@ -5438,7 +5814,7 @@ function MetasFacturacionContent() {
                               const totUSD = tc > 0 ? (feeML + feeAmz) / tc : 0;
                               const finalFactura = totUSD + 200.0;
                               return (
-                                <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l font-mono text-xs font-black text-emerald-950 bg-emerald-100">
+                                <td key={m.key} className="px-6 py-3 whitespace-nowrap text-right border-l font-mono text-xs font-black text-emerald-950 bg-emerald-100 border-b-2 border-slate-900">
                                   US$ {finalFactura.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                               );
@@ -5452,16 +5828,19 @@ function MetasFacturacionContent() {
                     return (
                       <tbody key={seller.id} className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                         {/* Fila Cliente */}
-                        <tr className="bg-orange-50/60">
-                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-orange-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-bold text-slate-900 border-r border-orange-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
-                            {seller.name}
+                        <tr className="border-t-2 border-slate-900 bg-[#ff5100]">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] font-black text-white border-t-2 border-r border-slate-900 border-r-orange-600/30 w-[280px] min-w-[280px] max-w-[280px] truncate text-xs uppercase tracking-wide">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-white shrink-0"></span>
+                              <span className="font-extrabold">{seller.name}</span>
+                            </div>
                           </td>
                           {filteredMonths.map(m => {
                             const mData = seller.months[m.key];
                             const isProj = mData?.isProjected;
                             return (
-                              <td key={m.key} className={`px-6 py-3 whitespace-nowrap text-right font-bold border-l ${isProj ? 'bg-orange-100/50 text-orange-950 border-orange-200' : 'bg-orange-50/40 text-slate-900 border-orange-100'}`}>
-                                {seller.name}
+                              <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right font-bold border-t-2 border-l border-slate-900 ${isProj ? 'bg-[#ff5100]/90 text-white/95 border-l-orange-600/30' : 'bg-[#ff5100] text-white border-l-orange-600/30'}`}>
+                                <span className="text-xs font-bold">{seller.name}</span>
                               </td>
                             );
                           })}
@@ -5579,8 +5958,8 @@ function MetasFacturacionContent() {
                         )}
 
                         {/* Fila Subtotal (Ingreso Reply) */}
-                        <tr className="bg-blue-50/50 hover:bg-blue-50 transition-colors border-b border-blue-100 font-bold">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-bold border-r border-blue-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                        <tr className="bg-blue-100 font-bold">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-black border-r border-blue-200 border-t-2 border-b-2 border-slate-900 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             Subtotal (Ingreso Reply)
                           </td>
                           {filteredMonths.map(m => {
@@ -5588,7 +5967,7 @@ function MetasFacturacionContent() {
                             const isProj = mData?.isProjected;
                             const cur = mData?.moneda || executiveKPIs?.currency;
                             return (
-                              <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right font-bold border-l ${isProj ? 'bg-orange-100/50 border-orange-200 text-orange-950' : 'border-blue-100 text-blue-900'}`}>
+                              <td key={m.key} className={`px-6 py-2.5 whitespace-nowrap text-right font-black border-l border-t-2 border-b-2 border-slate-900 ${isProj ? 'bg-orange-50 border-orange-200 text-orange-950' : 'border-blue-200 text-blue-950 bg-blue-50/90'}`}>
                                 {mData ? formatCurrency(mData.subtotal, cur) : '-'}
                               </td>
                             );
@@ -5612,8 +5991,8 @@ function MetasFacturacionContent() {
                         </tr>
 
                         {/* Fila Total Factura */}
-                        <tr className="bg-emerald-50/40 hover:bg-emerald-50/60 transition-colors">
-                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-bold border-r border-emerald-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                        <tr className="bg-emerald-50/40 hover:bg-emerald-50/60 transition-colors font-black">
+                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black border-r border-emerald-200 border-b-2 border-slate-900 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             Total Factura
                           </td>
                           {filteredMonths.map(m => {
@@ -5621,7 +6000,7 @@ function MetasFacturacionContent() {
                             const isProj = mData?.isProjected;
                             const cur = mData?.moneda || executiveKPIs?.currency;
                             return (
-                              <td key={m.key} className={`px-6 py-3 whitespace-nowrap text-right font-black border-l ${isProj ? 'bg-orange-100/50 text-orange-950 border-orange-200' : 'border-emerald-100 text-emerald-900'}`}>
+                              <td key={m.key} className={`px-6 py-3 whitespace-nowrap text-right font-black border-l border-b-2 border-slate-900 ${isProj ? 'bg-orange-100/50 text-orange-950 border-orange-200' : 'border-emerald-100 text-emerald-900'}`}>
                                 {mData ? formatCurrency(mData.total, cur) : '-'}
                               </td>
                             );
@@ -5715,8 +6094,165 @@ function MetasFacturacionContent() {
                 </tfoot>
               </table>
             </div>
-          </div>
+          ) : (
+            <div className="p-6 bg-slate-50/50 flex-1 overflow-y-auto max-h-[calc(100vh-210px)] min-h-[650px] border-t border-slate-100">
+              {allSellers.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+                  <p className="text-sm font-semibold">No se encontraron cuentas para el filtro seleccionado.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+                  {(() => {
+                    let hasRenderedNewsan = false;
+                    let hasRenderedNewsanChile = false;
+                    let hasRenderedAxo = false;
+                    let hasRenderedEvacol = false;
+                    let hasRenderedNaturaMX = false;
+                    let hasRenderedSodaStream = false;
+
+                    return allSellers.map((seller) => {
+                      const isNewsan = seller.name.toLowerCase().includes('newsan');
+                      const isNewsanAR = isNewsan && (selectedCountry === 'AR' || seller.name.toLowerCase().includes('argentina') || seller.id === '256189964' || seller.id === '989595440');
+                      const isNewsanCL = isNewsan && (selectedCountry === 'CL' || seller.name.toLowerCase().includes('chile'));
+                      const isAxo = seller.name.toLowerCase().includes('axo') || seller.id === 'axo_ck' || seller.id === 'axo_th' || seller.id === '550082876' || seller.id === '765606810' || seller.id === '938333830' || seller.id === '998163061';
+                      const isEvacol = seller.name.toLowerCase().includes('evacol');
+                      const isEvacolCO = (isEvacol && !seller.name.includes('USA') && !seller.name.includes('México') && !seller.name.includes('Mexico')) || ['2219963574', '928666257', '928424062', '928424063'].includes(seller.id);
+                      const isNaturaMX = (seller.name.toLowerCase().includes('natura') && (selectedCountry === 'MX' || seller.name.toLowerCase().includes('méxico') || seller.name.toLowerCase().includes('mexico') || seller.id === '2539005925' || seller.id === '2539005926'));
+                      const isSodaStreamAccount = seller.id === '430009374' || seller.name.toLowerCase().includes('soda stream');
+
+                      if (isNewsanCL) {
+                        if (hasRenderedNewsanChile) return null;
+                        hasRenderedNewsanChile = true;
+                      } else if (isSodaStreamAccount) {
+                        if (hasRenderedSodaStream) return null;
+                        hasRenderedSodaStream = true;
+                      } else if (isNewsanAR) {
+                        if (hasRenderedNewsan) return null;
+                        hasRenderedNewsan = true;
+                      } else if (isAxo) {
+                        if (hasRenderedAxo) return null;
+                        hasRenderedAxo = true;
+                      } else if (isEvacolCO) {
+                        if (hasRenderedEvacol) return null;
+                        hasRenderedEvacol = true;
+                      } else if (isNaturaMX) {
+                        if (hasRenderedNaturaMX) return null;
+                        hasRenderedNaturaMX = true;
+                      }
+
+                      const curData = getSellerMonthConcepts(seller, activeCardMonthKey);
+                      const prevData = prevRealMonthKey ? getSellerMonthConcepts(seller, prevRealMonthKey) : null;
+
+                      const diffGMV = prevData && prevData.gmv > 0 && curData.gmv > 0
+                        ? ((curData.gmv - prevData.gmv) / prevData.gmv) * 100
+                        : null;
+
+                      const diffSubtotal = prevData && prevData.subtotal > 0 && curData.subtotal > 0
+                        ? ((curData.subtotal - prevData.subtotal) / prevData.subtotal) * 100
+                        : null;
+
+                      const diffTotal = prevData && prevData.total > 0 && curData.total > 0
+                        ? ((curData.total - prevData.total) / prevData.total) * 100
+                        : null;
+
+                      const sellerCountryCode = selectedCountry === 'ALL' 
+                        ? (sellersMap[seller.id]?.code || (seller.name.includes('Chile') ? 'CL' : seller.name.includes('México') ? 'MX' : seller.name.includes('Colombia') ? 'CO' : 'AR')) 
+                        : selectedCountry;
+
+                      return (
+                        <div 
+                          key={`card-${seller.id}`} 
+                          className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col justify-between hover:shadow-md transition-shadow"
+                        >
+                          {/* Cabecera Card - Naranja Reply #ff5100 */}
+                          <div className="bg-[#ff5100] text-white px-4 py-3 border-t-2 border-slate-900 shadow-xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <CountryFlag code={sellerCountryCode} size="sm" />
+                                  <h3 className="font-black text-sm text-white tracking-tight truncate" title={curData.title}>
+                                    {curData.title}
+                                  </h3>
+                                </div>
+                                {curData.subtitle && (
+                                  <span className="inline-block mt-1 text-[9px] bg-black/25 text-white font-bold px-2 py-0.5 rounded shadow-2xs">
+                                    {curData.subtitle}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-[10px] font-black uppercase tracking-wider bg-black/20 px-2 py-0.5 rounded text-white inline-block">
+                                  {curData.currency}
+                                </span>
+                                <span className="text-[9px] text-white/90 font-medium block mt-1">
+                                  {monthsList.find(m => m.key === activeCardMonthKey)?.shortLabel || activeCardMonthKey}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Conceptos del mes */}
+                          <div className="p-4 bg-white flex-1 space-y-2">
+                            {curData.rows.map((r: any, rIdx: number) => (
+                              <div key={rIdx} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-b-0">
+                                <span className="text-slate-600 font-medium">{r.label}</span>
+                                <span className="font-mono font-semibold text-slate-900 text-right">{r.val}</span>
+                              </div>
+                            ))}
+
+                            {/* Subtotal (Ingreso Reply) con líneas negras marcadas arriba y abajo */}
+                            <div className="mt-3 py-2.5 px-3 bg-blue-100/70 border-t-2 border-b-2 border-slate-900 text-blue-950 flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                <span className="font-black text-xs">Subtotal (Ingreso Reply)</span>
+                              </div>
+                              <span className="font-mono font-black text-sm text-blue-950">
+                                {formatCurrency(curData.subtotal, curData.currency)}
+                              </span>
+                            </div>
+
+                            {/* IVA */}
+                            <div className="py-1 px-1 flex items-center justify-between text-slate-500 text-xs">
+                              <span>IVA (Débito Fiscal)</span>
+                              <span className="font-mono font-medium">
+                                {formatCurrency(curData.iva, curData.currency)}
+                              </span>
+                            </div>
+
+                            {/* Total Factura con línea negra abajo */}
+                            <div className="py-2.5 px-3 bg-emerald-50/70 border-b-2 border-slate-900 text-emerald-950 flex items-center justify-between">
+                              <span className="font-black text-xs uppercase tracking-wide">Total Factura</span>
+                              <span className="font-mono font-black text-sm text-emerald-950">
+                                {formatCurrency(curData.total, curData.currency)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Footer: Comparativa MoM vs Mes Anterior Real */}
+                          <div className="p-3.5 bg-slate-50 border-t border-slate-100">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                                <TrendingUp size={12} className="text-[#ff5100]" />
+                                <span>MoM vs {monthsList.find(m => m.key === prevRealMonthKey)?.shortLabel || prevRealMonthKey || 'anterior'}</span>
+                              </div>
+                              <span className="text-[9px] text-slate-400 font-medium lowercase">vs mes anterior real</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {renderMoMBadge(diffGMV, 'Ventas GMV')}
+                              {renderMoMBadge(diffSubtotal, 'Ingreso Reply')}
+                              {renderMoMBadge(diffTotal, 'Total Factura')}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+      </div>
       )}
     </div>
   )}
