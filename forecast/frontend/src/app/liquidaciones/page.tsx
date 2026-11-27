@@ -1255,8 +1255,8 @@ function MetasFacturacionContent() {
       const isForbasse = sId === '3693335392' || sName.toLowerCase().includes('forbasse');
       const isExterior = cCode !== 'AR' || rowCurrency === 'USD';
 
-      // Proyección Botmaker: Para el proyectado (>= 2026-11) repitamos el monto de la última facturación (Octubre 2026)
-      if (mKey >= '2026-11' && sellerOctBotmaker[sId] !== undefined) {
+      // Proyección Botmaker: Para el proyectado (>= 2026-12) repitamos el monto de la última facturación disponible si no hay datos reales en DB
+      if (mKey >= '2026-12' && (!row.botmaker && !row.botmaker_original) && sellerOctBotmaker[sId] !== undefined) {
         botmakerVal = sellerOctBotmaker[sId];
       }
 
@@ -1268,7 +1268,7 @@ function MetasFacturacionContent() {
         } else if (isNaturaAmazon) {
           // Cuenta adicional: no duplica el costo de Botmaker de la marca
           botmakerVal = 0.0;
-        } else if (mKey < '2026-11') {
+        } else {
           if (botmakerVal > 0) {
             const tcArs = getRateToUSD('ARS', mKey) || 1550.0;
             // Markup del 25% sobre la base de Botmaker a partir de Octubre 2026
@@ -1299,10 +1299,10 @@ function MetasFacturacionContent() {
         totalVal = subtotalVal;
       } else {
         // Cuentas locales de Argentina (ARS):
-        if (mKey === '2026-10') {
+        if (mKey >= '2026-10') {
           if (isCafeMartinez || isPinturasOnline || isAlmaNativa) {
             botmakerVal = 0;
-          } else if (isForbasse) {
+          } else if (isForbasse && mKey === '2026-10') {
             // Forbasse Octubre 2026: Facturar exactamente $206.750
             botmakerVal = 206750.0;
           } else {

@@ -318,20 +318,28 @@ async function syncFacturacionProyectada(targetSellerId = null) {
         }
         const prevPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
 
-        // Obtener proyecciones del mes corriente
-        const proyRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/seguimiento_diario_proyecciones?select=seller_id,fecha,proyeccion_fin_mes&fecha=gte.${currentPeriod}&order=fecha.desc`,
+        // Obtener la fecha más reciente registrada en el mes actual
+        const maxDateRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/seguimiento_diario_proyecciones?select=fecha&fecha=gte.${currentPeriod}&order=fecha.desc&limit=1`,
             {
                 headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
             }
         );
-        if (!proyRes.ok) throw new Error("Error consultando seguimiento_diario_proyecciones: " + await proyRes.text());
-        const proys = await proyRes.json();
+        const maxDateRows = maxDateRes.ok ? await maxDateRes.json() : [];
+        const maxFecha = maxDateRows[0]?.fecha;
 
         // Quedarse con la proyección más reciente por seller
         const latestProy = new Map();
-        for (const p of proys) {
-            if (!latestProy.has(p.seller_id)) {
+        if (maxFecha) {
+            const proyRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/seguimiento_diario_proyecciones?select=seller_id,fecha,proyeccion_fin_mes&fecha=eq.${maxFecha}`,
+                {
+                    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+                }
+            );
+            if (!proyRes.ok) throw new Error("Error consultando seguimiento_diario_proyecciones: " + await proyRes.text());
+            const proys = await proyRes.json();
+            for (const p of proys) {
                 latestProy.set(p.seller_id, p);
             }
         }

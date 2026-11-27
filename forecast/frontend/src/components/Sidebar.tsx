@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   Coins,
+  Bot,
   LogOut,
   UserCog,
   ShieldCheck
@@ -267,6 +268,22 @@ function SidebarContent() {
               <span>Tipos de Cambio</span>
             </div>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">FX</span>
+          </Link>
+
+          {/* 10. Botmaker (Gestión de Licencias y Consumos) */}
+          <Link
+            href="/botmaker"
+            className={`group flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              pathname === "/botmaker"
+                ? "bg-[#eff5ff] text-[#275ec9] font-semibold shadow-xs"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Bot size={18} className={pathname === "/botmaker" ? "text-[#4981fb]" : "text-slate-400 group-hover:text-slate-600"} />
+              <span>Botmaker</span>
+            </div>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">Licencias</span>
           </Link>
 
           {/* 10. Gestión de Usuarios y Roles (Exclusivo para Propietario) */}
