@@ -3743,7 +3743,7 @@ function MetasFacturacionContent() {
                       Concepto
                     </th>
                     {filteredMonths.map(m => (
-                      <th key={m.key} scope="col" className={`px-6 py-4 font-bold text-right min-w-[140px] uppercase border-l border-b border-slate-200 sticky top-0 z-20 ${m.isProjected ? 'bg-orange-50/95 text-orange-950' : 'bg-slate-100 text-slate-700'}`}>
+                      <th key={m.key} scope="col" className={`px-6 py-4 font-bold text-right min-w-[140px] uppercase border-l border-b border-slate-200 sticky top-0 z-10 ${m.isProjected ? 'bg-orange-50/95 text-orange-950' : 'bg-slate-100 text-slate-700'}`}>
                         <div className="flex flex-col items-end">
                           <span>{m.shortLabel}</span>
                           {m.isProjected && (
@@ -5763,12 +5763,14 @@ function MetasFacturacionContent() {
 
                           {/* Botmaker Fijo Marca USD 200 */}
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 font-medium pl-8 border-r border-slate-200 flex items-center justify-between">
-                              <span className="flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                                <span>Botmaker (Costo Fijo Marca)</span>
-                              </span>
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 ml-1">Fijo USD 200</span>
+                            <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] w-[280px] min-w-[280px] max-w-[280px] text-slate-700 font-medium pl-8 border-r border-slate-200">
+                              <div className="flex items-center justify-between w-full">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                  <span>Botmaker (Costo Fijo Marca)</span>
+                                </span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 ml-1">Fijo USD 200</span>
+                              </div>
                             </td>
                             {filteredMonths.map(m => (
                               <td key={m.key} className="px-6 py-2 whitespace-nowrap text-right border-l font-mono text-[11px] text-slate-800 font-medium">
@@ -5829,7 +5831,7 @@ function MetasFacturacionContent() {
                       <tbody key={seller.id} className={`${sIdx > 0 ? 'border-t-8 border-slate-100' : ''}`}>
                         {/* Fila Cliente */}
                         <tr className="border-t-2 border-slate-900 bg-[#ff5100]">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] font-black text-white border-t-2 border-r border-slate-900 border-r-orange-600/30 w-[280px] min-w-[280px] max-w-[280px] truncate text-xs uppercase tracking-wide">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-[#ff5100] z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] font-black text-white border-t-2 border-r border-slate-900 border-r-orange-600/30 w-[280px] min-w-[280px] max-w-[280px] truncate text-xs uppercase tracking-wide">
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-white shrink-0"></span>
                               <span className="font-extrabold">{seller.name}</span>
@@ -5848,7 +5850,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Facturación Cliente (GMV) */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             Ventas del Cliente (GMV)
                           </td>
                           {filteredMonths.map(m => {
@@ -5875,7 +5877,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Fee */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] text-slate-600 font-medium border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             Fee Aplicado
                           </td>
                           {filteredMonths.map(m => {
@@ -5891,7 +5893,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Monto Servicio */}
                         <tr className="bg-slate-50/50 hover:bg-slate-100/50 transition-colors border-b border-slate-100">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-800 font-bold border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-800 font-bold border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             Monto Servicio
                           </td>
                           {filteredMonths.map(m => {
@@ -5909,9 +5911,11 @@ function MetasFacturacionContent() {
                         {/* Fila Descuento Comercial (ej. Café Martínez -20%, Violetta Cosméticos -50%/-70%) */}
                         {Object.values(seller.months).some(m => ((m as any).descuento || 0) > 0) && (
                           <tr className="bg-rose-50/40 hover:bg-rose-50/70 transition-colors border-b border-rose-100">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-rose-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-rose-900 font-semibold border-r border-rose-200 w-[280px] min-w-[280px] max-w-[280px] flex items-center justify-between">
-                              <span>Descuento Comercial</span>
-                              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-200/60 text-rose-800 ml-2">Pactado</span>
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-rose-100 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-rose-900 font-semibold border-r border-rose-200 w-[280px] min-w-[280px] max-w-[280px]">
+                              <div className="flex items-center justify-between w-full">
+                                <span>Descuento Comercial</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-200 text-rose-800 ml-2">Pactado</span>
+                              </div>
                             </td>
                             {filteredMonths.map(m => {
                               const mData = seller.months[m.key];
@@ -5936,12 +5940,14 @@ function MetasFacturacionContent() {
                         {/* Fila Botmaker (fila aparte después de Subtotal) */}
                         {Object.values(seller.months).some(m => (m.botmaker || 0) > 0) && (
                           <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100">
-                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-700 font-medium border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] flex items-center justify-between">
-                              <span className="flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                                <span>Botmaker</span>
-                              </span>
-                              <span className="text-[10px] font-semibold text-slate-400">Licencia</span>
+                            <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-700 font-medium border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px]">
+                              <div className="flex items-center justify-between w-full">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                  <span>Botmaker</span>
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-400">Licencia</span>
+                              </div>
                             </td>
                             {filteredMonths.map(m => {
                               const mData = seller.months[m.key];
@@ -5959,7 +5965,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Subtotal (Ingreso Reply) */}
                         <tr className="bg-blue-100 font-bold">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-black border-r border-blue-200 border-t-2 border-b-2 border-slate-900 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-blue-100 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-blue-950 font-black border-r border-blue-200 border-t-2 border-b-2 border-slate-900 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             Subtotal (Ingreso Reply)
                           </td>
                           {filteredMonths.map(m => {
@@ -5976,7 +5982,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila IVA */}
                         <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 text-slate-500">
-                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-500 border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                          <td className="px-6 py-2.5 whitespace-nowrap sticky left-0 bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-slate-500 border-r border-slate-200 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             IVA (Débito Fiscal)
                           </td>
                           {filteredMonths.map(m => {
@@ -5992,7 +5998,7 @@ function MetasFacturacionContent() {
 
                         {/* Fila Total Factura */}
                         <tr className="bg-emerald-50/40 hover:bg-emerald-50/60 transition-colors font-black">
-                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black border-r border-emerald-200 border-b-2 border-slate-900 w-[280px] min-w-[280px] max-w-[280px] truncate">
+                          <td className="px-6 py-3 whitespace-nowrap sticky left-0 bg-emerald-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-emerald-950 font-black border-r border-emerald-200 border-b-2 border-slate-900 w-[280px] min-w-[280px] max-w-[280px] truncate">
                             Total Factura
                           </td>
                           {filteredMonths.map(m => {
